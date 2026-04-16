@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local uploads/videos (legacy, not used in serverless mode)
+/public/uploads/
+/public/videos/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
