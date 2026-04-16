@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { getApiHeaders } from "@/lib/api-headers";
+import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import { useTaskPolling, type PollingStatus } from "./use-task-polling";
 
 interface UseImprovePromptResult {
@@ -17,7 +17,10 @@ async function fetchTaskStatus(taskId: string) {
   const res = await fetch(`/api/freepik/improve-prompt/${taskId}`, {
     headers: getApiHeaders(),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const errMsg = await extractErrorMessage(res);
+    throw new Error(errMsg);
+  }
   const json = await res.json();
   return json.data as { status: "CREATED" | "IN_PROGRESS" | "COMPLETED" | "FAILED"; generated: string[] };
 }

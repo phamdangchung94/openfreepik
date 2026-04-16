@@ -1,5 +1,5 @@
 /**
- * Client-side helper to build fetch headers with the user's API key.
+ * Client-side helpers for API key management and fetch headers.
  * Reads from Zustand store (works in async contexts outside React).
  */
 
@@ -13,4 +13,26 @@ export function getApiHeaders(extra?: Record<string, string>): Record<string, st
     ...(apiKey ? { "x-api-key": apiKey } : {}),
     ...extra,
   };
+}
+
+/** Returns the current API key or throws if missing. */
+export function requireApiKey(): string {
+  const { apiKey } = useTaskStore.getState();
+  if (!apiKey) {
+    throw new Error("API key is required. Please enter your Freepik API key.");
+  }
+  return apiKey;
+}
+
+/**
+ * Extract a human-readable error message from a failed fetch response.
+ * Falls back to "HTTP {status}" if body can't be parsed.
+ */
+export async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const json = await res.json();
+    return json.message || json.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
 }

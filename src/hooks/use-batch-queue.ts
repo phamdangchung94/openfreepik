@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders } from "@/lib/api-headers";
+import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import { toBatchApiParams } from "@/lib/form/to-api-params";
 import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema";
 import type { TaskStatus } from "@/lib/freepik/types";
@@ -56,7 +56,10 @@ async function pollTask(apiTaskId: string, localId: string) {
       const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
         headers: getApiHeaders(),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errMsg = await extractErrorMessage(res);
+        throw new Error(errMsg);
+      }
       const json = await res.json();
       const { status, generated } = json.data as { status: TaskStatus; generated: string[] };
 
@@ -131,7 +134,8 @@ export function useBatchQueue(): UseBatchQueueResult {
       });
 
       if (!res.ok) {
-        useTaskStore.getState().updateTask(localId, { status: "FAILED", error: `HTTP ${res.status}` });
+        const errMsg = await extractErrorMessage(res);
+        useTaskStore.getState().updateTask(localId, { status: "FAILED", error: errMsg });
         return;
       }
 

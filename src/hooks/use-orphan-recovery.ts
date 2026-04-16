@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders } from "@/lib/api-headers";
+import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import type { TaskStatus } from "@/lib/freepik/types";
 
 /**
@@ -23,7 +23,10 @@ async function recoverTask(localId: string, apiTaskId: string) {
       const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
         headers: getApiHeaders(),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errMsg = await extractErrorMessage(res);
+        throw new Error(errMsg);
+      }
       const json = await res.json();
       const { status, generated } = json.data as {
         status: TaskStatus;

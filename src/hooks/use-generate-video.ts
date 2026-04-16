@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders } from "@/lib/api-headers";
+import { getApiHeaders, extractErrorMessage, requireApiKey } from "@/lib/api-headers";
 import type { KlingV3GenerateParams, TaskStatus } from "@/lib/freepik/types";
 
 interface GenerateOpts {
@@ -32,7 +32,10 @@ async function pollUntilDone(apiTaskId: string, localId: string) {
       const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
         headers: getApiHeaders(),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errMsg = await extractErrorMessage(res);
+        throw new Error(errMsg);
+      }
       const json = await res.json();
       const { status, generated } = json.data as { status: TaskStatus; generated: string[] };
 
@@ -82,6 +85,9 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
   const generate = useCallback(
     async (params: KlingV3GenerateParams, opts: GenerateOpts): Promise<string> => {
+      // Validate API key before creating task
+      requireApiKey();
+
       const localId = crypto.randomUUID();
       const store = useTaskStore.getState();
 
@@ -112,9 +118,10 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           });
 
           if (!res.ok) {
+            const errMsg = await extractErrorMessage(res);
             useTaskStore.getState().updateTask(localId, {
               status: "FAILED",
-              error: `HTTP ${res.status}`,
+              error: errMsg,
             });
             return;
           }
@@ -130,7 +137,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         } catch (err) {
           useTaskStore.getState().updateTask(localId, {
             status: "FAILED",
-            error: String(err),
+            error: err instanceof Error ? err.message : String(err),
           });
         } finally {
           activeCountRef.current--;
