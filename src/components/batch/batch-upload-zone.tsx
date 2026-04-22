@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { BatchItem } from "@/lib/form/generator-schema";
+import { uploadImageToHost } from "@/lib/upload/image-host";
 
 interface BatchUploadZoneProps {
   items: BatchItem[];
@@ -45,34 +46,16 @@ export function BatchUploadZone({
       setIsUploading(true);
 
       try {
-        // Upload to server → gets public URL from litterbox
-        const formData = new FormData();
-        for (const file of validFiles) {
-          formData.append("file", file);
-        }
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: "Upload failed" }));
-          throw new Error(err.error ?? `HTTP ${res.status}`);
-        }
-
-        const json = await res.json();
-        const uploaded = json.files as {
-          publicUrl: string;
-          dataUri: string;
-          filename: string;
-        }[];
+        // Upload directly from browser to litterbox (bypasses Vercel 4.5MB body limit)
+        const uploaded = await Promise.all(
+          validFiles.map((file) => uploadImageToHost(file)),
+        );
 
         const newItems: BatchItem[] = uploaded.map((u, i) => ({
           id: crypto.randomUUID(),
           file: validFiles[i],
           previewUrl: u.dataUri,
-          imageUrl: u.publicUrl, // Public URL for Freepik API
+          imageUrl: u.publicUrl,
           prompt: defaultPrompt,
           filename: validFiles[i]?.name ?? u.filename,
         }));
