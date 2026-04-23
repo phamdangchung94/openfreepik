@@ -41,6 +41,7 @@ import { GenerateAudioSwitch } from "./generate-audio-switch";
 import { MultiShotEditor } from "./multi-shot-editor";
 import { BatchUploadZone } from "@/components/batch/batch-upload-zone";
 import { BatchSettings } from "@/components/batch/batch-settings";
+import { StartEndFrameUploader } from "./start-end-frame-uploader";
 
 interface GeneratorFormProps {
   onSubmitSingle?: (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => void;
@@ -171,23 +172,28 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                     </div>
                   )}
 
-                  {/* Single URL fallback (when no batch items) */}
+                  {/* Single video Start/End frame uploader (when no batch items) */}
                   {batchItems.length === 0 && (
                     <div className="space-y-3">
-                      <p className="text-xs text-muted-foreground">
-                        Or enter image URLs directly:
-                      </p>
-                      <ImageUrlField
-                        name="start_image_url"
-                        label="Start Frame URL"
-                        required
-                        placeholder="https://example.com/start.jpg"
-                      />
-                      <ImageUrlField
-                        name="end_image_url"
-                        label="End Frame URL (optional)"
-                        placeholder="https://example.com/end.jpg"
-                      />
+                      <StartEndFrameUploader />
+                      <details className="group">
+                        <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                          Or enter image URLs directly
+                        </summary>
+                        <div className="mt-3 space-y-3">
+                          <ImageUrlField
+                            name="start_image_url"
+                            label="Start Frame URL"
+                            required
+                            placeholder="https://example.com/start.jpg"
+                          />
+                          <ImageUrlField
+                            name="end_image_url"
+                            label="End Frame URL (optional)"
+                            placeholder="https://example.com/end.jpg"
+                          />
+                        </div>
+                      </details>
                     </div>
                   )}
                 </div>
