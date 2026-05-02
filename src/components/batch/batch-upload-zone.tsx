@@ -53,6 +53,7 @@ export function BatchUploadZone({
 
         const newItems: BatchItem[] = uploaded.map((u, i) => ({
           id: crypto.randomUUID(),
+          mode: "i2v",
           file: validFiles[i],
           previewUrl: u.dataUri,
           imageUrl: u.publicUrl,

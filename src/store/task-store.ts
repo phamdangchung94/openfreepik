@@ -57,7 +57,7 @@ export const useTaskStore = create<TaskState>()(
       activeTaskId: null,
 
       queue: [],
-      concurrency: 5,
+      concurrency: 3,
       isProcessing: false,
       autoEnhance: false,
 

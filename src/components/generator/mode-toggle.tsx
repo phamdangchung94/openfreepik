@@ -11,7 +11,12 @@ const MODES = [
   { value: "i2v" as const, label: "Image to Video", icon: Image },
 ];
 
-export function ModeToggle() {
+interface ModeToggleProps {
+  /** Fires after the form mode changes — parent can clear batch state, etc. */
+  onModeChange?: (mode: "t2v" | "i2v") => void;
+}
+
+export function ModeToggle({ onModeChange }: ModeToggleProps = {}) {
   const { watch, setValue } = useFormContext<GeneratorFormValues>();
   const current = watch("mode");
 
@@ -25,9 +30,13 @@ export function ModeToggle() {
           size="sm"
           className={cn(
             "flex-1 gap-2",
-            current === value && "bg-background shadow-sm"
+            current === value && "bg-background shadow-sm",
           )}
-          onClick={() => setValue("mode", value, { shouldValidate: true })}
+          onClick={() => {
+            if (current === value) return;
+            setValue("mode", value, { shouldValidate: true });
+            onModeChange?.(value);
+          }}
         >
           <Icon className="h-4 w-4" />
           {label}

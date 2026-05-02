@@ -4,7 +4,7 @@ import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
 import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
-import { toBatchApiParams } from "@/lib/form/to-api-params";
+import { toBatchApiParams, toBatchT2VParams } from "@/lib/form/to-api-params";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import { enhancePromptOnce } from "@/lib/improve-prompt-runner";
 import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema";
@@ -47,7 +47,9 @@ export function useBatchQueue(): UseBatchQueueResult {
   const activeRef = useRef(0);
   const cancelledRef = useRef(false);
   const batchIdsRef = useRef<Set<string>>(new Set());
-  const itemMapRef = useRef<Map<string, { imageUrl: string; prompt: string }>>(new Map());
+  const itemMapRef = useRef<
+    Map<string, { mode: "t2v" | "i2v"; imageUrl?: string; prompt: string }>
+  >(new Map());
   const formRef = useRef<GeneratorFormValues | null>(null);
   // Break circular useCallback dependency: runTask -> fillSlots -> runTask
   const fillSlotsRef = useRef<() => void>(() => {});
@@ -80,7 +82,10 @@ export function useBatchQueue(): UseBatchQueueResult {
         useTaskStore.getState().updateTask(localId, { prompt });
       }
 
-      const params = toBatchApiParams(formValues, itemData.imageUrl, prompt);
+      const params =
+        itemData.mode === "i2v" && itemData.imageUrl
+          ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
+          : toBatchT2VParams(formValues, prompt);
       const res = await fetch("/api/freepik/kling-v3", {
         method: "POST",
         headers: getApiHeaders(),
@@ -149,20 +154,24 @@ export function useBatchQueue(): UseBatchQueueResult {
         const localId = crypto.randomUUID();
         ids.push(localId);
         batchIdsRef.current.add(localId);
-        itemMapRef.current.set(localId, { imageUrl: item.imageUrl, prompt: item.prompt });
+        itemMapRef.current.set(localId, {
+          mode: item.mode,
+          imageUrl: item.imageUrl,
+          prompt: item.prompt,
+        });
 
         store.addTask({
           id: localId,
           taskId: null,
           status: "CREATED",
           prompt: item.prompt,
-          mode: "i2v",
+          mode: item.mode,
           tier: formValues.tier,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           videoUrl: null,
           thumbnailUrl: null,
-          imageUrl: item.imageUrl,
+          imageUrl: item.imageUrl ?? null,
           error: null,
         });
       }

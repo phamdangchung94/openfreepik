@@ -23,6 +23,7 @@ import { GenerateAudioSwitch } from "./generate-audio-switch";
 import { GeneratorI2VSource } from "./generator-i2v-source";
 import { GeneratorAdvancedSettings } from "./generator-advanced-settings";
 import { GeneratorMultiShotSection } from "./generator-multi-shot-section";
+import { BatchT2VInput } from "@/components/batch/batch-t2v-input";
 
 interface GeneratorFormProps {
   onSubmitSingle?: (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => void;
@@ -73,7 +74,12 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const mode = watch("mode");
 
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
-  const isBatchMode = mode === "i2v" && batchItems.length > 0;
+  const [t2vBatchText, setT2vBatchText] = useState("");
+  const [t2vBatchOpen, setT2vBatchOpen] = useState(false);
+
+  const isBatchMode =
+    (mode === "i2v" && batchItems.length > 0) ||
+    (mode === "t2v" && t2vBatchOpen && batchItems.length > 0);
 
   const handleAddBatchItems = useCallback((newItems: BatchItem[]) => {
     setBatchItems((prev) => [...prev, ...newItems]);
@@ -87,6 +93,10 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
     setBatchItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, prompt } : item))
     );
+  }, []);
+
+  const handleT2vBatchItems = useCallback((items: BatchItem[]) => {
+    setBatchItems(items);
   }, []);
 
   const onFormSubmit = (values: GeneratorFormValues) => {
@@ -115,15 +125,51 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       >
         <Card>
           <CardContent className="pt-4 space-y-4">
-            <ModeToggle />
-            <PromptField improveButton={improveButton} />
+            <ModeToggle
+              onModeChange={() => {
+                // Switching mode invalidates the queued batch — different shape.
+                setBatchItems([]);
+                setT2vBatchText("");
+                setT2vBatchOpen(false);
+              }}
+            />
+            {mode === "t2v" && (
+              <>
+                {!t2vBatchOpen && (
+                  <PromptField improveButton={improveButton} />
+                )}
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                    onClick={() => {
+                      setT2vBatchOpen((v) => !v);
+                      setBatchItems([]);
+                      setT2vBatchText("");
+                    }}
+                  >
+                    {t2vBatchOpen ? "← Single prompt" : "Batch (many prompts) →"}
+                  </button>
+                </div>
+                {t2vBatchOpen && (
+                  <BatchT2VInput
+                    value={t2vBatchText}
+                    onChange={setT2vBatchText}
+                    onItemsChange={handleT2vBatchItems}
+                  />
+                )}
+              </>
+            )}
             {mode === "i2v" && (
-              <GeneratorI2VSource
-                batchItems={batchItems}
-                onAddBatchItems={handleAddBatchItems}
-                onRemoveBatchItem={handleRemoveBatchItem}
-                onUpdateBatchPrompt={handleUpdateBatchPrompt}
-              />
+              <>
+                <PromptField improveButton={improveButton} />
+                <GeneratorI2VSource
+                  batchItems={batchItems}
+                  onAddBatchItems={handleAddBatchItems}
+                  onRemoveBatchItem={handleRemoveBatchItem}
+                  onUpdateBatchPrompt={handleUpdateBatchPrompt}
+                />
+              </>
             )}
           </CardContent>
         </Card>
@@ -149,7 +195,12 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         <GeneratorMultiShotSection />
 
         {/* Submit — never disabled, user can fire multiple generations */}
-        <Button type="submit" size="lg" className="w-full">
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={t2vBatchOpen && batchItems.length === 0}
+        >
           {isBatchMode ? (
             `Generate ${batchItems.length} Videos`
           ) : (
