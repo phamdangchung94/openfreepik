@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import { toBatchApiParams } from "@/lib/form/to-api-params";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
@@ -95,6 +96,9 @@ export function useBatchQueue(): UseBatchQueueResult {
       const json = await res.json();
       const apiTaskId = json.data.task_id as string;
       useTaskStore.getState().updateTask(localId, { taskId: apiTaskId, status: "IN_PROGRESS" });
+      if (json.balance) {
+        useAuthStore.getState().mergeBalance(json.balance);
+      }
       await runPollTask(apiTaskId, localId);
     } catch (err) {
       useTaskStore.getState().updateTask(localId, { status: "FAILED", error: String(err) });

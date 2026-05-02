@@ -28,9 +28,9 @@ export default function HomePage() {
 
   const handleSingleSubmit = useCallback(
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
-      const { apiKey } = useAuthStore.getState();
-      if (!apiKey) {
-        toast.error("Please enter your Freepik API key first");
+      const { activationCode } = useAuthStore.getState();
+      if (!activationCode) {
+        toast.error("Please activate your code first");
         return;
       }
       try {
@@ -51,9 +51,9 @@ export default function HomePage() {
 
   const handleBatchSubmit = useCallback(
     (items: BatchItem[], sharedParams: GeneratorFormValues) => {
-      const { apiKey } = useAuthStore.getState();
-      if (!apiKey) {
-        toast.error("Please enter your Freepik API key first");
+      const { activationCode } = useAuthStore.getState();
+      if (!activationCode) {
+        toast.error("Please activate your code first");
         return;
       }
       startBatch(items, sharedParams);

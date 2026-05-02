@@ -2,7 +2,8 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders, extractErrorMessage, requireApiKey } from "@/lib/api-headers";
+import { getApiHeaders, extractErrorMessage, requireActivationCode } from "@/lib/api-headers";
+import { useAuthStore } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import type { KlingV3GenerateParams } from "@/lib/freepik/types";
 
@@ -36,8 +37,8 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
   const generate = useCallback(
     async (params: KlingV3GenerateParams, opts: GenerateOpts): Promise<string> => {
-      // Validate API key before creating task
-      requireApiKey();
+      // Validate activation code before creating task
+      requireActivationCode();
 
       const localId = crypto.randomUUID();
       const store = useTaskStore.getState();
@@ -83,6 +84,9 @@ export function useGenerateVideo(): UseGenerateVideoResult {
             taskId: apiTaskId,
             status: "IN_PROGRESS",
           });
+          if (json.balance) {
+            useAuthStore.getState().mergeBalance(json.balance);
+          }
 
           const result = await pollTaskUntilDone({
             apiTaskId,

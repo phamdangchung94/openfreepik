@@ -1,27 +1,29 @@
 /**
- * Client-side helpers for API key management and fetch headers.
+ * Client-side helpers for activation-code auth and fetch headers.
  * Reads from Zustand store (works in async contexts outside React).
  */
 
 import { useAuthStore } from "@/store/auth-store";
 
-/** Returns headers object with the API key for client→server fetch calls. */
+/** Returns headers object with the bearer activation code for client→server fetch calls. */
 export function getApiHeaders(extra?: Record<string, string>): Record<string, string> {
-  const { apiKey } = useAuthStore.getState();
+  const { activationCode } = useAuthStore.getState();
   return {
     "content-type": "application/json",
-    ...(apiKey ? { "x-api-key": apiKey } : {}),
+    ...(activationCode ? { Authorization: `Bearer ${activationCode}` } : {}),
     ...extra,
   };
 }
 
-/** Returns the current API key or throws if missing. */
-export function requireApiKey(): string {
-  const { apiKey } = useAuthStore.getState();
-  if (!apiKey) {
-    throw new Error("API key is required. Please enter your Freepik API key.");
+/** Returns the current activation code or throws if missing. */
+export function requireActivationCode(): string {
+  const { activationCode } = useAuthStore.getState();
+  if (!activationCode) {
+    throw new Error(
+      "Activation code is required. Please activate your code first.",
+    );
   }
-  return apiKey;
+  return activationCode;
 }
 
 /**

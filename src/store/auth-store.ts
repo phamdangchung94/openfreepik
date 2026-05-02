@@ -3,43 +3,51 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-interface AuthState {
-  apiKey: string;
-  setApiKey: (key: string) => void;
+export type ActivationMode = "unlimited" | "quota" | "topup";
+
+export interface ActivationMetadata {
+  label: string | null;
+  mode: ActivationMode;
+  quotaEur: number | null;
+  usedEur: number;
+  /** quota_eur - used_eur, or null for unlimited mode */
+  remainingEur: number | null;
 }
 
-const LEGACY_KEY = "openfreepik-tasks";
+/** Subset of metadata returned by POST /api/freepik/* responses. */
+export interface BalanceUpdate {
+  mode: ActivationMode;
+  quotaEur: number | null;
+  usedEur: number;
+  remainingEur: number | null;
+}
 
-/**
- * Reads any apiKey persisted under the legacy task-store key so users
- * who saved a key before this split don't lose it. Runs once at startup.
- */
-function readLegacyApiKey(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    const raw = window.localStorage.getItem(LEGACY_KEY);
-    if (!raw) return "";
-    const parsed = JSON.parse(raw);
-    return typeof parsed?.state?.apiKey === "string" ? parsed.state.apiKey : "";
-  } catch {
-    return "";
-  }
+interface AuthState {
+  /** The activation code itself — also used as the bearer token. */
+  activationCode: string;
+  /** Public metadata fetched from /api/activate; null until activated. */
+  metadata: ActivationMetadata | null;
+  setActivation: (code: string, metadata: ActivationMetadata) => void;
+  setMetadata: (metadata: ActivationMetadata) => void;
+  /** Merge balance fields from a generation response, preserving label. */
+  mergeBalance: (balance: BalanceUpdate) => void;
+  clear: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      apiKey: "",
-      setApiKey: (key) => set({ apiKey: key }),
+      activationCode: "",
+      metadata: null,
+      setActivation: (code, metadata) =>
+        set({ activationCode: code, metadata }),
+      setMetadata: (metadata) => set({ metadata }),
+      mergeBalance: (balance) =>
+        set((state) =>
+          state.metadata ? { metadata: { ...state.metadata, ...balance } } : state,
+        ),
+      clear: () => set({ activationCode: "", metadata: null }),
     }),
-    {
-      name: "openfreepik-auth",
-      onRehydrateStorage: () => (state) => {
-        if (state && !state.apiKey) {
-          const legacy = readLegacyApiKey();
-          if (legacy) state.setApiKey(legacy);
-        }
-      },
-    },
+    { name: "openfreepik-auth" },
   ),
 );

@@ -3,7 +3,7 @@
 import { Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { ApiKeyInput } from "@/components/layout/api-key-input";
+import { ActivationCodeInput } from "@/components/layout/activation-code-input";
 
 export function AppHeader() {
   return (
@@ -19,7 +19,7 @@ export function AppHeader() {
           </Badge>
         </div>
         <div className="flex items-center gap-3">
-          <ApiKeyInput />
+          <ActivationCodeInput />
           <ThemeToggle />
         </div>
       </div>
