@@ -4,6 +4,7 @@ import { Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { ActivationCodeInput } from "@/components/layout/activation-code-input";
+import { AutoDownloadToggle } from "@/components/layout/auto-download-toggle";
 
 export function AppHeader() {
   return (
@@ -20,6 +21,7 @@ export function AppHeader() {
         </div>
         <div className="flex items-center gap-3">
           <ActivationCodeInput />
+          <AutoDownloadToggle />
           <ThemeToggle />
         </div>
       </div>
