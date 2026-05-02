@@ -27,6 +27,15 @@ export function extractActivationCode(request: Request): string | null {
   return code && code.length > 0 ? code : null;
 }
 
+interface TaskGetHandlerOptions<T> {
+  /**
+   * Best-effort side effect after a successful poll — used by kling-v3 to
+   * write the video URL into usage_logs once Freepik reports COMPLETED.
+   * Errors are swallowed: the customer's poll succeeds either way.
+   */
+  onSuccess?: (taskId: string, data: T) => Promise<void> | void;
+}
+
 /**
  * Build a GET handler for `/[taskId]` routes that polls Freepik task status.
  * Uses authedFreepikCall — validates the activation code and picks a key
@@ -34,6 +43,7 @@ export function extractActivationCode(request: Request): string | null {
  */
 export function createTaskGetHandler<T>(
   getter: (taskId: string, opts: { apiKey: string }) => Promise<T>,
+  options?: TaskGetHandlerOptions<T>,
 ) {
   return async function GET(
     request: Request,
@@ -55,6 +65,15 @@ export function createTaskGetHandler<T>(
     if (!result.ok) {
       return NextResponse.json(result.body, { status: result.status });
     }
+
+    if (options?.onSuccess) {
+      try {
+        await options.onSuccess(taskId, result.data);
+      } catch (err) {
+        console.warn("[createTaskGetHandler] onSuccess hook failed:", err);
+      }
+    }
+
     return NextResponse.json({ data: result.data });
   };
 }

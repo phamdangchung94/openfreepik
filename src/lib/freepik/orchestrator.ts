@@ -179,8 +179,24 @@ function isKeyExhaustedError(err: unknown): boolean {
   return err.code === "QUOTA_EXHAUSTED" || err.code === "AUTH";
 }
 
+/**
+ * Best-effort refund. The original Freepik error needs to surface to the
+ * caller, so we never let a refund failure shadow it — the worst case
+ * here is a customer permanently overcharged for a request that did
+ * nothing, which audit #4 logs loudly so admin can manually reconcile.
+ */
 async function refundIfCharged(codeId: string, costEur: number): Promise<void> {
-  if (costEur > 0) await refundCode(codeId, costEur);
+  if (costEur <= 0) return;
+  try {
+    await refundCode(codeId, costEur);
+  } catch (err) {
+    console.error(
+      `[REFUND-FAILED] codeId=${codeId} amount=${costEur.toFixed(2)} EUR — ` +
+        "manual reconciliation required",
+      err,
+    );
+    // Future: insert into a pending_refunds table for cron-driven retry.
+  }
 }
 
 async function logUsage<T>(

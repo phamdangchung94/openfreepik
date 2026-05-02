@@ -20,10 +20,12 @@ export interface PickedKey {
  * Atomically pick the LRU active key with enough budget for `estimatedCostEur`,
  * touch its `last_used_at`, and return its decrypted plaintext.
  *
- * Uses `FOR UPDATE SKIP LOCKED` inside a CTE so two concurrent requests
- * never grab the same row when the pool is contended.
+ * Uses plain `FOR UPDATE` (not SKIP LOCKED) — a contended request waits
+ * ~50ms for the lock instead of returning null. SKIP LOCKED was dropped
+ * after the post-launch audit (#3) showed it caused spurious 503s under
+ * burst traffic when the pool had only 1 active key.
  *
- * Returns null if no active key has enough remaining budget.
+ * Returns null only if NO active key has enough remaining budget.
  */
 export async function pickActiveKey(
   estimatedCostEur: number,
@@ -41,7 +43,7 @@ export async function pickActiveKey(
       WHERE is_active
         AND (assigned_eur - used_eur) >= ${cost}::numeric
       ORDER BY last_used_at ASC NULLS FIRST, created_at ASC
-      FOR UPDATE SKIP LOCKED
+      FOR UPDATE
       LIMIT 1
     )
     UPDATE freepik_keys
