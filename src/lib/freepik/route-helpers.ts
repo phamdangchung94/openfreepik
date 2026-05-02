@@ -33,9 +33,25 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 /**
  * Extract the user's Freepik API key from the request header.
  * Returns null if not present.
+ *
+ * @deprecated Will be removed in Phase 5 — replaced by extractActivationCode
+ * once API routes switch to the activation-code auth model.
  */
 export function extractApiKey(request: Request): string | null {
   return request.headers.get("x-api-key") || null;
+}
+
+/**
+ * Extract a bearer-token activation code from the Authorization header.
+ * Accepts: `Authorization: Bearer <code>` (case-insensitive scheme).
+ * Returns null if missing or malformed.
+ */
+export function extractActivationCode(request: Request): string | null {
+  const auth = request.headers.get("authorization");
+  if (!auth) return null;
+  const match = auth.match(/^Bearer\s+(.+)$/i);
+  const code = match?.[1]?.trim();
+  return code && code.length > 0 ? code : null;
 }
 
 /**

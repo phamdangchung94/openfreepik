@@ -35,10 +35,12 @@ export const freepikKeys = pgTable("freepik_keys", {
 
 /**
  * Activation codes issued to customers.
- * Mode:
- *   - "unlimited": no quota check; runs until is_active=false
- *   - "quota":     quota_eur is the cap; reject when used_eur >= quota_eur
- *   - "topup":     quota_eur is current balance; admin tops up over time
+ *
+ * For all modes, remaining = quota_eur - used_eur (or unbounded if unlimited).
+ * Mode just describes admin behavior:
+ *   - "unlimited": ignore quota_eur entirely; runs until is_active=false
+ *   - "quota":     admin sets quota_eur once at issue time; never edited
+ *   - "topup":     admin increments quota_eur over time as customer pays
  *
  * The code itself IS the bearer token (long random string, 32+ chars).
  * No JWT; revoke = set is_active=false.

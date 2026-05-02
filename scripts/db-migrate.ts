@@ -20,7 +20,7 @@ const MIGRATIONS_DIR = "drizzle/migrations";
 async function main() {
   // Sanity check connection
   const ping = await sql`SELECT now() AS now`;
-  console.log(`Connected to Neon at ${ping[0].now}`);
+  console.log(`Connected to Neon at ${ping[0]?.now}`);
 
   // Track applied migrations in a small table
   await sql`
