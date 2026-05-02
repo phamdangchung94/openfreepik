@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { purgeExpiredSessions } from "@/lib/auth/admin";
 import { purgeStaleFailedLogins } from "@/lib/auth/login-throttle";
 import { purgeExpiredRateLimitBuckets } from "@/lib/rate-limit";
+import { errFields, log } from "@/lib/logger";
 
 /**
  * GET /api/cron/purge
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
   const expected = process.env.CRON_SECRET;
   if (!expected) {
-    console.error("[cron/purge] CRON_SECRET env var is not set");
+    log.error("CRON_MISCONFIGURED", { reason: "CRON_SECRET not set" });
     return NextResponse.json(
       { error: "MISCONFIGURED", message: "CRON_SECRET not set" },
       { status: 500 },
@@ -50,7 +51,12 @@ export async function GET(request: Request) {
     .filter((r) => r.status === "rejected")
     .map((r) => (r as PromiseRejectedResult).reason);
   if (failed.length > 0) {
-    console.error("[cron/purge] one or more purges failed:", failed);
+    log.error("CRON_PARTIAL", {
+      summary,
+      failures: failed.map((f) => errFields(f)),
+    });
+  } else {
+    log.info("CRON_OK", summary);
   }
 
   return NextResponse.json({ ok: true, summary });

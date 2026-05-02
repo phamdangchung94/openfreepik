@@ -28,6 +28,7 @@ import {
   pickActiveKey,
   recordKeyCost,
 } from "@/lib/freepik/key-pool";
+import { errFields, log } from "@/lib/logger";
 
 const MAX_KEY_RETRIES = 3;
 
@@ -119,7 +120,12 @@ export async function orchestrateFreepikCall<T>(
       if (err instanceof FreepikApiError) {
         return fail(err.status || 500, err.code, err.message);
       }
-      console.error("[orchestrator] unexpected error:", err);
+      log.error("ORCHESTRATOR_UNEXPECTED", {
+        endpoint: opts.endpoint,
+        codeId,
+        keyId: key.id,
+        ...errFields(err),
+      });
       return fail(500, "UNKNOWN", "An unexpected error occurred.");
     }
   }
@@ -127,7 +133,12 @@ export async function orchestrateFreepikCall<T>(
   // All retries used up — last error was a quota-exhaustion on every key.
   await refundIfCharged(codeId, opts.costEur);
   await logUsage(opts, codeId, null, null, "refunded");
-  console.warn("[orchestrator] all keys exhausted after retries:", lastErr);
+  log.warn("ALL_KEYS_EXHAUSTED", {
+    endpoint: opts.endpoint,
+    codeId,
+    costEur: opts.costEur,
+    ...errFields(lastErr),
+  });
   return fail(
     503,
     "ALL_KEYS_EXHAUSTED",
@@ -173,7 +184,10 @@ export async function authedFreepikCall<T>(opts: {
     if (err instanceof FreepikApiError) {
       return fail(err.status || 500, err.code, err.message);
     }
-    console.error("[authedFreepikCall] unexpected error:", err);
+    log.error("AUTHED_CALL_UNEXPECTED", {
+      keyId: key.id,
+      ...errFields(err),
+    });
     return fail(500, "UNKNOWN", "An unexpected error occurred.");
   }
 }
@@ -197,11 +211,13 @@ async function refundIfCharged(codeId: string, costEur: number): Promise<void> {
   try {
     await refundCode(codeId, costEur);
   } catch (err) {
-    console.error(
-      `[REFUND-FAILED] codeId=${codeId} amount=${costEur.toFixed(2)} EUR — ` +
-        "manual reconciliation required",
-      err,
-    );
+    // CRITICAL — this event must alert admin. Customer was charged for a
+    // request that produced no video; reversing requires manual SQL.
+    log.error("REFUND_FAILED", {
+      codeId,
+      amountEur: costEur,
+      ...errFields(err),
+    });
     // Future: insert into a pending_refunds table for cron-driven retry.
   }
 }
@@ -227,7 +243,12 @@ async function logUsage<T>(
     });
   } catch (err) {
     // Logging is best-effort — don't fail the request if the log insert fails.
-    console.error("[orchestrator] usage log insert failed:", err);
+    log.error("USAGE_LOG_INSERT_FAILED", {
+      codeId,
+      keyId,
+      endpoint: opts.endpoint,
+      ...errFields(err),
+    });
   }
 }
 

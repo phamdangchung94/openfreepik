@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { authedFreepikCall } from "./orchestrator";
+import { errFields, log } from "@/lib/logger";
 
 /**
  * Parse JSON body from a NextRequest, returning null on failure.
@@ -70,7 +71,7 @@ export function createTaskGetHandler<T>(
       try {
         await options.onSuccess(taskId, result.data);
       } catch (err) {
-        console.warn("[createTaskGetHandler] onSuccess hook failed:", err);
+        log.warn("POLL_ONSUCCESS_FAILED", { taskId, ...errFields(err) });
       }
     }
 

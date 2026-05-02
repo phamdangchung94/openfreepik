@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OpenFreepik
 
-## Getting Started
+SaaS wrapper around the Freepik Kling V3 video generation API. Customers
+authenticate with an admin-issued activation code; the server pools
+multiple Freepik API keys behind the scenes and meters per-customer
+usage.
 
-First, run the development server:
+**Live**: https://openfreepik.vercel.app
+**Admin**: https://openfreepik.vercel.app/dashboard
+
+## Stack
+
+- Next.js 16 (App Router, Turbopack)
+- React 19
+- Drizzle ORM + Neon Postgres
+- Zustand (client state)
+- TailwindCSS + Base UI components
+- Vercel deploy + Cron
+
+## Local development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+cp .env.example .env.local      # then fill the 5 secrets
+pnpm db:migrate                  # apply schema to your DB
+pnpm db:seed-pricing             # seed the pricing matrix
+pnpm dev                         # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> ⚠️ **Local + production currently share the same DB and secrets.** See
+> open issue [#2](https://github.com/phamdangchung94/openfreepik/issues/2)
+> and [`docs/RUNBOOK.md`](docs/RUNBOOK.md#required-env-vars) for the
+> isolation playbook. Until that lands, every local query hits production.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Operations
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md) covers rollback, env rotation,
+adding Freepik keys, revoking codes, migrations, monitoring, and
+common incident responses. Read this first when something breaks.
 
-## Learn More
+## Audit reports
 
-To learn more about Next.js, take a look at the following resources:
+Post-launch audits live in [`plans/audits/`](plans/audits/). Open issues
+are tracked on GitHub with `audit` label.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project conventions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- File size ≤ 200 lines (split anything larger)
+- Server-side: structured JSON logs via [`src/lib/logger.ts`](src/lib/logger.ts)
+- Money-touching paths: covered by [`scripts/audit-orchestrator-stress.ts`](scripts/audit-orchestrator-stress.ts)
+- AGENTS.md notes: this is a Next.js 16 codebase, APIs may differ from
+  what training data assumes — read `node_modules/next/dist/docs/`
+  before guessing
