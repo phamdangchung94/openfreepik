@@ -1,31 +1,23 @@
 import { NextResponse } from "next/server";
 import { freepik } from "@/lib/freepik";
 import { improvePromptRouteInputSchema } from "@/lib/freepik/improve-prompt-schema";
-import { errorToResponse, parseJsonBody, extractApiKey } from "@/lib/freepik/route-helpers";
+import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
+import {
+  extractActivationCode,
+  parseJsonBody,
+} from "@/lib/freepik/route-helpers";
 
 /**
  * POST /api/freepik/improve-prompt
- * Body: { prompt: string, type: "image"|"video", language?: string }
- * Header: x-api-key (user's Freepik API key)
- * Returns: { data: TaskData }
+ * Header: Authorization: Bearer <activation-code>
+ * Body:   { prompt: string, type: "image"|"video", language?: string }
+ *
+ * Same orchestration as kling-v3 but with cost=0 — improve-prompt is
+ * priced as free in pricing_rules, so we still validate the code and
+ * pick a key from the pool, but skip charging.
  */
 export async function POST(request: Request) {
-  const apiKey = extractApiKey(request);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "AUTH", message: "API key is required." },
-      { status: 401 }
-    );
-  }
-
   const body = await parseJsonBody(request);
-  if (!body) {
-    return NextResponse.json(
-      { error: "BAD_REQUEST", message: "Invalid JSON body." },
-      { status: 400 }
-    );
-  }
-
   const parsed = improvePromptRouteInputSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -34,14 +26,21 @@ export async function POST(request: Request) {
         message: "Validation failed.",
         issues: parsed.error.issues,
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  try {
-    const task = await freepik.improvePrompt.create(parsed.data, { apiKey });
-    return NextResponse.json({ data: task });
-  } catch (err) {
-    return errorToResponse(err);
+  const result = await orchestrateFreepikCall({
+    bearerCode: extractActivationCode(request),
+    endpoint: "improve-prompt",
+    costEur: 0,
+    callFreepik: (apiKey) =>
+      freepik.improvePrompt.create(parsed.data, { apiKey }),
+    extractTaskId: (data) => data.task_id,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(result.body, { status: result.status });
   }
+  return NextResponse.json({ data: result.data });
 }

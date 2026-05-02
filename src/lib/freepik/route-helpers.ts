@@ -1,23 +1,7 @@
 /** Shared helpers for Next.js API route handlers. */
 
 import { NextResponse } from "next/server";
-import { FreepikApiError } from "./errors";
-
-/**
- * Maps any caught error to a proper NextResponse with status code.
- * Prevents leaking internal details or the API key.
- */
-export function errorToResponse(err: unknown): NextResponse {
-  if (err instanceof FreepikApiError) {
-    return NextResponse.json(err.toJSON(), { status: err.status || 500 });
-  }
-
-  console.error("[freepik-route] Unexpected error:", err);
-  return NextResponse.json(
-    { error: "UNKNOWN", message: "An unexpected error occurred." },
-    { status: 500 }
-  );
-}
+import { authedFreepikCall } from "./orchestrator";
 
 /**
  * Parse JSON body from a NextRequest, returning null on failure.
@@ -28,17 +12,6 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
   } catch {
     return null;
   }
-}
-
-/**
- * Extract the user's Freepik API key from the request header.
- * Returns null if not present.
- *
- * @deprecated Will be removed in Phase 5 — replaced by extractActivationCode
- * once API routes switch to the activation-code auth model.
- */
-export function extractApiKey(request: Request): string | null {
-  return request.headers.get("x-api-key") || null;
 }
 
 /**
@@ -55,8 +28,9 @@ export function extractActivationCode(request: Request): string | null {
 }
 
 /**
- * Build a GET handler for `/[taskId]` routes that fetch task status
- * via a Freepik endpoint module's `getTask` function.
+ * Build a GET handler for `/[taskId]` routes that polls Freepik task status.
+ * Uses authedFreepikCall — validates the activation code and picks a key
+ * from the pool, but doesn't charge or log (poll fires every few seconds).
  */
 export function createTaskGetHandler<T>(
   getter: (taskId: string, opts: { apiKey: string }) => Promise<T>,
@@ -65,14 +39,6 @@ export function createTaskGetHandler<T>(
     request: Request,
     { params }: { params: Promise<{ taskId: string }> },
   ) {
-    const apiKey = extractApiKey(request);
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "AUTH", message: "API key is required." },
-        { status: 401 },
-      );
-    }
-
     const { taskId } = await params;
     if (!taskId) {
       return NextResponse.json(
@@ -81,11 +47,14 @@ export function createTaskGetHandler<T>(
       );
     }
 
-    try {
-      const task = await getter(taskId, { apiKey });
-      return NextResponse.json({ data: task });
-    } catch (err) {
-      return errorToResponse(err);
+    const result = await authedFreepikCall({
+      bearerCode: extractActivationCode(request),
+      callFreepik: (apiKey) => getter(taskId, { apiKey }),
+    });
+
+    if (!result.ok) {
+      return NextResponse.json(result.body, { status: result.status });
     }
+    return NextResponse.json({ data: result.data });
   };
 }
