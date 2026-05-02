@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { safeMediaUrl } from "@/lib/url-allowlist";
 import { Video } from "lucide-react";
 
 interface VideoPlayerProps {
@@ -10,7 +11,10 @@ interface VideoPlayerProps {
 }
 
 export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
-  if (!src) {
+  const safeSrc = safeMediaUrl(src);
+  const safePoster = safeMediaUrl(poster);
+
+  if (!safeSrc) {
     return (
       <div
         className={cn(
@@ -28,8 +32,8 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
 
   return (
     <video
-      src={src}
-      poster={poster ?? undefined}
+      src={safeSrc}
+      poster={safePoster ?? undefined}
       controls
       autoPlay
       loop

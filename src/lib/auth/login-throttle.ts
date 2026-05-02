@@ -1,0 +1,141 @@
+/**
+ * Per-IP brute-force protection for the admin login endpoint.
+ *
+ * Lock for 15 minutes after 5 failures inside any 15-minute rolling
+ * window. Successful login or `locked_until < now()` resets the counter.
+ *
+ * Distinct from src/lib/rate-limit.ts because the semantics are different:
+ *   - Rate limit: count per fixed window, allow N inside window.
+ *   - Login throttle: cumulative failure counter that flips a "locked"
+ *     state and stays locked until the timeout passes.
+ */
+
+import { eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { failedLogins } from "@/lib/db/schema";
+
+const MAX_FAILURES = 5;
+const LOCKOUT_MINUTES = 15;
+const COUNTER_RESET_MINUTES = 15;
+
+export interface LoginThrottleStatus {
+  locked: boolean;
+  retryAfterSeconds: number;
+  attemptsRemaining: number;
+}
+
+/**
+ * Check if the IP can attempt a login right now. Call BEFORE comparing
+ * the password — we want every check (success or failure) to go through
+ * this gate so admin sees consistent rate limiting behavior.
+ */
+export async function checkLoginAllowed(
+  ip: string,
+): Promise<LoginThrottleStatus> {
+  if (!ip) {
+    // No IP captured (proxy misconfiguration?) — fail safe and allow,
+    // but the caller should log this case for review.
+    return { locked: false, retryAfterSeconds: 0, attemptsRemaining: MAX_FAILURES };
+  }
+
+  const [row] = await db
+    .select()
+    .from(failedLogins)
+    .where(eq(failedLogins.ip, ip))
+    .limit(1);
+
+  const now = Date.now();
+
+  // Currently locked?
+  if (row?.lockedUntil && row.lockedUntil.getTime() > now) {
+    return {
+      locked: true,
+      retryAfterSeconds: Math.ceil((row.lockedUntil.getTime() - now) / 1000),
+      attemptsRemaining: 0,
+    };
+  }
+
+  // Counter reset window has passed?
+  if (row && row.lastAttempt.getTime() < now - COUNTER_RESET_MINUTES * 60_000) {
+    return {
+      locked: false,
+      retryAfterSeconds: 0,
+      attemptsRemaining: MAX_FAILURES,
+    };
+  }
+
+  return {
+    locked: false,
+    retryAfterSeconds: 0,
+    attemptsRemaining: Math.max(0, MAX_FAILURES - (row?.attempts ?? 0)),
+  };
+}
+
+/**
+ * Record a failed login attempt. Returns the updated status — when
+ * attempts hit MAX_FAILURES, locks the IP for LOCKOUT_MINUTES.
+ */
+export async function recordFailedLogin(
+  ip: string,
+): Promise<LoginThrottleStatus> {
+  if (!ip) {
+    return { locked: false, retryAfterSeconds: 0, attemptsRemaining: MAX_FAILURES };
+  }
+
+  const lockoutMs = LOCKOUT_MINUTES * 60_000;
+
+  // UPSERT — atomic increment + conditional lock-set in one statement.
+  const [row] = await db
+    .insert(failedLogins)
+    .values({
+      ip,
+      attempts: 1,
+      lastAttempt: new Date(),
+      lockedUntil: null,
+    })
+    .onConflictDoUpdate({
+      target: failedLogins.ip,
+      set: {
+        attempts: sql`${failedLogins.attempts} + 1`,
+        lastAttempt: sql`now()`,
+        lockedUntil: sql`CASE
+          WHEN ${failedLogins.attempts} + 1 >= ${MAX_FAILURES}
+          THEN now() + interval '${sql.raw(String(LOCKOUT_MINUTES))} minutes'
+          ELSE ${failedLogins.lockedUntil}
+        END`,
+      },
+    })
+    .returning();
+
+  if (!row) {
+    return { locked: false, retryAfterSeconds: 0, attemptsRemaining: MAX_FAILURES };
+  }
+
+  if (row.attempts >= MAX_FAILURES) {
+    return {
+      locked: true,
+      retryAfterSeconds: Math.ceil(lockoutMs / 1000),
+      attemptsRemaining: 0,
+    };
+  }
+  return {
+    locked: false,
+    retryAfterSeconds: 0,
+    attemptsRemaining: Math.max(0, MAX_FAILURES - row.attempts),
+  };
+}
+
+/** Reset counter on successful login. */
+export async function clearFailedLogins(ip: string): Promise<void> {
+  if (!ip) return;
+  await db.delete(failedLogins).where(eq(failedLogins.ip, ip));
+}
+
+/** Extract the client IP from request headers. Vercel sets x-forwarded-for. */
+export function getClientIp(request: Request): string {
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]!.trim();
+  const real = request.headers.get("x-real-ip");
+  if (real) return real.trim();
+  return "";
+}

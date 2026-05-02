@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  integer,
   numeric,
   pgTable,
   smallint,
@@ -143,6 +144,37 @@ export const adminSessions = pgTable("admin_sessions", {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Fixed-window rate-limit counters. bucket_key encodes the limited
+ * resource AND the time bucket, e.g. "kling-v3:code:abc:30821412" where
+ * 30821412 is the minute-since-epoch. Cron periodically deletes rows
+ * with expires_at < now() (or just lets storage grow — cleanup is best-
+ * effort since stale rows aren't returned by anything alive).
+ */
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  bucketKey: text("bucket_key").primaryKey(),
+  count: integer("count").notNull().default(1),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * Per-IP failed admin login tracking. Lock for 15 minutes after 5
+ * failures inside any 15-minute rolling window. Successful login or
+ * `locked_until < now()` resets the counter.
+ */
+export const failedLogins = pgTable(
+  "failed_logins",
+  {
+    ip: text("ip").primaryKey(),
+    attempts: integer("attempts").notNull().default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
+    lastAttempt: timestamp("last_attempt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("failed_logins_locked_until_idx").on(t.lockedUntil)],
+);
 
 export type FreepikKey = typeof freepikKeys.$inferSelect;
 export type NewFreepikKey = typeof freepikKeys.$inferInsert;

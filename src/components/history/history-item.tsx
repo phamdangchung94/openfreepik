@@ -5,6 +5,7 @@ import { Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/preview/status-badge";
 import { cn } from "@/lib/utils";
+import { safeMediaUrl } from "@/lib/url-allowlist";
 import type { GenerationTask } from "@/store/task-store";
 
 interface HistoryItemProps {
@@ -26,7 +27,7 @@ function timeAgo(timestamp: number): string {
 }
 
 export function HistoryItem({ task, isActive, onClick, onDelete }: HistoryItemProps) {
-  const hasThumb = task.mode === "i2v" && task.imageUrl;
+  const safeThumb = task.mode === "i2v" ? safeMediaUrl(task.imageUrl) : null;
   return (
     <div
       role="button"
@@ -39,9 +40,9 @@ export function HistoryItem({ task, isActive, onClick, onDelete }: HistoryItemPr
       )}
     >
       <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-        {hasThumb ? (
+        {safeThumb ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={task.imageUrl!} alt="Source" className="size-10 rounded-md object-cover" />
+          <img src={safeThumb} alt="Source" className="size-10 rounded-md object-cover" />
         ) : (
           <Video className="size-4 text-muted-foreground" />
         )}

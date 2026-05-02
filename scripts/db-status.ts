@@ -19,6 +19,8 @@ const TABLES = [
   "usage_logs",
   "pricing_rules",
   "admin_sessions",
+  "rate_limit_buckets",
+  "failed_logins",
   "__drizzle_migrations",
 ] as const;
 
