@@ -5,6 +5,7 @@ import { Key, LogOut, Infinity } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { UsagePanel } from "@/components/usage/usage-panel";
 import { useAuthStore, type ActivationMetadata } from "@/store/auth-store";
 
 export function ActivationCodeInput() {
@@ -119,7 +120,17 @@ function ActivatedDisplay({
       <Key className="h-4 w-4 text-green-500" />
       <span className="font-medium">{label}</span>
       <span className="text-muted-foreground">·</span>
-      <BalanceDisplay metadata={metadata} />
+      <UsagePanel
+        trigger={
+          <button
+            type="button"
+            className="cursor-pointer rounded px-1 hover:bg-muted/60"
+            title="View detailed usage"
+          >
+            <BalanceDisplay metadata={metadata} />
+          </button>
+        }
+      />
       <Button
         variant="ghost"
         size="xs"
