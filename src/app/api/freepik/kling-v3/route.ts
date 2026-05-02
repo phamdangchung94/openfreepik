@@ -4,7 +4,7 @@ import { klingV3RouteInputSchema } from "@/lib/freepik/kling-v3-schema";
 import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
 import { calculateCost, lookupForKlingV3 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { validateCode } from "@/lib/auth/activation";
+import { validateCode, type ValidationResult } from "@/lib/auth/activation";
 import {
   extractActivationCode,
   parseJsonBody,
@@ -47,9 +47,13 @@ export async function POST(request: Request) {
   // We resolve the code to its codeId so the limit is per-account, not
   // per-bearer-string (admin can't accidentally split the budget by
   // re-issuing a code with a different label).
+  //
+  // The validation result is reused inside the orchestrator via
+  // `preValidated` to avoid a second DB roundtrip (audit #11 W1).
   const bearer = extractActivationCode(request);
+  let validation: ValidationResult | undefined;
   if (bearer) {
-    const validation = await validateCode(bearer);
+    validation = await validateCode(bearer);
     if (validation.ok) {
       const rl = await checkRateLimit({
         resource: "kling-v3",
@@ -77,6 +81,7 @@ export async function POST(request: Request) {
 
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
+    preValidated: validation,
     endpoint: "kling-v3",
     costEur: cost,
     tier,

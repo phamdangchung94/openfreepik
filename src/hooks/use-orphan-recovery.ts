@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 
 /**
@@ -41,6 +42,12 @@ export function useOrphanRecovery() {
 
     // Wait a tick for Zustand to hydrate from localStorage
     const timer = setTimeout(() => {
+      // No bearer token = no point trying to recover. Audit #10: previously
+      // we'd 401-loop until maxTimeMs and surface as TIMEOUT. Now we leave
+      // the orphans alone — they re-resume next time the customer activates.
+      const { activationCode } = useAuthStore.getState();
+      if (!activationCode) return;
+
       const { tasks } = useTaskStore.getState();
       const orphans = Object.values(tasks).filter(
         (t) =>

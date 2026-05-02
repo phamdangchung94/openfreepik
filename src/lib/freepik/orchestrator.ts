@@ -20,6 +20,7 @@ import {
   refundCode,
   validateCode,
   type CodeMetadata,
+  type ValidationResult,
 } from "@/lib/auth/activation";
 import { FreepikApiError } from "@/lib/freepik/errors";
 import {
@@ -42,6 +43,12 @@ export interface OrchestrateOptions<T> {
   callFreepik: (apiKey: string) => Promise<T>;
   /** Extract the Freepik task_id from the response, for logging. */
   extractTaskId?: (data: T) => string | null;
+  /**
+   * Validation result reused from the caller (e.g. when a route handler
+   * already validated the code for a rate-limit gate). Skips one DB
+   * roundtrip — see audit #11 W1.
+   */
+  preValidated?: ValidationResult;
 }
 
 export type OrchestrateResult<T> =
@@ -59,7 +66,7 @@ export async function orchestrateFreepikCall<T>(
     return fail(401, "AUTH", "Activation code is required.");
   }
 
-  const validation = await validateCode(opts.bearerCode);
+  const validation = opts.preValidated ?? (await validateCode(opts.bearerCode));
   if (!validation.ok) {
     return fail(401, validation.reason.toUpperCase(), reasonMessage(validation.reason));
   }

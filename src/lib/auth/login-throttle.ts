@@ -131,6 +131,21 @@ export async function clearFailedLogins(ip: string): Promise<void> {
   await db.delete(failedLogins).where(eq(failedLogins.ip, ip));
 }
 
+/**
+ * Periodic cleanup — delete rows whose lockout already expired more than
+ * 24h ago. Without this the table grows forever AND the next request
+ * from a previously-locked IP starts at the stale `attempts` count
+ * instead of resetting to 1 (audit #12).
+ */
+export async function purgeStaleFailedLogins(): Promise<void> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  await db
+    .delete(failedLogins)
+    .where(
+      sql`${failedLogins.lockedUntil} IS NOT NULL AND ${failedLogins.lockedUntil} < ${cutoff}`,
+    );
+}
+
 /** Extract the client IP from request headers. Vercel sets x-forwarded-for. */
 export function getClientIp(request: Request): string {
   const xff = request.headers.get("x-forwarded-for");

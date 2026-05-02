@@ -52,6 +52,19 @@ export async function pollTaskUntilDone(
         headers: getApiHeaders(),
         signal,
       });
+
+      // 401 means the activation code went away (logout, revoke, expiry).
+      // Don't retry — there's no recovery path that doesn't require user
+      // action. Audit #10: previously this looped for 10 minutes until
+      // maxTimeMs and surfaced as a confusing TIMEOUT.
+      if (res.status === 401) {
+        return {
+          status: "FAILED",
+          generated: [],
+          error: "Authentication lost — please activate your code again",
+        };
+      }
+
       if (!res.ok) throw new Error(await extractErrorMessage(res));
 
       const json = await res.json();
