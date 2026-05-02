@@ -1,0 +1,68 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { freepikKeys } from "@/lib/db/schema";
+import { requireAdminApi } from "@/lib/auth/admin-server";
+import { parseJsonBody } from "@/lib/freepik/route-helpers";
+
+const patchSchema = z.object({
+  isActive: z.boolean().optional(),
+  label: z.string().min(1).max(120).optional(),
+  notes: z.string().max(500).nullable().optional(),
+  assignedEur: z.number().positive().optional(),
+});
+
+/** PATCH /api/admin/keys/[id] — toggle active, edit label/notes, adjust budget. */
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const denied = await requireAdminApi();
+  if (denied) return denied;
+
+  const { id } = await params;
+  const body = await parseJsonBody(request);
+  const parsed = patchSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { ok: false, error: "BAD_REQUEST", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (parsed.data.isActive !== undefined) updates.isActive = parsed.data.isActive;
+  if (parsed.data.label !== undefined) updates.label = parsed.data.label;
+  if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
+  if (parsed.data.assignedEur !== undefined)
+    updates.assignedEur = parsed.data.assignedEur.toFixed(2);
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json(
+      { ok: false, error: "BAD_REQUEST", message: "No fields to update." },
+      { status: 400 },
+    );
+  }
+
+  const [updated] = await db
+    .update(freepikKeys)
+    .set(updates)
+    .where(eq(freepikKeys.id, id))
+    .returning({
+      id: freepikKeys.id,
+      label: freepikKeys.label,
+      isActive: freepikKeys.isActive,
+      assignedEur: freepikKeys.assignedEur,
+      usedEur: freepikKeys.usedEur,
+      notes: freepikKeys.notes,
+    });
+
+  if (!updated) {
+    return NextResponse.json(
+      { ok: false, error: "NOT_FOUND", message: "Key not found." },
+      { status: 404 },
+    );
+  }
+  return NextResponse.json({ ok: true, updated });
+}
