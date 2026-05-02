@@ -29,7 +29,6 @@ export interface GenerationTask {
 interface TaskState {
   tasks: Record<string, GenerationTask>;
   activeTaskId: string | null;
-  apiKey: string;
 
   queue: string[];
   concurrency: number;
@@ -49,7 +48,6 @@ interface TaskState {
   setConcurrency: (concurrency: number) => void;
   setProcessing: (isProcessing: boolean) => void;
   setAutoEnhance: (v: boolean) => void;
-  setApiKey: (key: string) => void;
 }
 
 export const useTaskStore = create<TaskState>()(
@@ -57,7 +55,6 @@ export const useTaskStore = create<TaskState>()(
     (set, get) => ({
       tasks: {},
       activeTaskId: null,
-      apiKey: "",
 
       queue: [],
       concurrency: 5,
@@ -123,7 +120,6 @@ export const useTaskStore = create<TaskState>()(
       setProcessing: (isProcessing) => set({ isProcessing }),
 
       setAutoEnhance: (v) => set({ autoEnhance: v }),
-      setApiKey: (key) => set({ apiKey: key }),
     }),
     {
       name: "openfreepik-tasks",

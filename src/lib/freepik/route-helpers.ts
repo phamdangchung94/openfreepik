@@ -37,3 +37,39 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
 export function extractApiKey(request: Request): string | null {
   return request.headers.get("x-api-key") || null;
 }
+
+/**
+ * Build a GET handler for `/[taskId]` routes that fetch task status
+ * via a Freepik endpoint module's `getTask` function.
+ */
+export function createTaskGetHandler<T>(
+  getter: (taskId: string, opts: { apiKey: string }) => Promise<T>,
+) {
+  return async function GET(
+    request: Request,
+    { params }: { params: Promise<{ taskId: string }> },
+  ) {
+    const apiKey = extractApiKey(request);
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "AUTH", message: "API key is required." },
+        { status: 401 },
+      );
+    }
+
+    const { taskId } = await params;
+    if (!taskId) {
+      return NextResponse.json(
+        { error: "BAD_REQUEST", message: "taskId is required." },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const task = await getter(taskId, { apiKey });
+      return NextResponse.json({ data: task });
+    } catch (err) {
+      return errorToResponse(err);
+    }
+  };
+}

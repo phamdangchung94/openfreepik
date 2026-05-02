@@ -4,11 +4,11 @@ import { useState, useEffect } from "react";
 import { Key, Eye, EyeOff, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 
 export function ApiKeyInput() {
-  const apiKey = useTaskStore((s) => s.apiKey);
-  const setApiKey = useTaskStore((s) => s.setApiKey);
+  const apiKey = useAuthStore((s) => s.apiKey);
+  const setApiKey = useAuthStore((s) => s.setApiKey);
   const [visible, setVisible] = useState(false);
   const [localValue, setLocalValue] = useState(apiKey);
 

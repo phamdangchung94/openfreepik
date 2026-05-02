@@ -4,8 +4,9 @@ import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
 import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import { toBatchApiParams } from "@/lib/form/to-api-params";
+import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
+import { enhancePromptOnce } from "@/lib/improve-prompt-runner";
 import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema";
-import type { TaskStatus } from "@/lib/freepik/types";
 
 interface UseBatchQueueResult {
   startBatch: (items: BatchItem[], formValues: GeneratorFormValues) => void;
@@ -14,76 +15,28 @@ interface UseBatchQueueResult {
   progress: { completed: number; total: number; failed: number };
 }
 
-async function enhancePrompt(prompt: string): Promise<string> {
-  if (!prompt.trim()) return prompt;
-  try {
-    const res = await fetch("/api/freepik/improve-prompt", {
-      method: "POST",
-      headers: getApiHeaders(),
-      body: JSON.stringify({ prompt, type: "video", language: "en" }),
+async function runPollTask(apiTaskId: string, localId: string) {
+  const result = await pollTaskUntilDone({
+    apiTaskId,
+    endpoint: "kling-v3",
+    onProgress: (status) => {
+      if (status === "IN_PROGRESS") {
+        useTaskStore.getState().updateTask(localId, { status });
+      }
+    },
+  });
+
+  if (result.status === "COMPLETED") {
+    useTaskStore.getState().updateTask(localId, {
+      status: "COMPLETED",
+      videoUrl: result.generated[0] ?? null,
     });
-    if (!res.ok) return prompt;
-    const { data } = await res.json();
-    const taskId = data.task_id;
-
-    const start = Date.now();
-    while (Date.now() - start < 60_000) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const pollRes = await fetch(`/api/freepik/improve-prompt/${taskId}`, {
-        headers: getApiHeaders(),
-      });
-      if (!pollRes.ok) continue;
-      const pollData = await pollRes.json();
-      if (pollData.data.status === "COMPLETED") {
-        return pollData.data.generated[0] ?? prompt;
-      }
-      if (pollData.data.status === "FAILED") return prompt;
-    }
-    return prompt;
-  } catch {
-    return prompt;
+  } else {
+    useTaskStore.getState().updateTask(localId, {
+      status: result.status === "TIMEOUT" ? "TIMEOUT" : "FAILED",
+      error: result.error ?? "Generation failed",
+    });
   }
-}
-
-async function pollTask(apiTaskId: string, localId: string) {
-  const interval = 2_000;
-  const maxTime = 600_000;
-  const start = Date.now();
-  let attempt = 0;
-
-  while (Date.now() - start < maxTime) {
-    try {
-      const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
-        headers: getApiHeaders(),
-      });
-      if (!res.ok) {
-        const errMsg = await extractErrorMessage(res);
-        throw new Error(errMsg);
-      }
-      const json = await res.json();
-      const { status, generated } = json.data as { status: TaskStatus; generated: string[] };
-
-      if (status === "COMPLETED") {
-        const videoUrl = generated[0] ?? null;
-        useTaskStore.getState().updateTask(localId, {
-          status: "COMPLETED",
-          videoUrl,
-        });
-        return;
-      }
-      if (status === "FAILED") {
-        useTaskStore.getState().updateTask(localId, { status: "FAILED", error: "Generation failed" });
-        return;
-      }
-      useTaskStore.getState().updateTask(localId, { status: "IN_PROGRESS" });
-    } catch {
-      // retry on network error
-    }
-    attempt++;
-    const delay = Math.min(interval + attempt * 500, 10_000);
-    await new Promise((r) => setTimeout(r, delay));
-  }
-  useTaskStore.getState().updateTask(localId, { status: "TIMEOUT", error: "Polling timed out" });
 }
 
 export function useBatchQueue(): UseBatchQueueResult {
@@ -122,7 +75,7 @@ export function useBatchQueue(): UseBatchQueueResult {
 
       if (autoEnhance && prompt.trim()) {
         useTaskStore.getState().updateTask(localId, { status: "CREATED" });
-        prompt = await enhancePrompt(prompt);
+        prompt = await enhancePromptOnce(prompt);
         useTaskStore.getState().updateTask(localId, { prompt });
       }
 
@@ -142,7 +95,7 @@ export function useBatchQueue(): UseBatchQueueResult {
       const json = await res.json();
       const apiTaskId = json.data.task_id as string;
       useTaskStore.getState().updateTask(localId, { taskId: apiTaskId, status: "IN_PROGRESS" });
-      await pollTask(apiTaskId, localId);
+      await runPollTask(apiTaskId, localId);
     } catch (err) {
       useTaskStore.getState().updateTask(localId, { status: "FAILED", error: String(err) });
     } finally {
@@ -219,7 +172,10 @@ export function useBatchQueue(): UseBatchQueueResult {
 
   const cancelBatch = useCallback(() => {
     cancelledRef.current = true;
-    activeRef.current = 0; // Reset so next batch starts clean
+    activeRef.current = 0;
+    itemMapRef.current.clear();
+    batchIdsRef.current = new Set();
+    formRef.current = null;
     useTaskStore.getState().clearQueue();
   }, []);
 

@@ -13,6 +13,7 @@ import { useBatchQueue } from "@/hooks/use-batch-queue";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
 import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 import { toApiParams } from "@/lib/form/to-api-params";
 import type { GenerationTask } from "@/store/task-store";
 
@@ -27,7 +28,7 @@ export default function HomePage() {
 
   const handleSingleSubmit = useCallback(
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
-      const { apiKey } = useTaskStore.getState();
+      const { apiKey } = useAuthStore.getState();
       if (!apiKey) {
         toast.error("Please enter your Freepik API key first");
         return;
@@ -50,7 +51,7 @@ export default function HomePage() {
 
   const handleBatchSubmit = useCallback(
     (items: BatchItem[], sharedParams: GeneratorFormValues) => {
-      const { apiKey } = useTaskStore.getState();
+      const { apiKey } = useAuthStore.getState();
       if (!apiKey) {
         toast.error("Please enter your Freepik API key first");
         return;

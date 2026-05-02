@@ -3,11 +3,11 @@
  * Reads from Zustand store (works in async contexts outside React).
  */
 
-import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 
 /** Returns headers object with the API key for client→server fetch calls. */
 export function getApiHeaders(extra?: Record<string, string>): Record<string, string> {
-  const { apiKey } = useTaskStore.getState();
+  const { apiKey } = useAuthStore.getState();
   return {
     "content-type": "application/json",
     ...(apiKey ? { "x-api-key": apiKey } : {}),
@@ -17,7 +17,7 @@ export function getApiHeaders(extra?: Record<string, string>): Record<string, st
 
 /** Returns the current API key or throws if missing. */
 export function requireApiKey(): string {
-  const { apiKey } = useTaskStore.getState();
+  const { apiKey } = useAuthStore.getState();
   if (!apiKey) {
     throw new Error("API key is required. Please enter your Freepik API key.");
   }

@@ -2,8 +2,7 @@
 
 import { useEffect } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
-import type { TaskStatus } from "@/lib/freepik/types";
+import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 
 /**
  * Recovers orphaned tasks on page load.
@@ -14,52 +13,22 @@ import type { TaskStatus } from "@/lib/freepik/types";
  */
 
 async function recoverTask(localId: string, apiTaskId: string) {
-  const maxTime = 600_000;
-  const start = Date.now();
-  let attempt = 0;
-
-  while (Date.now() - start < maxTime) {
-    try {
-      const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
-        headers: getApiHeaders(),
-      });
-      if (!res.ok) {
-        const errMsg = await extractErrorMessage(res);
-        throw new Error(errMsg);
-      }
-      const json = await res.json();
-      const { status, generated } = json.data as {
-        status: TaskStatus;
-        generated: string[];
-      };
-
-      if (status === "COMPLETED") {
-        const videoUrl = generated[0] ?? null;
-        useTaskStore.getState().updateTask(localId, {
-          status: "COMPLETED",
-          videoUrl,
-        });
-        return;
-      }
-      if (status === "FAILED") {
-        useTaskStore.getState().updateTask(localId, {
-          status: "FAILED",
-          error: "Generation failed (recovered)",
-        });
-        return;
-      }
-      // Still in progress — keep polling
-    } catch {
-      // Network error — retry
-    }
-    attempt++;
-    const delay = Math.min(2_000 + attempt * 500, 10_000);
-    await new Promise((r) => setTimeout(r, delay));
-  }
-  useTaskStore.getState().updateTask(localId, {
-    status: "TIMEOUT",
-    error: "Polling timed out (recovered)",
+  const result = await pollTaskUntilDone({
+    apiTaskId,
+    endpoint: "kling-v3",
   });
+
+  if (result.status === "COMPLETED") {
+    useTaskStore.getState().updateTask(localId, {
+      status: "COMPLETED",
+      videoUrl: result.generated[0] ?? null,
+    });
+  } else {
+    useTaskStore.getState().updateTask(localId, {
+      status: result.status === "TIMEOUT" ? "TIMEOUT" : "FAILED",
+      error: `${result.error ?? "Generation failed"} (recovered)`,
+    });
+  }
 }
 
 // Module-level guard — survives React Strict Mode double-mount
