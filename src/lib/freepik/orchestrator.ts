@@ -214,12 +214,14 @@ async function runOrchestrate<T>(
 export async function authedFreepikCall<T>(opts: {
   bearerCode: string | null;
   callFreepik: (apiKey: string) => Promise<T>;
+  /** Reuse a validation result from a route-level rate-limit check. */
+  preValidated?: ValidationResult;
 }): Promise<OrchestrateResult<T>> {
   if (!opts.bearerCode) {
     return fail(401, "AUTH", "Activation code is required.");
   }
 
-  const validation = await validateCode(opts.bearerCode);
+  const validation = opts.preValidated ?? (await validateCode(opts.bearerCode));
   if (!validation.ok) {
     return fail(
       401,

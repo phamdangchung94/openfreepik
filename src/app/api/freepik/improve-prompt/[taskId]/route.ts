@@ -6,4 +6,6 @@ import { createTaskGetHandler } from "@/lib/freepik/route-helpers";
  * Header: x-api-key (user's Freepik API key)
  * Returns: { data: TaskData }
  */
-export const GET = createTaskGetHandler(freepik.improvePrompt.getTask);
+export const GET = createTaskGetHandler(freepik.improvePrompt.getTask, {
+  rateLimit: { resource: "improve-prompt-poll", limit: 60, windowSeconds: 60 },
+});

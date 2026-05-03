@@ -146,11 +146,9 @@ export async function purgeStaleFailedLogins(): Promise<void> {
     );
 }
 
-/** Extract the client IP from request headers. Vercel sets x-forwarded-for. */
-export function getClientIp(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  const real = request.headers.get("x-real-ip");
-  if (real) return real.trim();
-  return "";
-}
+/**
+ * Re-export so existing call-sites (admin login route) keep working.
+ * Real implementation lives in `src/lib/request-ip.ts` so it's reusable
+ * by rate-limit middleware without dragging in the throttle DB layer.
+ */
+export { getClientIp } from "@/lib/request-ip";

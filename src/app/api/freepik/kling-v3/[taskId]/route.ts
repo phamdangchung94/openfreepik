@@ -14,6 +14,8 @@ import { usageLogs } from "@/lib/db/schema";
  * to it. Idempotent — only fills in rows where video_url is still null.
  */
 export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
+  // Generous: 60/min = 1/sec sustained, fine for normal 2s polling.
+  rateLimit: { resource: "kling-v3-poll", limit: 60, windowSeconds: 60 },
   onSuccess: async (taskId, data) => {
     if (data.status !== "COMPLETED") return;
     const videoUrl = data.generated[0];
