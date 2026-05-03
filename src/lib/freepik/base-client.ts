@@ -94,6 +94,18 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
       status,
     });
   }
+  if (status === 403) {
+    // Freepik returns 403 for: account suspended, plan-feature gated,
+    // rate-blocked, or per-account limits hit. From our orchestrator's
+    // perspective the key is unusable — treat as auth-equivalent so the
+    // pool rotates to the next active key instead of bubbling a confusing
+    // "Unexpected HTTP 403" to the customer.
+    return new FreepikApiError({
+      message: msg || "Freepik refused the request — key likely suspended or limited.",
+      code: "AUTH",
+      status,
+    });
+  }
   if (status === 400) {
     return new FreepikApiError({
       message: msg || "Bad request — check your parameters.",

@@ -25,6 +25,7 @@ const PHRASE_MAP: Array<[RegExp, string]> = [
   [/insufficient balance/i, "Mã kích hoạt không đủ số dư cho video này."],
   [/all freepik keys ran out/i, "Hệ thống đang quá tải — vui lòng liên hệ hỗ trợ."],
   [/no freepik keys/i, "Tạm thời chưa có key khả dụng — vui lòng thử lại sau."],
+  [/freepik refused|key (likely )?suspended|account suspended|unexpected http 403/i, "Hệ thống đang gặp sự cố tạm thời — vui lòng thử lại sau ít phút."],
   [/activation code is required/i, "Bạn cần kích hoạt mã trước khi tạo video."],
   [/activation code/i, "Mã kích hoạt không hợp lệ."],
   [/network|fetch failed|enotfound|timeout/i, "Lỗi mạng — vui lòng kiểm tra kết nối và thử lại."],
