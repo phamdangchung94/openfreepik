@@ -93,6 +93,7 @@ export function ActivationCodeInput() {
       <Input
         type="text"
         placeholder="Enter activation code"
+        aria-label="Activation code"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}

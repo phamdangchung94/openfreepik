@@ -48,7 +48,7 @@ export function MultiShotEditor() {
         {fields.map((field, index) => (
           <div
             key={field.id}
-            className="flex gap-2 rounded-lg border bg-card p-3"
+            className="flex gap-2 rounded-3xl border bg-card p-3"
           >
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2">

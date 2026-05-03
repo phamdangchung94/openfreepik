@@ -39,16 +39,16 @@ export function HistoryItem({ task, isActive, onClick, onDelete }: HistoryItemPr
         isActive ? "border-primary bg-primary/5" : "border-transparent hover:border-border",
       )}
     >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
         {safeThumb ? (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={safeThumb} alt="Source" className="size-10 rounded-md object-cover" />
+          <img src={safeThumb} alt="Source" className="size-10 rounded-lg object-cover" />
         ) : (
           <Video className="size-4 text-muted-foreground" />
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="line-clamp-2 text-xs leading-snug">{task.prompt || "Untitled generation"}</p>
+        <p className="line-clamp-2 text-sm leading-snug">{task.prompt || "Untitled generation"}</p>
         <div className="flex items-center gap-2">
           <StatusBadge status={task.status} className="scale-90 origin-left" />
           <span className="text-[10px] text-muted-foreground">{timeAgo(task.createdAt)}</span>

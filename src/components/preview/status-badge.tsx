@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<
   IDLE: { label: "Idle", variant: "secondary" },
   CREATED: { label: "Created", variant: "outline" },
   IN_PROGRESS: { label: "In Progress", variant: "default", extra: "animate-pulse" },
-  COMPLETED: { label: "Completed", variant: "default", extra: "bg-emerald-600 text-white" },
+  COMPLETED: { label: "Completed", variant: "default", extra: "bg-primary text-primary-foreground" },
   FAILED: { label: "Failed", variant: "destructive" },
   TIMEOUT: { label: "Timeout", variant: "destructive" },
 };

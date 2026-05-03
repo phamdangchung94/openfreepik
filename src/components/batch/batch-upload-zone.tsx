@@ -88,7 +88,7 @@ export function BatchUploadZone({
       {/* Drop zone */}
       <div
         className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors cursor-pointer",
+          "flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed p-6 transition-colors cursor-pointer",
           isDragOver
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-muted-foreground/50",
@@ -163,7 +163,7 @@ function BatchItemCard({
   onUpdatePrompt: (prompt: string) => void;
 }) {
   return (
-    <div className="flex gap-3 rounded-lg border bg-card p-2.5">
+    <div className="flex gap-3 rounded-3xl border bg-card p-2.5">
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

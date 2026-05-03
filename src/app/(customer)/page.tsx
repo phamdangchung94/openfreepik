@@ -15,6 +15,7 @@ import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
 import { useAutoDownload } from "@/hooks/use-auto-download";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
+import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { toApiParams } from "@/lib/form/to-api-params";
 import type { GenerationTask } from "@/store/task-store";
 
@@ -26,7 +27,13 @@ export default function HomePage() {
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
   useAutoDownload(); // Browser-download videos when their tasks complete
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
+  const tasks = useTaskStore((s) => s.tasks);
+  const activationCode = useAuthStore((s) => s.activationCode);
   const formRef = useRef<GeneratorFormHandle>(null);
+
+  // Show onboarding card in the preview slot for first-visit users
+  // (no activation code OR no history yet). Hides automatically.
+  const showOnboarding = !activationCode || Object.keys(tasks).length === 0;
 
   const handleSingleSubmit = useCallback(
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
@@ -97,9 +104,13 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Center: Preview Panel */}
+        {/* Center: Preview panel — replaced by Onboarding for first-visit users */}
         <div className="hidden lg:block">
-          <PreviewPanel onRegenerate={handleRegenerate} />
+          {showOnboarding ? (
+            <CustomerOnboarding />
+          ) : (
+            <PreviewPanel onRegenerate={handleRegenerate} />
+          )}
         </div>
 
         {/* Right: History Sidebar */}

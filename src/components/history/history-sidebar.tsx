@@ -60,9 +60,13 @@ export function HistorySidebar() {
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 p-2">
           {sortedTasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center text-muted-foreground">
               <Video className="size-8 opacity-40" />
-              <p className="text-xs">No generations yet</p>
+              <p className="text-sm font-medium text-foreground/70">No generations yet</p>
+              <p className="text-xs text-muted-foreground">
+                Submit a prompt from the form on the left — it&apos;ll show up
+                here.
+              </p>
             </div>
           ) : (
             sortedTasks.map((task) => (

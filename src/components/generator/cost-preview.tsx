@@ -32,11 +32,13 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   const metadata = useAuthStore((s) => s.metadata);
 
   if (!rates) {
-    // Skeleton — cheap, ~30ms after first paint.
+    // Skeleton matches the loaded card's footprint (rounded-2xl + same
+    // padding) so the layout doesn't shift when rates fetch resolves
+    // (~30ms after first paint).
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Coins className="size-3.5" />
-        <span>Loading rates…</span>
+      <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+        <Coins className="size-3.5 animate-pulse" />
+        <span className="animate-pulse">Calculating cost…</span>
       </div>
     );
   }
@@ -64,7 +66,7 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs transition-colors ${
+      className={`flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-xs transition-colors ${
         insufficient
           ? "border-amber-500/40 bg-amber-500/5"
           : "border-border bg-muted/30"
