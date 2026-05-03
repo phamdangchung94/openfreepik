@@ -194,6 +194,35 @@ DELETE FROM failed_logins WHERE ip = '1.2.3.4';
 | `ORCHESTRATOR_UNEXPECTED` | MED | Read `errMessage` field; usually points to Freepik API change |
 | `CRON_PARTIAL` | LOW | Tomorrow's run will retry; only escalate if 3+ days in a row |
 | `CRON_MISCONFIGURED` | HIGH | `CRON_SECRET` not set on Vercel — re-add env var + redeploy |
+| `CHARGE_INITIATED` w/o matching `CHARGE_COMMITTED` | CRITICAL | Function crashed mid-call. Look up `requestId`, find `codeId` + `costEur`, refund manually via SQL |
+| `CHARGE_SLOW` | MED | Request still running >5s — usually slow Freepik. If clustered, check Freepik status page |
+
+### Detecting orphan charges (audit #5)
+
+The orchestrator emits a `CHARGE_INITIATED` log right before charging
+the activation code, then `CHARGE_COMMITTED` after the Freepik call
+succeeds and the usage row is written. Both share a `requestId`.
+
+If the function crashes between those two logs (Vercel timeout, OOM,
+deploy mid-request) you'll see an INITIATED with no matching
+COMMITTED. In your log drain, alert on:
+
+```
+event = "CHARGE_INITIATED" and not exists(
+  event = "CHARGE_COMMITTED" within 5 minutes where requestId = $.requestId
+)
+```
+
+When this fires, refund the customer manually via Neon SQL:
+
+```sql
+UPDATE activation_codes
+SET used_eur = used_eur - <costEur from log>
+WHERE id = '<codeId from log>';
+```
+
+This is a v0 mitigation — the proper fix is a `pending_charges` table
+with 2-phase commit + cron sweep, deferred to a future ticket.
 
 ### Setup Vercel Log Drain (audit #14, optional 15min)
 

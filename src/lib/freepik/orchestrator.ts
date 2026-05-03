@@ -32,6 +32,14 @@ import { errFields, log } from "@/lib/logger";
 
 const MAX_KEY_RETRIES = 3;
 
+/**
+ * Audit #5: emit CHARGE_SLOW after this many ms if the orchestrator
+ * hasn't returned. Set 5s to fire well before Vercel's 10s function
+ * timeout so admin sees the warning in logs even when the function gets
+ * killed mid-Freepik-call. Tunable.
+ */
+const SLOW_CHARGE_WARN_MS = 5_000;
+
 export interface OrchestrateOptions<T> {
   bearerCode: string | null;
   endpoint: "kling-v3" | "improve-prompt";
@@ -74,9 +82,47 @@ export async function orchestrateFreepikCall<T>(
 
   const codeId = validation.metadata.codeId;
 
+  // Audit #5 — pair an INTENT log before charge with a COMMITTED log
+  // after success. If admin sees CHARGE_INITIATED for a requestId without
+  // a matching CHARGE_COMMITTED within ~5 minutes, the function crashed
+  // mid-flight and the customer's balance needs manual reconciliation.
+  // Slow-call watchdog separately fires if we're still running after
+  // SLOW_CHARGE_WARN_MS (visible even if the function gets timeout-killed).
+  const requestId = crypto.randomUUID();
+  const startMs = Date.now();
+  const slowTimer = setTimeout(() => {
+    log.warn("CHARGE_SLOW", {
+      requestId,
+      endpoint: opts.endpoint,
+      codeId,
+      costEur: opts.costEur,
+      elapsedMs: Date.now() - startMs,
+    });
+  }, SLOW_CHARGE_WARN_MS);
+
+  try {
+    return await runOrchestrate(opts, validation.metadata, codeId, requestId, startMs);
+  } finally {
+    clearTimeout(slowTimer);
+  }
+}
+
+async function runOrchestrate<T>(
+  opts: OrchestrateOptions<T>,
+  initialMetadata: CodeMetadata,
+  codeId: string,
+  requestId: string,
+  startMs: number,
+): Promise<OrchestrateResult<T>> {
   // Skip charging entirely for free endpoints (cost=0).
-  let metadataAfterCharge: CodeMetadata = validation.metadata;
+  let metadataAfterCharge: CodeMetadata = initialMetadata;
   if (opts.costEur > 0) {
+    log.info("CHARGE_INITIATED", {
+      requestId,
+      endpoint: opts.endpoint,
+      codeId,
+      costEur: opts.costEur,
+    });
     const charged = await chargeCode(codeId, opts.costEur);
     if (!charged) {
       return fail(
@@ -107,6 +153,17 @@ export async function orchestrateFreepikCall<T>(
       await recordKeyCost(key.id, opts.costEur);
       const taskId = opts.extractTaskId?.(data) ?? null;
       await logUsage(opts, codeId, key.id, taskId, "succeeded");
+      if (opts.costEur > 0) {
+        log.info("CHARGE_COMMITTED", {
+          requestId,
+          endpoint: opts.endpoint,
+          codeId,
+          keyId: key.id,
+          freepikTaskId: taskId,
+          costEur: opts.costEur,
+          elapsedMs: Date.now() - startMs,
+        });
+      }
       return { ok: true, data, metadata: metadataAfterCharge };
     } catch (err) {
       lastErr = err;
@@ -121,6 +178,7 @@ export async function orchestrateFreepikCall<T>(
         return fail(err.status || 500, err.code, err.message);
       }
       log.error("ORCHESTRATOR_UNEXPECTED", {
+        requestId,
         endpoint: opts.endpoint,
         codeId,
         keyId: key.id,
@@ -134,6 +192,7 @@ export async function orchestrateFreepikCall<T>(
   await refundIfCharged(codeId, opts.costEur);
   await logUsage(opts, codeId, null, null, "refunded");
   log.warn("ALL_KEYS_EXHAUSTED", {
+    requestId,
     endpoint: opts.endpoint,
     codeId,
     costEur: opts.costEur,
