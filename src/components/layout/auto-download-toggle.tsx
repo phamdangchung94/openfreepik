@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { usePreferencesStore } from "@/store/preferences-store";
+import { isMobileDevice } from "@/lib/is-mobile";
 
 export function AutoDownloadToggle() {
   const enabled = usePreferencesStore((s) => s.autoDownload);
@@ -22,6 +23,13 @@ export function AutoDownloadToggle() {
   const markWarningSeen = usePreferencesStore((s) => s.markWarningSeen);
 
   const [warningOpen, setWarningOpen] = useState(false);
+  // Detect mobile after mount — `isMobileDevice` reads window APIs that
+  // SSR doesn't have. The toggle pops in on hydration; minor layout shift
+  // is acceptable for a header preference control.
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => setMobile(isMobileDevice()), []);
+
+  if (mobile) return null; // see auto-download hook for mobile rationale
 
   function handleToggle(next: boolean) {
     if (next && !warningSeen) {
@@ -45,8 +53,8 @@ export function AutoDownloadToggle() {
         className="flex items-center gap-1.5 text-xs cursor-pointer"
         title={
           enabled
-            ? "Tự động tải đang BẬT — video sẽ lưu vào thư mục Downloads khi hoàn tất"
-            : "Bấm để bật tự động tải"
+            ? "Tự động tải đang BẬT — video đơn tải ngay; batch hiện toast hỏi"
+            : "Bấm để bật tự động tải video về máy khi xong"
         }
       >
         <Download
@@ -68,23 +76,19 @@ export function AutoDownloadToggle() {
               Bật tự động tải?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Khi video tạo xong, file sẽ được tự động tải về thư mục Downloads
-              mặc định của trình duyệt.
+              Khi bạn tạo 1 video, file sẽ tự động tải về thư mục Downloads
+              ngay khi xong. Với batch nhiều video, tool sẽ hiện thông báo
+              hỏi bạn muốn tải tất cả hay không (tránh trình duyệt block).
             </AlertDialogDescription>
             <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
               <li>Mỗi video khoảng 5–30 MB.</li>
-              <li>Batch 100 video có thể chiếm 1–3 GB dung lượng ổ đĩa.</li>
               <li>
-                File sẽ không được sắp xếp — bạn nên tạo thư mục riêng trong
-                Downloads cho từng dự án.
+                Link video tạo ra hết hạn sau 24 giờ — tải sớm để giữ kết
+                quả, hoặc dùng nút "Tải" trong lịch sử bất cứ lúc nào.
               </li>
               <li>
-                Link video tạo ra sẽ hết hạn sau ~24–72 giờ, nên tự động tải là
-                cách an toàn nhất để giữ kết quả.
-              </li>
-              <li>
-                Bạn có thể tắt tự động tải bất kỳ lúc nào từ nút bật/tắt trên
-                thanh đầu trang.
+                Bạn có thể tắt bất kỳ lúc nào từ nút này trên thanh đầu
+                trang.
               </li>
             </ul>
           </AlertDialogHeader>

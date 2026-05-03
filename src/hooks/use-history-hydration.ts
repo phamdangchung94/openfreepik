@@ -77,6 +77,10 @@ async function hydrateOnce() {
       videoUrlExpiresAt: r.videoUrlExpiresAt
         ? new Date(r.videoUrlExpiresAt).getTime()
         : null,
+      // Server has no record of who downloaded what — start unmarked. The
+      // upsert never clobbers an existing local downloadedAt so customer
+      // re-opens on the same device keep their badges.
+      downloadedAt: null,
       thumbnailUrl: null,
       imageUrl: null,
       error: null,

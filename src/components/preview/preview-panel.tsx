@@ -1,5 +1,6 @@
 "use client";
 
+import { toast } from "sonner";
 import { useTaskStore, type GenerationTask } from "@/store/task-store";
 import {
   Card,
@@ -14,6 +15,7 @@ import { StatusBadge } from "./status-badge";
 import { VideoPlayer } from "./video-player";
 import { UrlCountdown } from "./url-countdown";
 import { friendlyError } from "@/lib/error-messages";
+import { buildFilename, downloadVideo } from "@/lib/auto-download";
 
 interface PreviewPanelProps {
   onRegenerate?: (task: GenerationTask) => void;
@@ -97,6 +99,24 @@ function CompletedState({
   task: GenerationTask;
   onRegenerate?: () => void;
 }) {
+  const markDownloaded = useTaskStore((s) => s.markDownloaded);
+
+  function handleDownload() {
+    if (!task.videoUrl) return;
+    if (task.videoUrlExpiresAt && task.videoUrlExpiresAt < Date.now()) {
+      toast.error("Link đã hết hạn — không thể tải");
+      return;
+    }
+    const filename = buildFilename({
+      tier: task.tier,
+      prompt: task.prompt,
+      createdAt: task.createdAt,
+    });
+    downloadVideo(task.videoUrl, filename);
+    markDownloaded(task.id);
+    toast.success(`Đã tải ${filename}`);
+  }
+
   return (
     <div className="space-y-4">
       <VideoPlayer
@@ -120,10 +140,10 @@ function CompletedState({
             variant="outline"
             size="sm"
             className="w-full"
-            onClick={() => window.open(task.videoUrl!, "_blank")}
+            onClick={handleDownload}
           >
             <Download className="size-3.5 mr-1.5" />
-            Tải về
+            {task.downloadedAt ? "Tải lại" : "Tải về"}
           </Button>
         )}
         {onRegenerate && (

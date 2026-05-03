@@ -55,6 +55,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         updatedAt: Date.now(),
         videoUrl: null,
         videoUrlExpiresAt: null,
+        downloadedAt: null,
         thumbnailUrl: null,
         imageUrl: opts.imageUrl ?? null,
         error: null,

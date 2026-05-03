@@ -37,6 +37,8 @@ export function HistorySidebar() {
   const isProcessing = useTaskStore((s) => s.isProcessing);
   const queue = useTaskStore((s) => s.queue);
 
+  const markDownloaded = useTaskStore((s) => s.markDownloaded);
+
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -50,6 +52,18 @@ export function HistorySidebar() {
   // "selected 5, only 2 downloadable" guessing game.
   const downloadableIds = useMemo(
     () => new Set(sortedTasks.filter(isDownloadable).map((t) => t.id)),
+    [sortedTasks],
+  );
+
+  // When entering select mode, pre-tick the videos the customer hasn't
+  // downloaded yet — the most likely intent for "Tải tất cả".
+  const undownloadedIds = useMemo(
+    () =>
+      new Set(
+        sortedTasks
+          .filter((t) => isDownloadable(t) && !t.downloadedAt)
+          .map((t) => t.id),
+      ),
     [sortedTasks],
   );
 
@@ -99,6 +113,7 @@ export function HistorySidebar() {
             createdAt: task.createdAt,
           }),
         );
+        markDownloaded(id);
       }
       if (i + DOWNLOAD_BATCH_SIZE < ids.length) {
         await new Promise((r) => setTimeout(r, DOWNLOAD_BATCH_DELAY_MS));
@@ -121,7 +136,12 @@ export function HistorySidebar() {
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => setSelectMode(true)}
+              onClick={() => {
+                setSelectMode(true);
+                // Pre-select what the user most likely wants — the videos
+                // they haven't already saved.
+                setSelected(new Set(undownloadedIds));
+              }}
               title="Chọn nhiều video để tải cùng lúc"
               disabled={downloadableIds.size === 0}
             >

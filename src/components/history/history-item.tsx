@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Video, X } from "lucide-react";
+import { Check, CheckCircle2, Video, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/preview/status-badge";
@@ -106,9 +106,20 @@ export function HistoryItem({
               {timeAgo(task.createdAt)}
             </span>
           </div>
-          {task.status === "COMPLETED" && task.videoUrlExpiresAt && (
-            <UrlCountdown expiresAt={task.videoUrlExpiresAt} compact />
-          )}
+          <div className="flex items-center gap-1.5">
+            {task.status === "COMPLETED" && task.downloadedAt && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] text-green-500"
+                title={`Đã tải lúc ${new Date(task.downloadedAt).toLocaleString()}`}
+              >
+                <CheckCircle2 className="size-3" />
+                Đã tải
+              </span>
+            )}
+            {task.status === "COMPLETED" && task.videoUrlExpiresAt && (
+              <UrlCountdown expiresAt={task.videoUrlExpiresAt} compact />
+            )}
+          </div>
         </div>
       </div>
 

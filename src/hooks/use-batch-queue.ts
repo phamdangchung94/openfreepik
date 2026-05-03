@@ -173,6 +173,7 @@ export function useBatchQueue(): UseBatchQueueResult {
           updatedAt: Date.now(),
           videoUrl: null,
           videoUrlExpiresAt: null,
+          downloadedAt: null,
           thumbnailUrl: null,
           imageUrl: item.imageUrl ?? null,
           error: null,
