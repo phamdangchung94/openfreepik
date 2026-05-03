@@ -1,0 +1,1 @@
+ALTER TABLE "usage_logs" ADD COLUMN "video_url_expires_at" timestamp with time zone;

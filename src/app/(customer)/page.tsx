@@ -13,8 +13,10 @@ import { useBatchQueue } from "@/hooks/use-batch-queue";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
 import { useAutoDownload } from "@/hooks/use-auto-download";
+import { useHistoryHydration } from "@/hooks/use-history-hydration";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
+import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { toApiParams } from "@/lib/form/to-api-params";
 import type { GenerationTask } from "@/store/task-store";
 
@@ -25,14 +27,21 @@ export default function HomePage() {
   const { startBatch, cancelBatch, isProcessing } = useBatchQueue();
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
   useAutoDownload(); // Browser-download videos when their tasks complete
+  useHistoryHydration(); // Pull completed videos from server on activation (cross-device)
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
+  const tasks = useTaskStore((s) => s.tasks);
+  const activationCode = useAuthStore((s) => s.activationCode);
   const formRef = useRef<GeneratorFormHandle>(null);
+
+  // Show onboarding card in the preview slot for first-visit users
+  // (no activation code OR no history yet). Hides automatically.
+  const showOnboarding = !activationCode || Object.keys(tasks).length === 0;
 
   const handleSingleSubmit = useCallback(
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
       const { activationCode } = useAuthStore.getState();
       if (!activationCode) {
-        toast.error("Please activate your code first");
+        toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
       try {
@@ -43,9 +52,9 @@ export default function HomePage() {
           imageUrl: params.start_image_url,
         });
         setActiveTaskId(localId);
-        toast.success("Generation started");
+        toast.success("Đã bắt đầu tạo video");
       } catch {
-        toast.error("Failed to start generation");
+        toast.error("Không thể bắt đầu tạo video");
       }
     },
     [generate, setActiveTaskId],
@@ -55,11 +64,11 @@ export default function HomePage() {
     (items: BatchItem[], sharedParams: GeneratorFormValues) => {
       const { activationCode } = useAuthStore.getState();
       if (!activationCode) {
-        toast.error("Please activate your code first");
+        toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
       startBatch(items, sharedParams);
-      toast.success(`Batch started: ${items.length} videos`);
+      toast.success(`Đã bắt đầu batch: ${items.length} video`);
     },
     [startBatch],
   );
@@ -71,7 +80,7 @@ export default function HomePage() {
         mode: task.mode,
         imageUrl: task.imageUrl,
       });
-      toast.info("Task loaded — edit prompt and generate again");
+      toast.info("Đã tải lại — chỉnh prompt và tạo lại");
     },
     [],
   );
@@ -85,7 +94,12 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px_260px]">
+      {/*
+       * 3-column at lg+ (form + preview/onboarding + history)
+       * 2-column at md  (form + history; preview/onboarding hidden — user sees it after submit)
+       * 1-column at sm  (form only; sidebar lives in a sheet from header)
+       */}
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_260px] lg:grid-cols-[minmax(0,1fr)_420px_260px]">
         {/* Left: Generator Form */}
         <div className="min-w-0">
           <GeneratorForm
@@ -97,14 +111,19 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Center: Preview Panel */}
-        <div className="hidden lg:block">
-          <PreviewPanel onRegenerate={handleRegenerate} />
+        {/* Center: Preview panel — replaced by Onboarding for first-visit users.
+            Hidden under lg so tablets prioritise form + history. */}
+        <div className="hidden lg:order-2 lg:block">
+          {showOnboarding ? (
+            <CustomerOnboarding />
+          ) : (
+            <PreviewPanel onRegenerate={handleRegenerate} />
+          )}
         </div>
 
-        {/* Right: History Sidebar */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4 h-[calc(100vh-6rem)] rounded-lg border bg-card">
+        {/* Right: History Sidebar — visible from tablet up. */}
+        <div className="hidden md:order-3 md:block">
+          <div className="sticky top-4 h-[calc(100vh-6rem)] rounded-3xl border bg-card">
             <HistorySidebar />
           </div>
         </div>

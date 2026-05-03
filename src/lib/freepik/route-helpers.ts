@@ -3,6 +3,8 @@
 import { NextResponse } from "next/server";
 import { authedFreepikCall } from "./orchestrator";
 import { errFields, log } from "@/lib/logger";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { validateCode, type ValidationResult } from "@/lib/auth/activation";
 
 /**
  * Parse JSON body from a NextRequest, returning null on failure.
@@ -35,6 +37,17 @@ interface TaskGetHandlerOptions<T> {
    * Errors are swallowed: the customer's poll succeeds either way.
    */
   onSuccess?: (taskId: string, data: T) => Promise<void> | void;
+  /**
+   * Per-code rate limit applied BEFORE picking a Freepik key. Polls fire
+   * every couple seconds so this should be generous (e.g. 60/min) — the
+   * point is to cap a stuck client looping at 50 req/s, not gate normal
+   * polling.
+   */
+  rateLimit?: {
+    resource: string;
+    limit: number;
+    windowSeconds: number;
+  };
 }
 
 /**
@@ -58,8 +71,38 @@ export function createTaskGetHandler<T>(
       );
     }
 
+    // Optional pre-flight: validate once to get codeId, then enforce a
+    // per-code rate limit. Pass the validation through so authedFreepikCall
+    // doesn't re-fetch.
+    const bearer = extractActivationCode(request);
+    let validation: ValidationResult | undefined;
+    if (options?.rateLimit && bearer) {
+      validation = await validateCode(bearer);
+      if (validation.ok) {
+        const rl = await checkRateLimit({
+          resource: options.rateLimit.resource,
+          scope: validation.metadata.codeId,
+          limit: options.rateLimit.limit,
+          windowSeconds: options.rateLimit.windowSeconds,
+        });
+        if (!rl.allowed) {
+          return NextResponse.json(
+            {
+              error: "RATE_LIMIT",
+              message: `Polling too fast — wait ${rl.retryAfterSeconds}s.`,
+            },
+            {
+              status: 429,
+              headers: { "retry-after": String(rl.retryAfterSeconds) },
+            },
+          );
+        }
+      }
+    }
+
     const result = await authedFreepikCall({
-      bearerCode: extractActivationCode(request),
+      bearerCode: bearer,
+      preValidated: validation,
       callFreepik: (apiKey) => getter(taskId, { apiKey }),
     });
 

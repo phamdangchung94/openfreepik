@@ -18,7 +18,7 @@ export function AspectRatioPicker() {
 
   return (
     <div className="space-y-2">
-      <Label>Aspect Ratio</Label>
+      <Label>Tỉ lệ khung hình</Label>
       <div className="flex gap-2">
         {RATIOS.map(({ value, label, w, h }) => (
           <Button

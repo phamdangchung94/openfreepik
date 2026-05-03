@@ -21,6 +21,15 @@ export interface GenerationTask {
   createdAt: number;
   updatedAt: number;
   videoUrl: string | null;
+  /** Epoch ms when the videoUrl is expected to stop working. */
+  videoUrlExpiresAt: number | null;
+  /**
+   * Epoch ms when the customer (or auto-download) last fired a download
+   * for this video. Drives the "Đã tải" badge and selection defaults.
+   * NOT proof the file landed on disk — the browser doesn't tell us —
+   * but a click happened.
+   */
+  downloadedAt: number | null;
   thumbnailUrl: string | null;
   imageUrl: string | null;
   error: string | null;
@@ -37,6 +46,15 @@ interface TaskState {
 
   addTask: (task: GenerationTask) => void;
   updateTask: (id: string, updates: Partial<GenerationTask>) => void;
+  /**
+   * Idempotent merge — used by the cross-device hydration hook to populate
+   * tasks from /api/usage. Existing tasks (by id) keep local fields like
+   * `prompt` if present; videoUrl + videoUrlExpiresAt always come from the
+   * server source of truth.
+   */
+  upsertTaskFromServer: (task: GenerationTask) => void;
+  /** Stamp downloadedAt = now. Idempotent — overwrites with the latest click. */
+  markDownloaded: (id: string) => void;
   removeTask: (id: string) => void;
   clearAll: () => void;
   setActiveTaskId: (id: string | null) => void;
@@ -74,6 +92,38 @@ export const useTaskStore = create<TaskState>()(
             tasks: {
               ...state.tasks,
               [id]: { ...existing, ...updates, updatedAt: Date.now() },
+            },
+          };
+        }),
+
+      markDownloaded: (id) =>
+        set((state) => {
+          const existing = state.tasks[id];
+          if (!existing) return state;
+          return {
+            tasks: {
+              ...state.tasks,
+              [id]: { ...existing, downloadedAt: Date.now() },
+            },
+          };
+        }),
+
+      upsertTaskFromServer: (task) =>
+        set((state) => {
+          const existing = state.tasks[task.id];
+          if (!existing) return { tasks: { ...state.tasks, [task.id]: task } };
+          // Server wins on URL/expiry/status; local prompt/mode/tier preserved
+          // (they're identical anyway, but be conservative).
+          return {
+            tasks: {
+              ...state.tasks,
+              [task.id]: {
+                ...existing,
+                status: task.status,
+                videoUrl: task.videoUrl,
+                videoUrlExpiresAt: task.videoUrlExpiresAt,
+                updatedAt: Date.now(),
+              },
             },
           };
         }),

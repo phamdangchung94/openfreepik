@@ -80,14 +80,14 @@ export function UsagePanel({ trigger }: UsagePanelProps) {
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="flex items-center gap-2">
               <Activity className="size-4" />
-              Usage Stats
+              Thống kê sử dụng
             </DialogTitle>
             <Button
               variant="ghost"
               size="xs"
               onClick={fetchUsage}
               disabled={loading}
-              title="Refresh"
+              title="Làm mới"
             >
               <RefreshCw
                 className={`size-3.5 ${loading ? "animate-spin" : ""}`}
@@ -103,7 +103,7 @@ export function UsagePanel({ trigger }: UsagePanelProps) {
         )}
 
         {!data && loading && (
-          <p className="text-xs text-muted-foreground">Loading...</p>
+          <p className="text-xs text-muted-foreground">Đang tải...</p>
         )}
 
         {data && <UsageContent data={data} />}
@@ -127,14 +127,14 @@ function UsageContent({ data }: { data: UsageResponse }) {
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between text-xs">
           <span className="font-medium">
-            {balance.label ?? "Customer"}{" "}
+            {balance.label ?? "Khách hàng"}{" "}
             <Badge variant="secondary" className="ml-1 text-[10px]">
               {balance.mode}
             </Badge>
           </span>
           {balance.mode === "unlimited" ? (
             <span className="font-mono text-muted-foreground">
-              {balance.usedEur.toFixed(2)} EUR used · ∞ remaining
+              Đã dùng {balance.usedEur.toFixed(2)} EUR · còn lại ∞
             </span>
           ) : (
             <span className="font-mono">
@@ -151,13 +151,13 @@ function UsageContent({ data }: { data: UsageResponse }) {
       <div className="grid grid-cols-2 gap-2">
         <StatCard
           icon={<Calendar className="size-3.5" />}
-          label="Today (UTC)"
+          label="Hôm nay (UTC)"
           videos={today.videos}
           eur={today.eur}
         />
         <StatCard
           icon={<Hash className="size-3.5" />}
-          label="All time"
+          label="Tất cả"
           videos={totals.videos}
           eur={totals.eur}
         />
@@ -165,21 +165,21 @@ function UsageContent({ data }: { data: UsageResponse }) {
 
       {/* Recent log */}
       <div className="space-y-2">
-        <h3 className="text-xs font-medium">Recent activity</h3>
+        <h3 className="text-xs font-medium">Hoạt động gần đây</h3>
         {recent.length === 0 ? (
           <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-            No usage yet — generate a video to see entries here.
+            Chưa có hoạt động — tạo video đầu tiên để xem ở đây.
           </p>
         ) : (
           <ScrollArea className="h-[260px] rounded-md border">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/60 backdrop-blur">
                 <tr>
-                  <th className="px-2 py-1.5 text-left font-medium">When</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Endpoint</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Tier</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Thời gian</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Loại</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Chất lượng</th>
                   <th className="px-2 py-1.5 text-right font-medium">EUR</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -189,7 +189,7 @@ function UsageContent({ data }: { data: UsageResponse }) {
                       {new Date(r.createdAt).toLocaleString()}
                     </td>
                     <td className="px-2 py-1.5">
-                      {r.endpoint === "kling-v3" ? "Video" : "Improve"}
+                      {r.endpoint === "kling-v3" ? "Video" : "Cải thiện"}
                       {r.durationSeconds && (
                         <span className="ml-1 text-muted-foreground">
                           ({r.durationSeconds}s
@@ -235,7 +235,7 @@ function StatCard({
         </div>
         <div className="flex items-baseline justify-between">
           <span className="text-2xl font-bold tabular-nums">{videos}</span>
-          <span className="text-xs text-muted-foreground">videos</span>
+          <span className="text-xs text-muted-foreground">video</span>
         </div>
         <div className="font-mono text-[11px] text-muted-foreground">
           {eur.toFixed(2)} EUR

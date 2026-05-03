@@ -60,13 +60,13 @@ export function GeneratorI2VSource({
               <div className="mt-3 space-y-3">
                 <ImageUrlField
                   name="start_image_url"
-                  label="Start Frame URL"
+                  label="URL khung đầu"
                   required
                   placeholder="https://example.com/start.jpg"
                 />
                 <ImageUrlField
                   name="end_image_url"
-                  label="End Frame URL (optional)"
+                  label="URL khung cuối (tuỳ chọn)"
                   placeholder="https://example.com/end.jpg"
                 />
               </div>

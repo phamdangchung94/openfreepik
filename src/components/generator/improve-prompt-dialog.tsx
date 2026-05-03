@@ -51,14 +51,14 @@ export function ImprovePromptDialog({
         render={<Button variant="outline" size="sm" type="button" />}
       >
         <Sparkles className="size-3.5" />
-        Improve
+        Cải thiện
       </DialogTrigger>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Improve Prompt</DialogTitle>
+          <DialogTitle>Cải thiện prompt</DialogTitle>
           <DialogDescription>
-            AI will enhance your prompt for better video generation
+            AI sẽ tối ưu prompt để tạo video tốt hơn
           </DialogDescription>
         </DialogHeader>
 
@@ -67,20 +67,20 @@ export function ImprovePromptDialog({
             <div className="flex flex-col items-center justify-center gap-3 py-6">
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
               <p className="text-sm text-muted-foreground animate-pulse">
-                Improving your prompt...
+                Đang cải thiện prompt...
               </p>
             </div>
           )}
 
           {status === "FAILED" && (
             <p className="text-sm text-destructive py-4">
-              Failed to improve prompt. Please try again.
+              Không thể cải thiện prompt. Vui lòng thử lại.
             </p>
           )}
 
           {status === "TIMEOUT" && (
             <p className="text-sm text-destructive py-4">
-              Request timed out. Please try again.
+              Quá thời gian. Vui lòng thử lại.
             </p>
           )}
 
@@ -93,14 +93,14 @@ export function ImprovePromptDialog({
 
         <DialogFooter>
           <Button variant="outline" type="button" onClick={handleClose}>
-            Cancel
+            Huỷ
           </Button>
           <Button
             type="button"
             disabled={!result || isLoading}
             onClick={handleAccept}
           >
-            Use This Prompt
+            Dùng prompt này
           </Button>
         </DialogFooter>
       </DialogContent>

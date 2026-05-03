@@ -1,28 +1,75 @@
 "use client";
 
 /**
- * Browser-side video download helpers. Auto-download is opt-in (toggle in the
- * header). When on, every transition to COMPLETED in the task store fires a
- * default-folder download via a temporary anchor click — the browser puts the
- * file in the user's configured Downloads folder.
+ * Browser-side video download helpers.
  *
- * Custom download paths would need the Chrome-only File System Access API and
- * an indexedDB-persisted directory handle; deliberately out of scope for v1.
+ * Why we proxy through our own /api/download instead of pointing an
+ * <a download> at the Freepik URL: the `download` attribute is ignored
+ * cross-origin, so the browser just plays the video inline in a new tab.
+ * The proxy responds with `Content-Disposition: attachment` from our
+ * own origin, which forces the browser's save-to-disk flow.
+ *
+ * Trade-off: doubles bandwidth (Freepik → Vercel → user). Acceptable
+ * while we're on Hobby tier — typical 20MB videos × 100/day = 2GB/day,
+ * comfortably within the 100GB/month limit.
  */
 
-export function downloadVideo(url: string, filename: string): void {
-  if (typeof document === "undefined") return;
+import { getApiHeaders } from "@/lib/api-headers";
+
+export interface DownloadInputs {
+  /** The Freepik task_id stored in the task — what /api/download[taskId] expects. */
+  freepikTaskId: string | null;
+  /** Used as the saved filename. */
+  filename: string;
+}
+
+export type DownloadResult =
+  | { ok: true }
+  | { ok: false; error: "no_task_id" | "expired" | "auth" | "network" | "upstream" };
+
+/**
+ * Fetch the video through our proxy and trigger a save dialog. Returns
+ * a result object so callers can show specific toasts (auth lost vs link
+ * expired vs network).
+ */
+export async function downloadVideo(
+  inputs: DownloadInputs,
+): Promise<DownloadResult> {
+  if (typeof document === "undefined") return { ok: false, error: "network" };
+  if (!inputs.freepikTaskId) return { ok: false, error: "no_task_id" };
+
+  let res: Response;
+  try {
+    res = await fetch(`/api/download/${inputs.freepikTaskId}`, {
+      headers: getApiHeaders(),
+    });
+  } catch {
+    return { ok: false, error: "network" };
+  }
+
+  if (res.status === 401) return { ok: false, error: "auth" };
+  if (res.status === 410) return { ok: false, error: "expired" };
+  if (!res.ok) return { ok: false, error: "upstream" };
+
+  // Stream into a blob — for typical 20MB videos this is fine in memory.
+  // If we ever ship 100MB+ files we'd switch to streaming-write via the
+  // File System Access API (Chrome only).
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  // Without rel=noopener some browsers warn about the synthetic click target.
+  a.href = blobUrl;
+  a.download = inputs.filename;
   a.rel = "noopener";
-  // target=_blank is a fallback when the server omits Content-Disposition;
-  // the file opens in a new tab the user can save manually.
-  a.target = "_blank";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+
+  // Revoke after the click handler has had a chance to start the save —
+  // Chrome can race if we revoke synchronously.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+
+  return { ok: true };
 }
 
 export interface FilenameInputs {

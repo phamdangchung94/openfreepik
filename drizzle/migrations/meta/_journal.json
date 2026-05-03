@@ -15,6 +15,13 @@
       "when": 1777742119101,
       "tag": "0001_rate_limit_failed_logins",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777807925182,
+      "tag": "0002_add_video_url_expires_at",
+      "breakpoints": true
     }
   ]
 }

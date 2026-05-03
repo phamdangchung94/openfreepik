@@ -11,13 +11,13 @@ const TIERS = [
   {
     value: "pro" as const,
     label: "Pro",
-    desc: "Higher fidelity",
+    desc: "Chất lượng cao hơn",
     icon: Crown,
   },
   {
     value: "std" as const,
-    label: "Standard",
-    desc: "Faster & cheaper",
+    label: "Tiêu chuẩn",
+    desc: "Nhanh & rẻ hơn",
     icon: Zap,
   },
 ];
@@ -28,7 +28,7 @@ export function QualityTierPicker() {
 
   return (
     <div className="space-y-2">
-      <Label>Quality Tier</Label>
+      <Label>Chất lượng</Label>
       <div className="grid grid-cols-2 gap-2">
         {TIERS.map(({ value, label, desc, icon: Icon }) => (
           <Button

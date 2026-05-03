@@ -24,7 +24,7 @@ export function GeneratorAdvancedSettings() {
             <CardTitle className="text-sm flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                Advanced Settings
+                Cài đặt nâng cao
               </span>
               <ChevronDown
                 className={cn(

@@ -6,6 +6,13 @@ import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { validateCode, type ValidationResult } from "@/lib/auth/activation";
+
+// improve-prompt is free per pricing rules but still hits Freepik. Cap
+// at 30/min so a runaway client can't burn the pool's request quota.
+const IMPROVE_PROMPT_RATE_LIMIT = 30;
+const IMPROVE_PROMPT_RATE_WINDOW_SEC = 60;
 
 /**
  * POST /api/freepik/improve-prompt
@@ -30,8 +37,38 @@ export async function POST(request: Request) {
     );
   }
 
+  // Rate limit per code BEFORE the orchestrator picks a key, so a misbehaving
+  // client can't burn the pool's per-key request quota. Re-validate once
+  // and pass the result through to skip a second DB roundtrip.
+  const bearer = extractActivationCode(request);
+  let validation: ValidationResult | undefined;
+  if (bearer) {
+    validation = await validateCode(bearer);
+    if (validation.ok) {
+      const rl = await checkRateLimit({
+        resource: "improve-prompt",
+        scope: validation.metadata.codeId,
+        limit: IMPROVE_PROMPT_RATE_LIMIT,
+        windowSeconds: IMPROVE_PROMPT_RATE_WINDOW_SEC,
+      });
+      if (!rl.allowed) {
+        return NextResponse.json(
+          {
+            error: "RATE_LIMIT",
+            message: `Limit ${IMPROVE_PROMPT_RATE_LIMIT} requests per ${IMPROVE_PROMPT_RATE_WINDOW_SEC}s. Wait ${rl.retryAfterSeconds}s and retry.`,
+          },
+          {
+            status: 429,
+            headers: { "retry-after": String(rl.retryAfterSeconds) },
+          },
+        );
+      }
+    }
+  }
+
   const result = await orchestrateFreepikCall({
-    bearerCode: extractActivationCode(request),
+    bearerCode: bearer,
+    preValidated: validation,
     endpoint: "improve-prompt",
     costEur: 0,
     callFreepik: (apiKey) =>

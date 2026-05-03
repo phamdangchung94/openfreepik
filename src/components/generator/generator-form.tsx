@@ -24,6 +24,7 @@ import { GeneratorI2VSource } from "./generator-i2v-source";
 import { GeneratorAdvancedSettings } from "./generator-advanced-settings";
 import { GeneratorMultiShotSection } from "./generator-multi-shot-section";
 import { BatchT2VInput } from "@/components/batch/batch-t2v-input";
+import { CostPreview } from "./cost-preview";
 
 interface GeneratorFormProps {
   onSubmitSingle?: (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => void;
@@ -148,7 +149,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                       setT2vBatchText("");
                     }}
                   >
-                    {t2vBatchOpen ? "← Single prompt" : "Batch (many prompts) →"}
+                    {t2vBatchOpen ? "← Một prompt" : "Batch (nhiều prompt) →"}
                   </button>
                 </div>
                 {t2vBatchOpen && (
@@ -178,7 +179,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">
               <Settings2 className="h-4 w-4" />
-              Video Settings
+              Cài đặt video
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -194,6 +195,9 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         <GeneratorAdvancedSettings />
         <GeneratorMultiShotSection />
 
+        {/* Real-time cost preview — updates as tier/duration/audio change. */}
+        <CostPreview count={isBatchMode ? batchItems.length : 1} />
+
         {/* Submit — never disabled, user can fire multiple generations */}
         <Button
           type="submit"
@@ -202,10 +206,10 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           disabled={t2vBatchOpen && batchItems.length === 0}
         >
           {isBatchMode ? (
-            `Generate ${batchItems.length} Videos`
+            `Tạo ${batchItems.length} Video`
           ) : (
             <>
-              Generate Video
+              Tạo Video
               <kbd className="ml-2 rounded bg-primary-foreground/20 px-1.5 py-0.5 text-xs font-mono">
                 ⌘↵
               </kbd>
@@ -213,7 +217,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           )}
           {activeCount > 0 && (
             <Badge variant="secondary" className="ml-2 text-xs">
-              {activeCount} running
+              {activeCount} đang chạy
             </Badge>
           )}
         </Button>
