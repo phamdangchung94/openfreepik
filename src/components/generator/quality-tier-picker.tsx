@@ -28,7 +28,7 @@ export function QualityTierPicker() {
 
   return (
     <div className="space-y-2">
-      <Label>Quality Tier</Label>
+      <Label>Chất lượng</Label>
       <div className="grid grid-cols-2 gap-2">
         {TIERS.map(({ value, label, desc, icon: Icon }) => (
           <Button

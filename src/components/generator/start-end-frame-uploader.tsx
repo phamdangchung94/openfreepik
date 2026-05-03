@@ -114,9 +114,9 @@ function FrameSlot({
               <>
                 <Upload className="h-6 w-6 text-muted-foreground" />
                 <p className="text-xs text-muted-foreground">
-                  Click or drop image
+                  Bấm hoặc thả ảnh
                 </p>
-                <p className="text-[10px] text-muted-foreground/70">
+                <p className="text-[10px] text-muted-foreground">
                   JPG, PNG, WebP — 10MB
                 </p>
               </>
@@ -151,7 +151,7 @@ export function StartEndFrameUploader() {
   return (
     <div className="grid grid-cols-2 gap-3">
       <FrameSlot
-        label="Start Frame"
+        label="Khung đầu"
         required
         url={startUrl}
         localPreview={startLocalPreview}
@@ -165,7 +165,7 @@ export function StartEndFrameUploader() {
         }}
       />
       <FrameSlot
-        label="End Frame (optional)"
+        label="Khung cuối (tuỳ chọn)"
         url={endUrl}
         localPreview={endLocalPreview}
         onUploaded={(publicUrl, dataUri) => {

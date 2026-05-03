@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
 const MODES = [
-  { value: "t2v" as const, label: "Text to Video", icon: Type },
-  { value: "i2v" as const, label: "Image to Video", icon: Image },
+  { value: "t2v" as const, label: "Văn bản → Video", icon: Type },
+  { value: "i2v" as const, label: "Ảnh → Video", icon: Image },
 ];
 
 interface ModeToggleProps {

@@ -17,13 +17,13 @@ interface HistoryItemProps {
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "just now";
+  if (seconds < 60) return "vừa xong";
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return `${minutes} phút trước`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `${hours} giờ trước`;
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return `${days} ngày trước`;
 }
 
 export function HistoryItem({ task, isActive, onClick, onDelete }: HistoryItemProps) {
@@ -48,7 +48,7 @@ export function HistoryItem({ task, isActive, onClick, onDelete }: HistoryItemPr
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="line-clamp-2 text-sm leading-snug">{task.prompt || "Untitled generation"}</p>
+        <p className="line-clamp-2 text-sm leading-snug">{task.prompt || "Video chưa đặt tên"}</p>
         <div className="flex items-center gap-2">
           <StatusBadge status={task.status} className="scale-90 origin-left" />
           <span className="text-[10px] text-muted-foreground">{timeAgo(task.createdAt)}</span>

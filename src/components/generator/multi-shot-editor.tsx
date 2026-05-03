@@ -33,7 +33,7 @@ export function MultiShotEditor() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label>Scenes ({fields.length}/6)</Label>
+        <Label>Cảnh ({fields.length}/6)</Label>
         <Badge variant={overCap ? "destructive" : "secondary"}>
           {totalDuration}/15s
         </Badge>
@@ -53,7 +53,7 @@ export function MultiShotEditor() {
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-xs">
-                  Scene {index + 1}
+                  Cảnh {index + 1}
                 </Badge>
                 <Select
                   defaultValue={shots[index]?.duration ?? "5"}
@@ -76,7 +76,7 @@ export function MultiShotEditor() {
               </div>
               <Textarea
                 rows={2}
-                placeholder={`Describe scene ${index + 1}...`}
+                placeholder={`Mô tả cảnh ${index + 1}...`}
                 {...register(`multi_prompt.${index}.prompt`)}
               />
             </div>
@@ -102,12 +102,12 @@ export function MultiShotEditor() {
         onClick={() => append({ prompt: "", duration: "5" })}
       >
         <Plus className="mr-1 h-4 w-4" />
-        Add Scene
+        Thêm cảnh
       </Button>
 
       {overCap && (
         <p className="text-sm text-destructive">
-          Total duration exceeds 15 seconds. Remove scenes or shorten durations.
+          Tổng thời lượng vượt quá 15 giây. Hãy bỏ bớt cảnh hoặc rút ngắn.
         </p>
       )}
     </div>

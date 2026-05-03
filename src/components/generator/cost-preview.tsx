@@ -38,7 +38,7 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
     return (
       <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
         <Coins className="size-3.5 animate-pulse" />
-        <span className="animate-pulse">Calculating cost…</span>
+        <span className="animate-pulse">Đang tính giá…</span>
       </div>
     );
   }
@@ -54,7 +54,7 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
     return (
       <div className="flex items-center gap-2 text-xs text-amber-500">
         <AlertCircle className="size-3.5" />
-        <span>No rate for this combination — admin needs to add one.</span>
+        <span>Chưa có giá cho cấu hình này — admin cần thêm.</span>
       </div>
     );
   }
@@ -83,7 +83,7 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
           </>
         ) : (
           <>
-            Estimated cost{" "}
+            Chi phí dự kiến{" "}
             <span className="font-mono font-medium text-foreground">
               {total.toFixed(2)} EUR
             </span>
@@ -92,12 +92,12 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
       </span>
       {insufficient && remaining !== null && remaining !== undefined && (
         <span className="text-amber-500">
-          Need {(total - remaining).toFixed(2)} EUR more
+          Cần thêm {(total - remaining).toFixed(2)} EUR
         </span>
       )}
       {!insufficient && metadata?.mode !== "unlimited" && remaining !== null && remaining !== undefined && (
         <span className="text-muted-foreground">
-          {remaining.toFixed(2)} EUR remaining
+          Còn {remaining.toFixed(2)} EUR
         </span>
       )}
     </div>

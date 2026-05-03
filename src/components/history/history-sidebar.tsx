@@ -35,7 +35,7 @@ export function HistorySidebar() {
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
           <History className="size-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">History</h2>
+          <h2 className="text-sm font-medium">Lịch sử</h2>
         </div>
         {totalTasks > 0 && (
           <Button variant="ghost" size="icon-xs" onClick={clearAll}>
@@ -50,7 +50,7 @@ export function HistorySidebar() {
       {isProcessing && (
         <div className="space-y-1 px-3 py-2">
           <p className="text-xs text-muted-foreground">
-            Processing {completedInQueue}/{totalTasks}
+            Đang xử lý {completedInQueue}/{totalTasks}
           </p>
           <Progress value={progressValue} />
         </div>
@@ -62,10 +62,9 @@ export function HistorySidebar() {
           {sortedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center text-muted-foreground">
               <Video className="size-8 opacity-40" />
-              <p className="text-sm font-medium text-foreground/70">No generations yet</p>
+              <p className="text-sm font-medium text-foreground/70">Chưa có video nào</p>
               <p className="text-xs text-muted-foreground">
-                Submit a prompt from the form on the left — it&apos;ll show up
-                here.
+                Nhập prompt từ form bên trái — kết quả sẽ hiện ở đây.
               </p>
             </div>
           ) : (

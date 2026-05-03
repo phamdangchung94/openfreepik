@@ -37,11 +37,11 @@ export function ActivationCodeInput() {
       const json = await res.json();
       if (!res.ok || !json.ok) {
         if (!opts?.silent) {
-          toast.error(json.message ?? "Activation failed");
+          toast.error(json.message ?? "Kích hoạt thất bại");
         } else {
           // Silent re-validation failed (revoked/expired) — log out the client.
           clear();
-          toast.error(json.message ?? "Activation revoked");
+          toast.error(json.message ?? "Mã kích hoạt đã bị thu hồi");
         }
         return;
       }
@@ -51,11 +51,11 @@ export function ActivationCodeInput() {
       } else {
         setActivation(code, meta);
         setDraft("");
-        toast.success(meta.label ? `Welcome, ${meta.label}` : "Activated");
+        toast.success(meta.label ? `Xin chào, ${meta.label}` : "Đã kích hoạt");
       }
     } catch (err) {
       console.error("[activate]", err);
-      if (!opts?.silent) toast.error("Network error — please retry");
+      if (!opts?.silent) toast.error("Lỗi mạng — thử lại");
     } finally {
       setBusy(false);
     }
@@ -65,7 +65,7 @@ export function ActivationCodeInput() {
     e.preventDefault();
     const code = draft.trim();
     if (code.length < 8) {
-      toast.error("Code looks too short");
+      toast.error("Mã quá ngắn");
       return;
     }
     activate(code);
@@ -81,7 +81,7 @@ export function ActivationCodeInput() {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Key className="h-4 w-4" />
-        <span>Activating...</span>
+        <span>Đang kích hoạt...</span>
       </div>
     );
   }
@@ -92,17 +92,17 @@ export function ActivationCodeInput() {
       <Key className="h-4 w-4 shrink-0 text-amber-500" />
       <Input
         type="text"
-        placeholder="Enter activation code"
-        aria-label="Activation code"
+        placeholder="Nhập mã kích hoạt"
+        aria-label="Mã kích hoạt"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}
-        className="h-8 w-[260px] rounded-full px-4 text-xs font-mono"
+        className="h-9 w-[180px] rounded-full px-4 text-xs font-mono sm:h-8 sm:w-[260px]"
         autoComplete="off"
         spellCheck={false}
       />
-      <Button type="submit" size="xs" disabled={busy || draft.trim().length < 8}>
-        {busy ? "..." : "Activate"}
+      <Button type="submit" size="sm" disabled={busy || draft.trim().length < 8}>
+        {busy ? "..." : "Kích hoạt"}
       </Button>
     </form>
   );
@@ -115,7 +115,7 @@ function ActivatedDisplay({
   metadata: ActivationMetadata;
   onLogout: () => void;
 }) {
-  const label = metadata.label ?? "Customer";
+  const label = metadata.label ?? "Khách hàng";
   return (
     <div className="flex items-center gap-2 text-xs">
       <Key className="h-4 w-4 text-green-500" />
@@ -134,12 +134,13 @@ function ActivatedDisplay({
       />
       <Button
         variant="ghost"
-        size="xs"
+        size="sm"
         onClick={onLogout}
-        title="Log out"
-        className="ml-1"
+        title="Đăng xuất"
+        aria-label="Đăng xuất"
+        className="ml-1 size-9 sm:size-7 [&_svg]:size-4 sm:[&_svg]:size-3.5"
       >
-        <LogOut className="size-3.5" />
+        <LogOut />
       </Button>
     </div>
   );
@@ -150,7 +151,7 @@ function BalanceDisplay({ metadata }: { metadata: ActivationMetadata }) {
     return (
       <span className="inline-flex items-center gap-1 font-mono text-muted-foreground">
         <Infinity className="size-3.5" />
-        unlimited
+        không giới hạn
       </span>
     );
   }

@@ -13,12 +13,12 @@ const STATUS_CONFIG: Record<
   GenerationTaskStatus,
   { label: string; variant: "default" | "secondary" | "destructive" | "outline"; extra?: string }
 > = {
-  IDLE: { label: "Idle", variant: "secondary" },
-  CREATED: { label: "Created", variant: "outline" },
-  IN_PROGRESS: { label: "In Progress", variant: "default", extra: "animate-pulse" },
-  COMPLETED: { label: "Completed", variant: "default", extra: "bg-primary text-primary-foreground" },
-  FAILED: { label: "Failed", variant: "destructive" },
-  TIMEOUT: { label: "Timeout", variant: "destructive" },
+  IDLE: { label: "Chờ", variant: "secondary" },
+  CREATED: { label: "Đã tạo", variant: "outline" },
+  IN_PROGRESS: { label: "Đang xử lý", variant: "default", extra: "animate-pulse" },
+  COMPLETED: { label: "Hoàn tất", variant: "default", extra: "bg-primary text-primary-foreground" },
+  FAILED: { label: "Thất bại", variant: "destructive" },
+  TIMEOUT: { label: "Quá thời gian", variant: "destructive" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

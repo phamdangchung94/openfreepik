@@ -14,7 +14,7 @@ export function DurationSlider() {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>Duration</Label>
+        <Label>Thời lượng</Label>
         <span className="text-sm font-medium tabular-nums">{numValue}s</span>
       </div>
       <Slider

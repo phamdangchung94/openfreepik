@@ -56,7 +56,7 @@ export function ImprovePromptDialog({
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Improve Prompt</DialogTitle>
+          <DialogTitle>Cải thiện prompt</DialogTitle>
           <DialogDescription>
             AI will enhance your prompt for better video generation
           </DialogDescription>

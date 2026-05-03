@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Video, AlertCircle, Loader2, Download, RotateCcw } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import { VideoPlayer } from "./video-player";
+import { friendlyError } from "@/lib/error-messages";
 
 interface PreviewPanelProps {
   onRegenerate?: (task: GenerationTask) => void;
@@ -21,9 +22,9 @@ function EmptyState() {
   return (
     <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-muted/50 px-6 text-center">
       <Video className="h-12 w-12 text-muted-foreground" />
-      <p className="text-sm text-foreground/70">No video selected</p>
+      <p className="text-sm text-foreground/70">Chưa chọn video</p>
       <p className="text-xs text-muted-foreground">
-        Pick a generation from history or fire a new one from the form.
+        Chọn 1 video từ lịch sử hoặc tạo mới từ form bên trái.
       </p>
     </div>
   );
@@ -45,8 +46,8 @@ function LoadingState({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm font-medium text-foreground/80">
-            Generating video
-            {totalActive > 1 ? ` — ${position} of ${totalActive}` : "…"}
+            Đang tạo video
+            {totalActive > 1 ? ` — ${position}/${totalActive}` : "…"}
           </p>
           <p className="line-clamp-2 max-w-xs text-xs text-muted-foreground">
             &ldquo;{task.prompt}&rdquo;
@@ -69,11 +70,11 @@ function ErrorState({
       <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-destructive/5">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-sm font-medium text-destructive">
-          {task.status === "TIMEOUT" ? "Generation timed out" : "Generation failed"}
+          {task.status === "TIMEOUT" ? "Tạo video quá thời gian" : "Tạo video thất bại"}
         </p>
       </div>
       {task.error && (
-        <p className="text-sm text-destructive/80">{task.error}</p>
+        <p className="text-sm text-destructive/80">{friendlyError(task.error)}</p>
       )}
       <p className="text-sm text-muted-foreground">
         {task.prompt}
@@ -81,7 +82,7 @@ function ErrorState({
       {onRegenerate && (
         <Button variant="outline" size="sm" className="w-full" onClick={onRegenerate}>
           <RotateCcw className="size-3.5 mr-1.5" />
-          Regenerate
+          Tạo lại
         </Button>
       )}
     </div>
@@ -106,10 +107,10 @@ function CompletedState({
           {task.prompt}
         </p>
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground/60">
-            {task.mode === "t2v" ? "Text to Video" : "Image to Video"}
+          <p className="text-xs text-muted-foreground">
+            {task.mode === "t2v" ? "Văn bản → Video" : "Ảnh → Video"}
             {" / "}
-            {task.tier === "pro" ? "Pro" : "Standard"}
+            {task.tier === "pro" ? "Pro" : "Tiêu chuẩn"}
           </p>
           {task.videoUrl && (
             <Button
@@ -118,7 +119,7 @@ function CompletedState({
               onClick={() => window.open(task.videoUrl!, "_blank")}
             >
               <Download className="size-3" />
-              Download
+              Tải về
             </Button>
           )}
         </div>
@@ -153,7 +154,7 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
     <Card className="sticky top-4">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
-          <span>Preview</span>
+          <span>Xem trước</span>
           {task && <StatusBadge status={task.status} />}
         </CardTitle>
       </CardHeader>

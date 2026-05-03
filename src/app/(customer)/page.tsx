@@ -39,7 +39,7 @@ export default function HomePage() {
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
       const { activationCode } = useAuthStore.getState();
       if (!activationCode) {
-        toast.error("Please activate your code first");
+        toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
       try {
@@ -50,9 +50,9 @@ export default function HomePage() {
           imageUrl: params.start_image_url,
         });
         setActiveTaskId(localId);
-        toast.success("Generation started");
+        toast.success("Đã bắt đầu tạo video");
       } catch {
-        toast.error("Failed to start generation");
+        toast.error("Không thể bắt đầu tạo video");
       }
     },
     [generate, setActiveTaskId],
@@ -62,11 +62,11 @@ export default function HomePage() {
     (items: BatchItem[], sharedParams: GeneratorFormValues) => {
       const { activationCode } = useAuthStore.getState();
       if (!activationCode) {
-        toast.error("Please activate your code first");
+        toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
       startBatch(items, sharedParams);
-      toast.success(`Batch started: ${items.length} videos`);
+      toast.success(`Đã bắt đầu batch: ${items.length} video`);
     },
     [startBatch],
   );
@@ -78,7 +78,7 @@ export default function HomePage() {
         mode: task.mode,
         imageUrl: task.imageUrl,
       });
-      toast.info("Task loaded — edit prompt and generate again");
+      toast.info("Đã tải lại — chỉnh prompt và tạo lại");
     },
     [],
   );
@@ -92,7 +92,12 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6">
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px_260px]">
+      {/*
+       * 3-column at lg+ (form + preview/onboarding + history)
+       * 2-column at md  (form + history; preview/onboarding hidden — user sees it after submit)
+       * 1-column at sm  (form only; sidebar lives in a sheet from header)
+       */}
+      <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_260px] lg:grid-cols-[minmax(0,1fr)_420px_260px]">
         {/* Left: Generator Form */}
         <div className="min-w-0">
           <GeneratorForm
@@ -104,8 +109,9 @@ export default function HomePage() {
           />
         </div>
 
-        {/* Center: Preview panel — replaced by Onboarding for first-visit users */}
-        <div className="hidden lg:block">
+        {/* Center: Preview panel — replaced by Onboarding for first-visit users.
+            Hidden under lg so tablets prioritise form + history. */}
+        <div className="hidden lg:order-2 lg:block">
           {showOnboarding ? (
             <CustomerOnboarding />
           ) : (
@@ -113,9 +119,9 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Right: History Sidebar */}
-        <div className="hidden lg:block">
-          <div className="sticky top-4 h-[calc(100vh-6rem)] rounded-lg border bg-card">
+        {/* Right: History Sidebar — visible from tablet up. */}
+        <div className="hidden md:order-3 md:block">
+          <div className="sticky top-4 h-[calc(100vh-6rem)] rounded-3xl border bg-card">
             <HistorySidebar />
           </div>
         </div>

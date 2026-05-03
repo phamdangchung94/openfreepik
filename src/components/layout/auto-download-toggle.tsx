@@ -45,14 +45,14 @@ export function AutoDownloadToggle() {
         className="flex items-center gap-1.5 text-xs cursor-pointer"
         title={
           enabled
-            ? "Auto-download is ON — videos save to your Downloads folder when ready"
-            : "Click to enable auto-download"
+            ? "Tự động tải đang BẬT — video sẽ lưu vào thư mục Downloads khi hoàn tất"
+            : "Bấm để bật tự động tải"
         }
       >
         <Download
           className={`size-3.5 ${enabled ? "text-green-500" : "text-muted-foreground"}`}
         />
-        <span className="hidden lg:inline">Auto-download</span>
+        <span className="hidden lg:inline">Tự động tải</span>
         <Switch
           checked={enabled}
           onCheckedChange={handleToggle}
@@ -65,33 +65,33 @@ export function AutoDownloadToggle() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Download className="size-4" />
-              Enable auto-download?
+              Bật tự động tải?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              When a video finishes generating, it will be downloaded
-              automatically to your browser&apos;s default Downloads folder.
+              Khi video tạo xong, file sẽ được tự động tải về thư mục Downloads
+              mặc định của trình duyệt.
             </AlertDialogDescription>
             <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>Each video is roughly 5–30 MB.</li>
-              <li>A batch of 100 videos can use 1–3 GB of disk space.</li>
+              <li>Mỗi video khoảng 5–30 MB.</li>
+              <li>Batch 100 video có thể chiếm 1–3 GB dung lượng ổ đĩa.</li>
               <li>
-                Files won&apos;t be organized — consider creating a folder in
-                Downloads for each project.
+                File sẽ không được sắp xếp — bạn nên tạo thư mục riêng trong
+                Downloads cho từng dự án.
               </li>
               <li>
-                Generated video URLs expire in ~24–72 hours, so auto-download
-                is the safest way to keep your results.
+                Link video tạo ra sẽ hết hạn sau ~24–72 giờ, nên tự động tải là
+                cách an toàn nhất để giữ kết quả.
               </li>
               <li>
-                You can turn auto-download off any time from the toggle in
-                the header.
+                Bạn có thể tắt tự động tải bất kỳ lúc nào từ nút bật/tắt trên
+                thanh đầu trang.
               </li>
             </ul>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>Huỷ</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirm}>
-              Got it, enable
+              Đã hiểu, bật
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

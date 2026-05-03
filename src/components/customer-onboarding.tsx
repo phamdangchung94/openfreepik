@@ -21,20 +21,20 @@ export function CustomerOnboarding() {
   const steps = [
     {
       icon: Key,
-      title: "Paste your activation code",
-      desc: "Tap the input in the top-right of the header. Your remaining EUR appears next to it once activated.",
+      title: "Nhập mã kích hoạt",
+      desc: "Click vào ô nhập ở góc phải header. Số dư EUR sẽ hiển thị ngay bên cạnh sau khi kích hoạt.",
       done: !!activationCode,
     },
     {
       icon: Sparkles,
-      title: "Pick a prompt or upload an image",
-      desc: "Use Text-to-Video for a written scene, or Image-to-Video to animate a still. Adjust tier, duration, and audio in the settings card.",
+      title: "Viết prompt hoặc upload ảnh",
+      desc: "Dùng Text-to-Video để mô tả cảnh bằng chữ, hoặc Image-to-Video để biến ảnh tĩnh thành video. Chỉnh tier, thời lượng và âm thanh ở card cài đặt.",
       done: false,
     },
     {
       icon: Play,
-      title: "Hit Generate",
-      desc: "Estimated cost shows above the button. Each video takes ~20–60 seconds. Auto-download saves them to your Downloads folder.",
+      title: "Bấm Tạo Video",
+      desc: "Chi phí dự kiến hiển thị ngay trên nút. Mỗi video mất khoảng 20–60 giây. Bật auto-download để tự động lưu về máy.",
       done: false,
     },
   ];
@@ -45,13 +45,13 @@ export function CustomerOnboarding() {
         <div className="space-y-1.5">
           <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
             <Sparkles className="size-3.5" />
-            Get started
+            Bắt đầu
           </div>
           <h2 className="text-xl font-semibold">
-            Generate your first AI video
+            Tạo video AI đầu tiên của bạn
           </h2>
           <p className="text-sm text-muted-foreground">
-            Three steps. ~30 seconds.
+            Ba bước. Khoảng 30 giây.
           </p>
         </div>
 
@@ -86,12 +86,12 @@ export function CustomerOnboarding() {
         </ol>
 
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          Don&apos;t have an activation code?{" "}
+          Chưa có mã kích hoạt?{" "}
           <a
             href="mailto:tproxy.team@gmail.com"
             className="inline-flex items-center gap-0.5 text-accent hover:underline"
           >
-            Contact us <ArrowUpRight className="size-3" />
+            Liên hệ với chúng tôi <ArrowUpRight className="size-3" />
           </a>
         </p>
       </CardContent>

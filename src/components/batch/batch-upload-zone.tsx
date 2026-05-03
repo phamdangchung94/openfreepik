@@ -64,7 +64,7 @@ export function BatchUploadZone({
         onAddItems(newItems);
       } catch (err) {
         console.error("[batch-upload] Error:", err);
-        alert(err instanceof Error ? err.message : "Upload failed");
+        alert(err instanceof Error ? err.message : "Tải ảnh thất bại");
       } finally {
         setIsUploading(false);
       }
@@ -87,8 +87,11 @@ export function BatchUploadZone({
     <div className="space-y-3">
       {/* Drop zone */}
       <div
+        role="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-label="Tải ảnh lên"
         className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed p-6 transition-colors cursor-pointer",
+          "flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed p-6 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
           isDragOver
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-muted-foreground/50",
@@ -101,20 +104,27 @@ export function BatchUploadZone({
         onDragLeave={() => setIsDragOver(false)}
         onDrop={handleDrop}
         onClick={() => !isDisabled && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (isDisabled) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
       >
         {isUploading ? (
           <>
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Uploading images...</p>
+            <p className="text-sm text-muted-foreground">Đang tải ảnh lên...</p>
           </>
         ) : (
           <>
             <Upload className="h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Drag & drop images here, or click to browse
+              Kéo thả ảnh vào đây, hoặc bấm để chọn
             </p>
-            <p className="text-xs text-muted-foreground/70">
-              JPG, PNG, WebP — max 10MB each, up to 20 files
+            <p className="text-xs text-muted-foreground">
+              JPG, PNG, WebP — tối đa 10MB mỗi ảnh, đến 20 ảnh
             </p>
           </>
         )}
@@ -133,7 +143,7 @@ export function BatchUploadZone({
       {items.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Badge variant="secondary">{items.length} images</Badge>
+            <Badge variant="secondary">{items.length} ảnh</Badge>
           </div>
           <ScrollArea className="max-h-[400px]">
             <div className="space-y-2 pr-2">
@@ -189,7 +199,7 @@ function BatchItemCard({
         </div>
         <Textarea
           rows={2}
-          placeholder="Custom prompt for this image..."
+          placeholder="Prompt cho ảnh này..."
           value={item.prompt}
           onChange={(e) => onUpdatePrompt(e.target.value)}
           className="text-xs min-h-[48px]"

@@ -52,8 +52,8 @@ export function CfgScaleSlider() {
         }}
       />
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Creative</span>
-        <span>Strict</span>
+        <span>Sáng tạo</span>
+        <span>Bám sát</span>
       </div>
     </div>
   );

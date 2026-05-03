@@ -37,7 +37,7 @@ export function BatchT2VInput({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <ListPlus className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">Batch prompts</span>
+        <span className="text-sm font-medium">Danh sách prompt</span>
         <Badge
           variant={overLimit ? "destructive" : "secondary"}
           className="ml-auto text-[10px]"
@@ -48,21 +48,20 @@ export function BatchT2VInput({
       <Textarea
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder={`Paste up to ${MAX_PROMPTS} prompts — one per line.\n\na cinematic shot of a cat walking through a neon-lit alley\na drone view of a misty mountain valley at dawn\n…`}
+        placeholder={`Dán tối đa ${MAX_PROMPTS} prompt — mỗi dòng một prompt.\n\ncảnh điện ảnh một con mèo đi qua con hẻm đầy đèn neon\ngóc nhìn flycam thung lũng núi sương mù lúc bình minh\n…`}
         rows={10}
         className="font-mono text-xs min-h-[200px]"
         spellCheck={false}
       />
       {overLimit && (
         <p className="text-xs text-destructive">
-          Too many prompts — keep it under {MAX_PROMPTS}. Extra lines will be
-          ignored.
+          Quá nhiều prompt — giữ dưới {MAX_PROMPTS}. Các dòng dư sẽ bị bỏ qua.
         </p>
       )}
       {items.length > 0 && (
         <div className="flex items-center justify-between rounded-md border border-dashed bg-muted/30 px-3 py-2">
           <span className="text-xs text-muted-foreground">
-            Each line generates one video — settings below apply to all.
+            Mỗi dòng tạo một video — cài đặt bên dưới áp dụng cho tất cả.
           </span>
           <BatchSettings />
         </div>

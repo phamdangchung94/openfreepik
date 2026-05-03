@@ -19,7 +19,7 @@ export function BatchSettings() {
       {/* Concurrency */}
       <div className="flex items-center gap-3">
         <Label className="text-xs text-muted-foreground shrink-0">
-          Concurrency
+          Số luồng
         </Label>
         <div className="flex gap-1">
           {CONCURRENCY_OPTIONS.map((n) => (
@@ -45,7 +45,7 @@ export function BatchSettings() {
             htmlFor="auto-enhance"
             className="text-xs cursor-pointer"
           >
-            Auto-enhance prompts
+            Tự động cải thiện prompt
           </Label>
         </div>
         <Switch
