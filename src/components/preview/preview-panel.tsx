@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Video, AlertCircle, Loader2, Download, RotateCcw } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import { VideoPlayer } from "./video-player";
+import { UrlCountdown } from "./url-countdown";
 import { friendlyError } from "@/lib/error-messages";
 
 interface PreviewPanelProps {
@@ -106,23 +107,25 @@ function CompletedState({
         <p className="text-sm text-muted-foreground">
           {task.prompt}
         </p>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">
             {task.mode === "t2v" ? "Văn bản → Video" : "Ảnh → Video"}
             {" / "}
             {task.tier === "pro" ? "Pro" : "Tiêu chuẩn"}
           </p>
-          {task.videoUrl && (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => window.open(task.videoUrl!, "_blank")}
-            >
-              <Download className="size-3" />
-              Tải về
-            </Button>
-          )}
+          <UrlCountdown expiresAt={task.videoUrlExpiresAt} />
         </div>
+        {task.videoUrl && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => window.open(task.videoUrl!, "_blank")}
+          >
+            <Download className="size-3.5 mr-1.5" />
+            Tải về
+          </Button>
+        )}
         {onRegenerate && (
           <Button variant="outline" size="sm" className="w-full" onClick={onRegenerate}>
             <RotateCcw className="size-3.5 mr-1.5" />

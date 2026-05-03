@@ -7,6 +7,7 @@ import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import { toBatchApiParams, toBatchT2VParams } from "@/lib/form/to-api-params";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import { enhancePromptOnce } from "@/lib/improve-prompt-runner";
+import { expiresFromNow } from "@/lib/video-url-ttl";
 import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema";
 
 interface UseBatchQueueResult {
@@ -31,6 +32,7 @@ async function runPollTask(apiTaskId: string, localId: string) {
     useTaskStore.getState().updateTask(localId, {
       status: "COMPLETED",
       videoUrl: result.generated[0] ?? null,
+      videoUrlExpiresAt: expiresFromNow(),
     });
   } else {
     useTaskStore.getState().updateTask(localId, {
@@ -170,6 +172,7 @@ export function useBatchQueue(): UseBatchQueueResult {
           createdAt: Date.now(),
           updatedAt: Date.now(),
           videoUrl: null,
+          videoUrlExpiresAt: null,
           thumbnailUrl: null,
           imageUrl: item.imageUrl ?? null,
           error: null,

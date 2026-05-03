@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
+import { expiresFromNow } from "@/lib/video-url-ttl";
 
 /**
  * Recovers orphaned tasks on page load.
@@ -23,6 +24,7 @@ async function recoverTask(localId: string, apiTaskId: string) {
     useTaskStore.getState().updateTask(localId, {
       status: "COMPLETED",
       videoUrl: result.generated[0] ?? null,
+      videoUrlExpiresAt: expiresFromNow(),
     });
   } else {
     useTaskStore.getState().updateTask(localId, {

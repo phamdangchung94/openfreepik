@@ -90,6 +90,13 @@ export const usageLogs = pgTable(
       .default("0.00"),
     freepikTaskId: text("freepik_task_id"),
     videoUrl: text("video_url"),
+    /**
+     * When the videoUrl is expected to stop working. Set by the poll endpoint
+     * when COMPLETED is first observed (capturedAt + VIDEO_URL_TTL_HOURS).
+     * Freepik doesn't publish a TTL; 24h is the conservative industry default
+     * for AWS CloudFront signed URLs.
+     */
+    videoUrlExpiresAt: timestamp("video_url_expires_at", { withTimezone: true }),
     status: text("status", {
       enum: ["succeeded", "failed", "refunded", "pending"],
     })

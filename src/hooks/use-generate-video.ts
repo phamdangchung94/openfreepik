@@ -5,6 +5,7 @@ import { useTaskStore } from "@/store/task-store";
 import { getApiHeaders, extractErrorMessage, requireActivationCode } from "@/lib/api-headers";
 import { useAuthStore } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
+import { expiresFromNow } from "@/lib/video-url-ttl";
 import type { KlingV3GenerateParams } from "@/lib/freepik/types";
 
 interface GenerateOpts {
@@ -53,6 +54,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         videoUrl: null,
+        videoUrlExpiresAt: null,
         thumbnailUrl: null,
         imageUrl: opts.imageUrl ?? null,
         error: null,
@@ -102,6 +104,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
             useTaskStore.getState().updateTask(localId, {
               status: "COMPLETED",
               videoUrl: result.generated[0] ?? null,
+              videoUrlExpiresAt: expiresFromNow(),
             });
           } else {
             useTaskStore.getState().updateTask(localId, {

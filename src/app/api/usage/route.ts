@@ -61,12 +61,14 @@ export async function GET(request: Request) {
       withAudio: usageLogs.withAudio,
       costEur: usageLogs.costEur,
       freepikTaskId: usageLogs.freepikTaskId,
+      videoUrl: usageLogs.videoUrl,
+      videoUrlExpiresAt: usageLogs.videoUrlExpiresAt,
       status: usageLogs.status,
     })
     .from(usageLogs)
     .where(eq(usageLogs.codeId, codeId))
     .orderBy(desc(usageLogs.createdAt))
-    .limit(20);
+    .limit(50);
 
   return NextResponse.json({
     balance: { mode, label, quotaEur, usedEur, remainingEur },
@@ -82,6 +84,7 @@ export async function GET(request: Request) {
       ...r,
       costEur: Number(r.costEur),
       createdAt: r.createdAt.toISOString(),
+      videoUrlExpiresAt: r.videoUrlExpiresAt?.toISOString() ?? null,
     })),
   });
 }

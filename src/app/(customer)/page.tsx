@@ -13,6 +13,7 @@ import { useBatchQueue } from "@/hooks/use-batch-queue";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
 import { useAutoDownload } from "@/hooks/use-auto-download";
+import { useHistoryHydration } from "@/hooks/use-history-hydration";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
@@ -26,6 +27,7 @@ export default function HomePage() {
   const { startBatch, cancelBatch, isProcessing } = useBatchQueue();
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
   useAutoDownload(); // Browser-download videos when their tasks complete
+  useHistoryHydration(); // Pull completed videos from server on activation (cross-device)
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
   const tasks = useTaskStore((s) => s.tasks);
   const activationCode = useAuthStore((s) => s.activationCode);
