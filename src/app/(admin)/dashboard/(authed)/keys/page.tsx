@@ -55,7 +55,8 @@ export default function AdminKeysPage() {
           <h1 className="text-2xl font-semibold">Freepik keys</h1>
           <p className="text-sm text-muted-foreground">
             {rows.length} {rows.length === 1 ? "key" : "keys"} in the rotation
-            pool
+            pool. Spend tracked locally — Freepik exposes no balance API, so
+            verify against the Magnific dashboard periodically.
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -21,9 +21,9 @@ const monaSansMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kling 3 Video Generator — Freepik API",
+  title: "Kling 3 Video Generator",
   description:
-    "Generate AI videos with Kling 3 via Freepik API. Text-to-video, image-to-video, batch processing, and more.",
+    "Generate AI videos with Kling 3 — text-to-video, image-to-video, batch processing, auto-download.",
 };
 
 export default function RootLayout({

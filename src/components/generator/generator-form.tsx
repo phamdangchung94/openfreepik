@@ -24,6 +24,7 @@ import { GeneratorI2VSource } from "./generator-i2v-source";
 import { GeneratorAdvancedSettings } from "./generator-advanced-settings";
 import { GeneratorMultiShotSection } from "./generator-multi-shot-section";
 import { BatchT2VInput } from "@/components/batch/batch-t2v-input";
+import { CostPreview } from "./cost-preview";
 
 interface GeneratorFormProps {
   onSubmitSingle?: (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => void;
@@ -193,6 +194,9 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
 
         <GeneratorAdvancedSettings />
         <GeneratorMultiShotSection />
+
+        {/* Real-time cost preview — updates as tier/duration/audio change. */}
+        <CostPreview count={isBatchMode ? batchItems.length : 1} />
 
         {/* Submit — never disabled, user can fire multiple generations */}
         <Button

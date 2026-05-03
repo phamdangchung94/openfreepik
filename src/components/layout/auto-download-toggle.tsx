@@ -79,7 +79,7 @@ export function AutoDownloadToggle() {
                 Downloads for each project.
               </li>
               <li>
-                Freepik video URLs expire in ~24–72 hours, so auto-download
+                Generated video URLs expire in ~24–72 hours, so auto-download
                 is the safest way to keep your results.
               </li>
               <li>
