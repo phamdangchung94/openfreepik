@@ -59,8 +59,7 @@ export function toApiParams(v: GeneratorFormValues): KlingV3GenerateParams {
 }
 
 /**
- * Override start_image_url for a single batch item
- * (used when generating from a batch with per-image prompts).
+ * Override start_image_url for a single I2V batch item.
  */
 export function toBatchApiParams(
   v: GeneratorFormValues,
@@ -72,4 +71,22 @@ export function toBatchApiParams(
     params.prompt = prompt.trim();
   }
   return params;
+}
+
+/**
+ * Build params for a single T2V batch item — only the prompt varies
+ * per item; everything else (tier, duration, audio, aspect ratio…)
+ * comes from the shared form values.
+ */
+export function toBatchT2VParams(
+  v: GeneratorFormValues,
+  prompt: string
+): KlingV3GenerateParams {
+  return toApiParams({
+    ...v,
+    mode: "t2v",
+    prompt,
+    start_image_url: "",
+    end_image_url: "",
+  });
 }

@@ -2,8 +2,10 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders, extractErrorMessage, requireApiKey } from "@/lib/api-headers";
-import type { KlingV3GenerateParams, TaskStatus } from "@/lib/freepik/types";
+import { getApiHeaders, extractErrorMessage, requireActivationCode } from "@/lib/api-headers";
+import { useAuthStore } from "@/store/auth-store";
+import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
+import type { KlingV3GenerateParams } from "@/lib/freepik/types";
 
 interface GenerateOpts {
   tier: "pro" | "std";
@@ -16,56 +18,6 @@ interface UseGenerateVideoResult {
   generate: (params: KlingV3GenerateParams, opts: GenerateOpts) => Promise<string>;
   /** Number of currently active (in-flight) generations */
   activeCount: number;
-}
-
-/**
- * Fire-and-forget polling for a single task.
- * Runs independently — multiple can run in parallel.
- */
-async function pollUntilDone(apiTaskId: string, localId: string) {
-  const maxTime = 600_000;
-  const start = Date.now();
-  let attempt = 0;
-
-  while (Date.now() - start < maxTime) {
-    try {
-      const res = await fetch(`/api/freepik/kling-v3/${apiTaskId}`, {
-        headers: getApiHeaders(),
-      });
-      if (!res.ok) {
-        const errMsg = await extractErrorMessage(res);
-        throw new Error(errMsg);
-      }
-      const json = await res.json();
-      const { status, generated } = json.data as { status: TaskStatus; generated: string[] };
-
-      if (status === "COMPLETED") {
-        const videoUrl = generated[0] ?? null;
-        useTaskStore.getState().updateTask(localId, {
-          status: "COMPLETED",
-          videoUrl,
-        });
-        return;
-      }
-      if (status === "FAILED") {
-        useTaskStore.getState().updateTask(localId, {
-          status: "FAILED",
-          error: "Generation failed",
-        });
-        return;
-      }
-      useTaskStore.getState().updateTask(localId, { status: "IN_PROGRESS" });
-    } catch {
-      // retry on network error
-    }
-    attempt++;
-    const delay = Math.min(2_000 + attempt * 500, 10_000);
-    await new Promise((r) => setTimeout(r, delay));
-  }
-  useTaskStore.getState().updateTask(localId, {
-    status: "TIMEOUT",
-    error: "Polling timed out",
-  });
 }
 
 /**
@@ -85,8 +37,8 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
   const generate = useCallback(
     async (params: KlingV3GenerateParams, opts: GenerateOpts): Promise<string> => {
-      // Validate API key before creating task
-      requireApiKey();
+      // Validate activation code before creating task
+      requireActivationCode();
 
       const localId = crypto.randomUUID();
       const store = useTaskStore.getState();
@@ -132,8 +84,31 @@ export function useGenerateVideo(): UseGenerateVideoResult {
             taskId: apiTaskId,
             status: "IN_PROGRESS",
           });
+          if (json.balance) {
+            useAuthStore.getState().mergeBalance(json.balance);
+          }
 
-          await pollUntilDone(apiTaskId, localId);
+          const result = await pollTaskUntilDone({
+            apiTaskId,
+            endpoint: "kling-v3",
+            onProgress: (status) => {
+              if (status === "IN_PROGRESS") {
+                useTaskStore.getState().updateTask(localId, { status });
+              }
+            },
+          });
+
+          if (result.status === "COMPLETED") {
+            useTaskStore.getState().updateTask(localId, {
+              status: "COMPLETED",
+              videoUrl: result.generated[0] ?? null,
+            });
+          } else {
+            useTaskStore.getState().updateTask(localId, {
+              status: result.status === "TIMEOUT" ? "TIMEOUT" : "FAILED",
+              error: result.error ?? "Generation failed",
+            });
+          }
         } catch (err) {
           useTaskStore.getState().updateTask(localId, {
             status: "FAILED",

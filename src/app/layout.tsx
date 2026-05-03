@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
-import { AppHeader } from "@/components/layout/app-header";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -41,10 +40,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider>
-            <div className="relative flex min-h-screen flex-col">
-              <AppHeader />
-              <main className="flex-1">{children}</main>
-            </div>
+            {children}
             <Toaster position="bottom-right" richColors />
           </TooltipProvider>
         </ThemeProvider>

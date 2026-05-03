@@ -62,12 +62,15 @@ export const generatorFormSchema = z
 
 export type GeneratorFormValues = z.infer<typeof generatorFormSchema>;
 
-/** Batch item — one image with its own prompt for I2V batch processing. */
+/** Batch item — one prompt-driven generation, image-bound for I2V or text-only for T2V. */
 export interface BatchItem {
   id: string;
-  file?: File;
-  previewUrl: string;
-  imageUrl: string;
+  mode: "t2v" | "i2v";
   prompt: string;
-  filename: string;
+  /** Required for i2v mode; undefined for t2v. */
+  imageUrl?: string;
+  /** Browser preview data URI — i2v only. */
+  previewUrl?: string;
+  filename?: string;
+  file?: File;
 }

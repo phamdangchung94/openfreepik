@@ -12,7 +12,9 @@ import { useGenerateVideo } from "@/hooks/use-generate-video";
 import { useBatchQueue } from "@/hooks/use-batch-queue";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
+import { useAutoDownload } from "@/hooks/use-auto-download";
 import { useTaskStore } from "@/store/task-store";
+import { useAuthStore } from "@/store/auth-store";
 import { toApiParams } from "@/lib/form/to-api-params";
 import type { GenerationTask } from "@/store/task-store";
 
@@ -22,14 +24,15 @@ export default function HomePage() {
   const { generate, activeCount } = useGenerateVideo();
   const { startBatch, cancelBatch, isProcessing } = useBatchQueue();
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
+  useAutoDownload(); // Browser-download videos when their tasks complete
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
   const formRef = useRef<GeneratorFormHandle>(null);
 
   const handleSingleSubmit = useCallback(
     async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
-      const { apiKey } = useTaskStore.getState();
-      if (!apiKey) {
-        toast.error("Please enter your Freepik API key first");
+      const { activationCode } = useAuthStore.getState();
+      if (!activationCode) {
+        toast.error("Please activate your code first");
         return;
       }
       try {
@@ -50,9 +53,9 @@ export default function HomePage() {
 
   const handleBatchSubmit = useCallback(
     (items: BatchItem[], sharedParams: GeneratorFormValues) => {
-      const { apiKey } = useTaskStore.getState();
-      if (!apiKey) {
-        toast.error("Please enter your Freepik API key first");
+      const { activationCode } = useAuthStore.getState();
+      if (!activationCode) {
+        toast.error("Please activate your code first");
         return;
       }
       startBatch(items, sharedParams);

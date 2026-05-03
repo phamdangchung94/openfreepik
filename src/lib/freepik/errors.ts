@@ -4,6 +4,7 @@ export type FreepikErrorCode =
   | "AUTH"
   | "BAD_REQUEST"
   | "RATE_LIMIT"
+  | "QUOTA_EXHAUSTED"
   | "SERVER"
   | "NETWORK"
   | "INVALID_RESPONSE"

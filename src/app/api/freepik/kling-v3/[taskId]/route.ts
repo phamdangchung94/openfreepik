@@ -1,37 +1,32 @@
-import { NextResponse } from "next/server";
+import { and, eq, isNull } from "drizzle-orm";
 import { freepik } from "@/lib/freepik";
-import { errorToResponse, extractApiKey } from "@/lib/freepik/route-helpers";
+import { createTaskGetHandler } from "@/lib/freepik/route-helpers";
+import { db } from "@/lib/db/client";
+import { usageLogs } from "@/lib/db/schema";
 
 /**
  * GET /api/freepik/kling-v3/[taskId]
- * Header: x-api-key (user's Freepik API key)
+ * Header: Authorization: Bearer <activation-code>
  * Returns: { data: TaskData }
+ *
+ * On the first poll that comes back COMPLETED, write the resulting video
+ * URL into usage_logs so the admin/customer history pages can deep-link
+ * to it. Idempotent — only fills in rows where video_url is still null.
  */
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ taskId: string }> }
-) {
-  const apiKey = extractApiKey(request);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "AUTH", message: "API key is required." },
-      { status: 401 }
-    );
-  }
+export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
+  onSuccess: async (taskId, data) => {
+    if (data.status !== "COMPLETED") return;
+    const videoUrl = data.generated[0];
+    if (!videoUrl) return;
 
-  const { taskId } = await params;
-
-  if (!taskId) {
-    return NextResponse.json(
-      { error: "BAD_REQUEST", message: "taskId is required." },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const task = await freepik.klingV3.getTask(taskId, { apiKey });
-    return NextResponse.json({ data: task });
-  } catch (err) {
-    return errorToResponse(err);
-  }
-}
+    await db
+      .update(usageLogs)
+      .set({ videoUrl })
+      .where(
+        and(
+          eq(usageLogs.freepikTaskId, taskId),
+          isNull(usageLogs.videoUrl),
+        ),
+      );
+  },
+});

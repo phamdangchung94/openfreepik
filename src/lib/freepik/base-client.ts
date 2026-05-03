@@ -87,6 +87,13 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
       status,
     });
   }
+  if (status === 402) {
+    return new FreepikApiError({
+      message: msg || "Freepik account is out of credit.",
+      code: "QUOTA_EXHAUSTED",
+      status,
+    });
+  }
   if (status === 400) {
     return new FreepikApiError({
       message: msg || "Bad request — check your parameters.",
