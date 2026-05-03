@@ -101,8 +101,8 @@ function CompletedState({
 }) {
   const markDownloaded = useTaskStore((s) => s.markDownloaded);
 
-  function handleDownload() {
-    if (!task.videoUrl) return;
+  async function handleDownload() {
+    if (!task.videoUrl || !task.taskId) return;
     if (task.videoUrlExpiresAt && task.videoUrlExpiresAt < Date.now()) {
       toast.error("Link đã hết hạn — không thể tải");
       return;
@@ -112,9 +112,26 @@ function CompletedState({
       prompt: task.prompt,
       createdAt: task.createdAt,
     });
-    downloadVideo(task.videoUrl, filename);
-    markDownloaded(task.id);
-    toast.success(`Đã tải ${filename}`);
+    const loading = toast.loading(`Đang tải ${filename}...`);
+    const result = await downloadVideo({
+      freepikTaskId: task.taskId,
+      filename,
+    });
+    toast.dismiss(loading);
+    if (result.ok) {
+      markDownloaded(task.id);
+      toast.success(`Đã tải ${filename}`);
+    } else {
+      const msg =
+        result.error === "expired"
+          ? "Link đã hết hạn — không thể tải"
+          : result.error === "auth"
+            ? "Mã kích hoạt hết hạn — vui lòng đăng nhập lại"
+            : result.error === "network"
+              ? "Lỗi mạng — kiểm tra kết nối và thử lại"
+              : "Tải thất bại — thử lại sau";
+      toast.error(msg);
+    }
   }
 
   return (

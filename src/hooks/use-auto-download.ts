@@ -84,8 +84,8 @@ export function useAutoDownload() {
   }, []);
 }
 
-function fireSingleDownload(id: string, task: GenerationTask) {
-  if (!task.videoUrl) return;
+async function fireSingleDownload(id: string, task: GenerationTask) {
+  if (!task.videoUrl || !task.taskId) return;
 
   // Block if URL is already past expiry — saves the user a confusing
   // 404-when-they-open-the-file experience.
@@ -99,9 +99,20 @@ function fireSingleDownload(id: string, task: GenerationTask) {
     prompt: task.prompt,
     createdAt: task.createdAt,
   });
-  downloadVideo(task.videoUrl, filename);
-  useTaskStore.getState().markDownloaded(id);
-  toast.success(`Đã tải ${filename}`);
+
+  const loading = toast.loading(`Đang tải ${filename}...`);
+  const result = await downloadVideo({
+    freepikTaskId: task.taskId,
+    filename,
+  });
+  toast.dismiss(loading);
+
+  if (result.ok) {
+    useTaskStore.getState().markDownloaded(id);
+    toast.success(`Đã tải ${filename}`);
+  } else {
+    toast.error(downloadErrorToast(result.error));
+  }
 }
 
 function flushBatchToast() {
@@ -118,25 +129,62 @@ function flushBatchToast() {
   });
 }
 
-function downloadBatch(ids: string[]) {
+async function downloadBatch(ids: string[]) {
   const tasks = useTaskStore.getState().tasks;
   const mark = useTaskStore.getState().markDownloaded;
   let fired = 0;
+  let failed = 0;
+
+  const loading = toast.loading(`Đang tải 0/${ids.length} video...`);
+
+  // Sequential to be gentle on Vercel function concurrency + the user's
+  // bandwidth. Typical 20MB video ≈ 1-3s through the proxy, so 10 videos
+  // takes 10-30s overall — acceptable for a batch flow.
   for (const id of ids) {
     const t = tasks[id];
-    if (!t?.videoUrl) continue;
+    if (!t?.videoUrl || !t.taskId) continue;
     if (t.videoUrlExpiresAt && t.videoUrlExpiresAt < Date.now()) continue;
-    downloadVideo(
-      t.videoUrl,
-      buildFilename({
+
+    toast.loading(`Đang tải ${fired + 1}/${ids.length} video...`, { id: loading });
+    const result = await downloadVideo({
+      freepikTaskId: t.taskId,
+      filename: buildFilename({
         tier: t.tier,
         prompt: t.prompt,
         createdAt: t.createdAt,
       }),
-    );
-    mark(id);
-    fired++;
+    });
+    if (result.ok) {
+      mark(id);
+      fired++;
+    } else {
+      failed++;
+    }
   }
-  if (fired === 0) toast.error("Không có video nào tải được — link đã hết hạn");
-  else toast.success(`Đang tải ${fired} video`);
+
+  toast.dismiss(loading);
+  if (fired === 0) {
+    toast.error("Không tải được video nào — link có thể đã hết hạn");
+  } else if (failed > 0) {
+    toast.warning(`Đã tải ${fired} video; ${failed} video thất bại`);
+  } else {
+    toast.success(`Đã tải ${fired} video`);
+  }
+}
+
+function downloadErrorToast(
+  err: "no_task_id" | "expired" | "auth" | "network" | "upstream",
+): string {
+  switch (err) {
+    case "expired":
+      return "Link đã hết hạn — không thể tải";
+    case "auth":
+      return "Mã kích hoạt hết hạn — vui lòng đăng nhập lại";
+    case "network":
+      return "Lỗi mạng — kiểm tra kết nối và thử lại";
+    case "upstream":
+      return "Freepik không trả về video — thử lại sau";
+    case "no_task_id":
+      return "Video chưa hoàn tất — không thể tải";
+  }
 }

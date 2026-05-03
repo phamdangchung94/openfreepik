@@ -5,7 +5,6 @@ import {
   CheckSquare,
   Download,
   History,
-  Square,
   Trash2,
   Video,
   X,
@@ -19,14 +18,6 @@ import { Separator } from "@/components/ui/separator";
 import { useTaskStore, type GenerationTask } from "@/store/task-store";
 import { buildFilename, downloadVideo } from "@/lib/auto-download";
 import { HistoryItem } from "./history-item";
-
-/**
- * Per-batch download cap. Triggering 50+ <a download> clicks at once makes
- * the browser warn ("Allow site to download multiple files?") and some
- * mobile browsers will silently drop the rest. We chunk + delay below.
- */
-const DOWNLOAD_BATCH_SIZE = 10;
-const DOWNLOAD_BATCH_DELAY_MS = 400;
 
 export function HistorySidebar() {
   const tasks = useTaskStore((s) => s.tasks);
@@ -97,28 +88,41 @@ export function HistorySidebar() {
       return;
     }
 
-    toast.success(`Đang tải ${ids.length} video...`);
+    const loading = toast.loading(`Đang tải 0/${ids.length} video...`);
+    let fired = 0;
+    let failed = 0;
 
-    // Chunk to avoid the browser's "allow multiple downloads" prompt.
-    for (let i = 0; i < ids.length; i += DOWNLOAD_BATCH_SIZE) {
-      const slice = ids.slice(i, i + DOWNLOAD_BATCH_SIZE);
-      for (const id of slice) {
-        const task = tasks[id];
-        if (!task?.videoUrl) continue;
-        downloadVideo(
-          task.videoUrl,
-          buildFilename({
-            tier: task.tier,
-            prompt: task.prompt,
-            createdAt: task.createdAt,
-          }),
-        );
-        markDownloaded(id);
+    // Sequential through the proxy — each fetch streams ~20MB so we don't
+    // want concurrency hammering the Vercel function. The old chunking
+    // logic was for the browser's "allow multiple downloads" prompt; with
+    // server-side Content-Disposition the prompt doesn't fire any more.
+    for (const id of ids) {
+      const task = tasks[id];
+      if (!task?.videoUrl || !task.taskId) {
+        failed++;
+        continue;
       }
-      if (i + DOWNLOAD_BATCH_SIZE < ids.length) {
-        await new Promise((r) => setTimeout(r, DOWNLOAD_BATCH_DELAY_MS));
+      toast.loading(`Đang tải ${fired + 1}/${ids.length} video...`, { id: loading });
+      const result = await downloadVideo({
+        freepikTaskId: task.taskId,
+        filename: buildFilename({
+          tier: task.tier,
+          prompt: task.prompt,
+          createdAt: task.createdAt,
+        }),
+      });
+      if (result.ok) {
+        markDownloaded(id);
+        fired++;
+      } else {
+        failed++;
       }
     }
+
+    toast.dismiss(loading);
+    if (fired === 0) toast.error("Không tải được video nào — link có thể đã hết hạn");
+    else if (failed > 0) toast.warning(`Đã tải ${fired} video; ${failed} thất bại`);
+    else toast.success(`Đã tải ${fired} video`);
 
     exitSelectMode();
   }
