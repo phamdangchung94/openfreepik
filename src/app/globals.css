@@ -4,117 +4,135 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * GitHub-inspired "Midnight Command Center" design system.
+ *
+ * Two layers:
+ *   1. Raw palette (--color-deep-space, --color-spring-green, …) — what
+ *      the design spec gives us.
+ *   2. Semantic Shadcn slots (--background, --primary, …) — what every
+ *      Tailwind class in the codebase already references. The semantic
+ *      slots are mapped to raw palette values so the swap propagates
+ *      everywhere without per-component edits.
+ */
+
 @theme inline {
+  /* ── Raw GitHub palette (use these for spec-specific overrides) ──── */
+  --color-deep-space: #0d1117;
+  --color-midnight-ink: #000000;
+  --color-code-canvas: #151a22;
+  --color-subtle-gray: #21262d;
+  --color-ash-gray: #283041;
+  --color-ghost-white: #ffffff;
+  --color-faded-silver: #f0f6fc;
+  --color-ui-gray: #9198a1;
+  --color-muted-text: #7c8980;
+  --color-polar-blue: #8dd6ff;
+  --color-spring-green: #08872b;
+  --color-cosmic-violet: #8c93fb;
+  --color-neon-green: #5fed83;
+  --color-interface-blue: #1f6feb;
+
+  /* ── Shadcn semantic slots → GitHub palette ────────────────────── */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* ── Typography ─────────────────────────────────────────────────── */
+  --font-sans: var(--font-mona-sans),
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-mona-sans-mono),
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-heading: var(--font-mona-sans),
+    ui-sans-serif, system-ui, sans-serif;
+
+  /* ── Border radius (GitHub spec) ────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;        /* default for buttons, inputs */
+  --radius-lg: 8px;        /* inputs */
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;      /* cards */
+  --radius-4xl: 32px;
+  --radius-pill: 60px;     /* pill buttons + pill input */
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
+/*
+ * Single colour scheme — GitHub spec is dark only. We define both :root
+ * and .dark with identical values so light-mode users (or system theme
+ * resolves to light) still get the intended visuals.
+ */
+:root,
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Surfaces */
+  --background: #0d1117;            /* Deep Space */
+  --foreground: #ffffff;            /* Ghost White */
+  --card: #151a22;                  /* Code Canvas */
+  --card-foreground: #ffffff;
+  --popover: #000000;               /* Midnight Ink */
+  --popover-foreground: #ffffff;
+  --sidebar: #000000;
+  --sidebar-foreground: #f0f6fc;
+  --sidebar-border: #21262d;
+  --sidebar-ring: #8dd6ff;
+  --sidebar-primary: #8dd6ff;
+  --sidebar-primary-foreground: #0d1117;
+  --sidebar-accent: #21262d;
+  --sidebar-accent-foreground: #ffffff;
+
+  /* Action colors */
+  --primary: #08872b;               /* Spring Green — primary action */
+  --primary-foreground: #ffffff;
+  --secondary: #21262d;             /* Subtle Gray */
+  --secondary-foreground: #f0f6fc;
+  --muted: #21262d;
+  --muted-foreground: #9198a1;      /* UI Gray */
+  --accent: #8dd6ff;                /* Polar Blue — interactive accent */
+  --accent-foreground: #0d1117;
+  --destructive: oklch(0.62 0.22 25);   /* keep red-ish for FAILED states */
+
+  /* Lines & focus */
+  --border: #21262d;                /* Subtle Gray */
+  --input: #21262d;
+  --ring: #8dd6ff;                  /* Polar Blue focus */
+
+  /* Chart palette — leave existing */
+  --chart-1: #8dd6ff;
+  --chart-2: #5fed83;
+  --chart-3: #8c93fb;
+  --chart-4: #1f6feb;
+  --chart-5: #08872b;
+
+  --radius: 0.375rem;               /* 6px default */
 }
 
 @layer base {
@@ -123,8 +141,21 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
   html {
     @apply font-sans;
+  }
+  /*
+   * Links default to Polar Blue per GitHub spec — easier than retrofitting
+   * every <a> across the codebase. Components that explicitly set their
+   * own colour still win.
+   */
+  a {
+    color: var(--accent);
+  }
+  a:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
   }
 }

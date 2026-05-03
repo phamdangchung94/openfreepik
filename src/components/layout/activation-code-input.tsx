@@ -96,7 +96,7 @@ export function ActivationCodeInput() {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         disabled={busy}
-        className="h-8 w-[260px] text-xs font-mono"
+        className="h-8 w-[260px] rounded-full px-4 text-xs font-mono"
         autoComplete="off"
         spellCheck={false}
       />
