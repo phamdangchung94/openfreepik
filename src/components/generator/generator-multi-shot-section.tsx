@@ -30,10 +30,10 @@ export function GeneratorMultiShotSection() {
             <CardTitle className="text-sm flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Layers className="h-4 w-4" />
-                Multi-Shot Mode
+                Chế độ nhiều cảnh
                 {multiShot && (
                   <Badge variant="secondary" className="text-xs">
-                    Enabled
+                    Đang bật
                   </Badge>
                 )}
               </span>
@@ -50,7 +50,7 @@ export function GeneratorMultiShotSection() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="multi_shot_toggle" className="cursor-pointer">
-                Enable multi-shot (up to 6 scenes, max 15s total)
+                Bật nhiều cảnh (tối đa 6 cảnh, tổng ≤ 15 giây)
               </Label>
               <Switch
                 id="multi_shot_toggle"

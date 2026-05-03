@@ -11,13 +11,13 @@ const TIERS = [
   {
     value: "pro" as const,
     label: "Pro",
-    desc: "Higher fidelity",
+    desc: "Chất lượng cao hơn",
     icon: Crown,
   },
   {
     value: "std" as const,
-    label: "Standard",
-    desc: "Faster & cheaper",
+    label: "Tiêu chuẩn",
+    desc: "Nhanh & rẻ hơn",
     icon: Zap,
   },
 ];

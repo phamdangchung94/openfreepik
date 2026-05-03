@@ -11,7 +11,7 @@ export function GenerateAudioSwitch() {
   return (
     <div className="flex items-center justify-between">
       <Label htmlFor="generate_audio" className="cursor-pointer">
-        Generate Audio
+        Tạo âm thanh
       </Label>
       <Controller
         control={control}
