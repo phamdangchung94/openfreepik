@@ -10,10 +10,17 @@ import { pricingRules, type NewPricingRule } from "../src/lib/db/schema";
 import { sql } from "drizzle-orm";
 
 // Per-second rates (EUR). Multiply by duration to get base cost.
-// Audio adds ~40% based on Freepik's public credit pricing.
+//
+// Conservative bump applied 2026-05-03 per audit C1 finding:
+//   - third-party reseller signals (Atlas, Novita, EvoLink) suggest
+//     std at $0.084-0.168/s and pro at $0.112-0.224/s.
+//   - Kuaishou's own credit table shows audio multiplier 1.5x, not 1.4.
+// These rates target ~25% margin above the reseller floor. Replace
+// with measured Freepik billing values once the verification matrix
+// (audit #9 acceptance criteria) has been run.
 const RATES = {
-  std: { perSecond: 0.05, audioMultiplier: 1.4 },
-  pro: { perSecond: 0.10, audioMultiplier: 1.4 },
+  std: { perSecond: 0.10, audioMultiplier: 1.5 },
+  pro: { perSecond: 0.16, audioMultiplier: 1.5 },
 } as const;
 
 const DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
