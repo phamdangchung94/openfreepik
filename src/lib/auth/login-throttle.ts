@@ -85,6 +85,13 @@ export async function recordFailedLogin(
   const lockoutMs = LOCKOUT_MINUTES * 60_000;
 
   // UPSERT — atomic increment + conditional lock-set in one statement.
+  //
+  // Subtlety: when the previous attempt was longer than COUNTER_RESET_MINUTES
+  // ago, the counter resets to 1 (not increments). Without this, an IP that
+  // failed 4 times an hour ago would lock out on its very next wrong
+  // password — even though `checkLoginAllowed` already told the user
+  // "5 attempts remaining". This keeps both functions consistent without
+  // a separate reset DB roundtrip.
   const [row] = await db
     .insert(failedLogins)
     .values({
@@ -96,9 +103,15 @@ export async function recordFailedLogin(
     .onConflictDoUpdate({
       target: failedLogins.ip,
       set: {
-        attempts: sql`${failedLogins.attempts} + 1`,
+        attempts: sql`CASE
+          WHEN ${failedLogins.lastAttempt} < now() - interval '${sql.raw(String(COUNTER_RESET_MINUTES))} minutes'
+          THEN 1
+          ELSE ${failedLogins.attempts} + 1
+        END`,
         lastAttempt: sql`now()`,
         lockedUntil: sql`CASE
+          WHEN ${failedLogins.lastAttempt} < now() - interval '${sql.raw(String(COUNTER_RESET_MINUTES))} minutes'
+          THEN NULL
           WHEN ${failedLogins.attempts} + 1 >= ${MAX_FAILURES}
           THEN now() + interval '${sql.raw(String(LOCKOUT_MINUTES))} minutes'
           ELSE ${failedLogins.lockedUntil}
@@ -132,18 +145,17 @@ export async function clearFailedLogins(ip: string): Promise<void> {
 }
 
 /**
- * Periodic cleanup — delete rows whose lockout already expired more than
- * 24h ago. Without this the table grows forever AND the next request
- * from a previously-locked IP starts at the stale `attempts` count
- * instead of resetting to 1 (audit #12).
+ * Periodic cleanup — delete any row whose last attempt is more than 24h
+ * old, regardless of lock state. Stale `attempts` values are now also
+ * handled at write time by recordFailedLogin's CASE expression (counter
+ * resets to 1 when the previous attempt is older than COUNTER_RESET_MINUTES),
+ * but this keeps the table from growing forever.
  */
 export async function purgeStaleFailedLogins(): Promise<void> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   await db
     .delete(failedLogins)
-    .where(
-      sql`${failedLogins.lockedUntil} IS NOT NULL AND ${failedLogins.lockedUntil} < ${cutoff}`,
-    );
+    .where(sql`${failedLogins.lastAttempt} < ${cutoff}`);
 }
 
 /**
