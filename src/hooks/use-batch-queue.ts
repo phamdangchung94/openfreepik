@@ -20,13 +20,26 @@ interface UseBatchQueueResult {
    */
   retryFailed: () => number;
   isProcessing: boolean;
-  progress: { completed: number; total: number; failed: number };
+  progress: {
+    completed: number;
+    total: number;
+    failed: number;
+    /** Tasks currently in-flight (IN_PROGRESS — fetch/poll running). */
+    running: number;
+    /** Tasks queued but waiting for a free concurrency slot. */
+    queued: number;
+  };
 }
 
-async function runPollTask(apiTaskId: string, localId: string) {
+async function runPollTask(
+  apiTaskId: string,
+  localId: string,
+  signal: AbortSignal,
+) {
   const result = await pollTaskUntilDone({
     apiTaskId,
     endpoint: "kling-v3",
+    signal,
     onProgress: (status) => {
       if (status === "IN_PROGRESS") {
         useTaskStore.getState().updateTask(localId, { status });
@@ -40,6 +53,12 @@ async function runPollTask(apiTaskId: string, localId: string) {
       videoUrl: result.generated[0] ?? null,
       videoUrlExpiresAt: expiresFromNow(),
     });
+  } else if (result.status === "CANCELLED") {
+    // The user-cancel path overwrites the task status separately in
+    // cancelBatch(). Don't clobber it here — leave whatever status
+    // cancelBatch already set (CANCELLED). Setting "CANCELLED" again
+    // would be fine but avoiding the double-write keeps audit logs clean.
+    return;
   } else {
     useTaskStore.getState().updateTask(localId, {
       status: result.status === "TIMEOUT" ? "TIMEOUT" : "FAILED",
@@ -59,6 +78,9 @@ export function useBatchQueue(): UseBatchQueueResult {
     Map<string, { mode: "t2v" | "i2v"; imageUrl?: string; prompt: string }>
   >(new Map());
   const formRef = useRef<GeneratorFormValues | null>(null);
+  // Per-batch AbortController; cancelBatch aborts it so in-flight POSTs
+  // and poll loops bail immediately instead of running to completion.
+  const abortRef = useRef<AbortController | null>(null);
   // Break circular useCallback dependency: runTask -> fillSlots -> runTask
   const fillSlotsRef = useRef<() => void>(() => {});
 
@@ -66,17 +88,33 @@ export function useBatchQueue(): UseBatchQueueResult {
     const ids = batchIdsRef.current;
     let completed = 0;
     let failed = 0;
+    let running = 0;
+    let queued = 0;
     for (const id of ids) {
       const t = tasks[id];
       if (!t) continue;
       if (t.status === "COMPLETED") completed++;
-      if (t.status === "FAILED" || t.status === "TIMEOUT") failed++;
+      else if (
+        t.status === "FAILED" ||
+        t.status === "TIMEOUT" ||
+        t.status === "CANCELLED"
+      ) {
+        // CANCELLED counts as failed for the "remaining work" tally — the
+        // customer cancelled it intentionally but it's still a non-success
+        // terminal state. retryFailed() covers all three.
+        failed++;
+      } else if (t.status === "IN_PROGRESS") running++;
+      else if (t.status === "CREATED") queued++;
     }
-    return { completed, total: ids.size, failed };
+    return { completed, total: ids.size, failed, running, queued };
   })();
 
   const runTask = useCallback(async (localId: string) => {
+    // Capture controller once at start; any later cancelBatch() flips its
+    // signal, which both the fetch and the poll loop respect.
+    const signal = abortRef.current?.signal ?? new AbortController().signal;
     try {
+      if (signal.aborted) return;
       const itemData = itemMapRef.current.get(localId);
       const formValues = formRef.current;
       if (!itemData || !formValues) return;
@@ -90,6 +128,8 @@ export function useBatchQueue(): UseBatchQueueResult {
         useTaskStore.getState().updateTask(localId, { prompt });
       }
 
+      if (signal.aborted) return;
+
       const params =
         itemData.mode === "i2v" && itemData.imageUrl
           ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
@@ -98,6 +138,7 @@ export function useBatchQueue(): UseBatchQueueResult {
         method: "POST",
         headers: getApiHeaders(),
         body: JSON.stringify({ params, tier: formValues.tier }),
+        signal,
       });
 
       if (!res.ok) {
@@ -112,8 +153,11 @@ export function useBatchQueue(): UseBatchQueueResult {
       if (json.balance) {
         useAuthStore.getState().mergeBalance(json.balance);
       }
-      await runPollTask(apiTaskId, localId);
+      await runPollTask(apiTaskId, localId, signal);
     } catch (err) {
+      // AbortError = caller cancelled. Don't overwrite the CANCELLED
+      // status that cancelBatch() already wrote.
+      if (signal.aborted) return;
       useTaskStore.getState().updateTask(localId, { status: "FAILED", error: String(err) });
     } finally {
       activeRef.current--;
@@ -152,6 +196,11 @@ export function useBatchQueue(): UseBatchQueueResult {
       formRef.current = formValues;
       itemMapRef.current.clear();
       batchIdsRef.current = new Set();
+      // Fresh AbortController per batch. cancelBatch() aborts this one;
+      // a subsequent startBatch installs a new one so the old signal stays
+      // aborted forever (which is what we want — late-arriving callbacks
+      // from the cancelled batch just bail).
+      abortRef.current = new AbortController();
 
       const store = useTaskStore.getState();
       // Clear any stale queue from previous session/batch
@@ -195,11 +244,36 @@ export function useBatchQueue(): UseBatchQueueResult {
 
   const cancelBatch = useCallback(() => {
     cancelledRef.current = true;
+
+    // Mark every still-running task in the current batch as CANCELLED
+    // BEFORE clearing batchIdsRef — otherwise the Preview Panel keeps
+    // showing "Đang tạo video..." for IN_PROGRESS tasks. Customer-
+    // expected: clicking Huỷ instantly flips the preview UI.
+    const store = useTaskStore.getState();
+    for (const id of batchIdsRef.current) {
+      const t = store.tasks[id];
+      if (!t) continue;
+      if (t.status === "IN_PROGRESS" || t.status === "CREATED") {
+        store.updateTask(id, {
+          status: "CANCELLED",
+          error: "Đã huỷ",
+        });
+      }
+    }
+
+    // Abort the AbortController so in-flight POSTs and poll loops bail
+    // mid-flight instead of running to completion.
+    abortRef.current?.abort();
+    abortRef.current = null;
+
     activeRef.current = 0;
-    itemMapRef.current.clear();
-    batchIdsRef.current = new Set();
+    // Note: keep itemMapRef + batchIdsRef so retryFailed() can still
+    // resurrect the cancelled tasks (cancelled counts as "failed" in the
+    // progress widget, and the customer often wants Retry after a manual
+    // cancel that they regret).
     formRef.current = null;
-    useTaskStore.getState().clearQueue();
+    store.clearQueue();
+    store.setProcessing(false);
   }, []);
 
   const retryFailed = useCallback(() => {
@@ -210,7 +284,13 @@ export function useBatchQueue(): UseBatchQueueResult {
     for (const id of ids) {
       const t = store.tasks[id];
       if (!t) continue;
-      if (t.status !== "FAILED" && t.status !== "TIMEOUT") continue;
+      if (
+        t.status !== "FAILED" &&
+        t.status !== "TIMEOUT" &&
+        t.status !== "CANCELLED"
+      ) {
+        continue;
+      }
       // Need a prompt-mode-tier triple in itemMapRef to re-run; if missing,
       // bail on that one (e.g. tasks rehydrated from server have no entry).
       if (!itemMapRef.current.has(id)) continue;

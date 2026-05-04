@@ -137,6 +137,8 @@ export default function HomePage() {
         total={progress.total}
         completed={progress.completed}
         failed={progress.failed}
+        running={progress.running}
+        queued={progress.queued}
         isProcessing={isProcessing}
         onCancel={cancelBatch}
         onRetryFailed={() => {

@@ -19,6 +19,7 @@ const STATUS_CONFIG: Record<
   COMPLETED: { label: "Hoàn tất", variant: "default", extra: "bg-primary text-primary-foreground" },
   FAILED: { label: "Thất bại", variant: "destructive" },
   TIMEOUT: { label: "Quá thời gian", variant: "destructive" },
+  CANCELLED: { label: "Đã huỷ", variant: "secondary" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

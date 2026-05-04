@@ -10,6 +10,10 @@ interface BatchProgressWidgetProps {
   total: number;
   completed: number;
   failed: number;
+  /** In-flight (IN_PROGRESS — currently calling Freepik). */
+  running?: number;
+  /** Queued but waiting for a concurrency slot. */
+  queued?: number;
   isProcessing: boolean;
   onCancel: () => void;
   /** Optional retry callback. Hidden if absent or no tasks failed. */
@@ -37,6 +41,8 @@ export function BatchProgressWidget({
   total,
   completed,
   failed,
+  running = 0,
+  queued = 0,
   isProcessing,
   onCancel,
   onRetryFailed,
@@ -120,12 +126,26 @@ export function BatchProgressWidget({
         <span className="flex items-center gap-2">
           <span className="text-green-500">✓ {completed}</span>
           {failed > 0 && <span className="text-destructive">✗ {failed}</span>}
-          {isProcessing && remaining > 0 && (
-            <span>· còn {remaining}</span>
-          )}
         </span>
         {isProcessing && eta && <span title="Ước tính thời gian còn lại">{eta}</span>}
       </div>
+
+      {isProcessing && (running > 0 || queued > 0) && (
+        <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+          {running > 0 && (
+            <span title="Đang gọi Freepik">
+              <span className="font-medium text-foreground">{running}</span>{" "}
+              đang chạy
+            </span>
+          )}
+          {queued > 0 && (
+            <span title="Đợi đến lượt khi có slot trống">
+              <span className="font-medium text-foreground">{queued}</span>{" "}
+              trong hàng chờ
+            </span>
+          )}
+        </div>
+      )}
 
       {isProcessing && (
         <Button

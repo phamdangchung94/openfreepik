@@ -9,7 +9,8 @@ export type GenerationTaskStatus =
   | "IN_PROGRESS"
   | "COMPLETED"
   | "FAILED"
-  | "TIMEOUT";
+  | "TIMEOUT"
+  | "CANCELLED";
 
 export interface GenerationTask {
   id: string;

@@ -68,15 +68,31 @@ function ErrorState({
   task: GenerationTask;
   onRegenerate?: () => void;
 }) {
+  const cancelled = task.status === "CANCELLED";
+  const heading = cancelled
+    ? "Đã huỷ"
+    : task.status === "TIMEOUT"
+      ? "Tạo video quá thời gian"
+      : "Tạo video thất bại";
   return (
     <div className="space-y-4">
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-destructive/5">
-        <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-sm font-medium text-destructive">
-          {task.status === "TIMEOUT" ? "Tạo video quá thời gian" : "Tạo video thất bại"}
+      <div
+        className={`flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl ${
+          cancelled ? "bg-muted/40" : "bg-destructive/5"
+        }`}
+      >
+        <AlertCircle
+          className={`h-10 w-10 ${cancelled ? "text-muted-foreground" : "text-destructive"}`}
+        />
+        <p
+          className={`text-sm font-medium ${
+            cancelled ? "text-muted-foreground" : "text-destructive"
+          }`}
+        >
+          {heading}
         </p>
       </div>
-      {task.error && (
+      {task.error && !cancelled && (
         <p className="text-sm text-destructive/80">{friendlyError(task.error)}</p>
       )}
       <p className="text-sm text-muted-foreground">
@@ -203,9 +219,12 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
         {task?.status === "COMPLETED" && (
           <CompletedState task={task} onRegenerate={handleRegenerate} />
         )}
-        {task && (task.status === "FAILED" || task.status === "TIMEOUT") && (
-          <ErrorState task={task} onRegenerate={handleRegenerate} />
-        )}
+        {task &&
+          (task.status === "FAILED" ||
+            task.status === "TIMEOUT" ||
+            task.status === "CANCELLED") && (
+            <ErrorState task={task} onRegenerate={handleRegenerate} />
+          )}
         {task &&
           (task.status === "CREATED" || task.status === "IN_PROGRESS") && (
             <LoadingState
