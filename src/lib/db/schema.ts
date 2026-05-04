@@ -16,23 +16,29 @@ import {
  * server stores them AES-GCM encrypted with KEY_ENCRYPTION_SECRET.
  * Each Freepik account starts with 500 EUR free credit.
  */
-export const freepikKeys = pgTable("freepik_keys", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  label: text("label").notNull(),
-  keyEncrypted: text("key_encrypted").notNull(),
-  assignedEur: numeric("assigned_eur", { precision: 10, scale: 2 })
-    .notNull()
-    .default("500.00"),
-  usedEur: numeric("used_eur", { precision: 10, scale: 2 })
-    .notNull()
-    .default("0.00"),
-  isActive: boolean("is_active").notNull().default(true),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
-});
+export const freepikKeys = pgTable(
+  "freepik_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    label: text("label").notNull(),
+    keyEncrypted: text("key_encrypted").notNull(),
+    assignedEur: numeric("assigned_eur", { precision: 10, scale: 2 })
+      .notNull()
+      .default("500.00"),
+    usedEur: numeric("used_eur", { precision: 10, scale: 2 })
+      .notNull()
+      .default("0.00"),
+    isActive: boolean("is_active").notNull().default(true),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  // Audit P2-7: prevent admin from accidentally creating two keys with
+  // the same label (makes spend attribution ambiguous).
+  (t) => [uniqueIndex("freepik_keys_label_uniq").on(t.label)],
+);
 
 /**
  * Activation codes issued to customers.

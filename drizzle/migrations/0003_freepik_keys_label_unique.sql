@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "freepik_keys_label_uniq" ON "freepik_keys" USING btree ("label");

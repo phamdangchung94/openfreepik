@@ -5,6 +5,11 @@
  * ones.
  */
 
+// Keys here MUST match the codes the server actually emits. Audit
+// P2-13: previously CODE_NOT_FOUND/CODE_REVOKED/CODE_EXPIRED/RATE_LIMITED
+// were documented but never matched — orchestrator emits NOT_FOUND /
+// INACTIVE / EXPIRED / RATE_LIMIT (no CODE_ prefix). Both shapes are
+// listed below so neither old nor new emit names go untranslated.
 const CODE_MAP: Record<string, string> = {
   ALL_KEYS_EXHAUSTED:
     "Hệ thống đang quá tải — vui lòng liên hệ hỗ trợ.",
@@ -12,10 +17,19 @@ const CODE_MAP: Record<string, string> = {
     "Tạm thời chưa có key khả dụng — vui lòng thử lại sau.",
   INSUFFICIENT_BALANCE:
     "Mã kích hoạt không đủ số dư cho video này.",
+  PRICING_MISSING:
+    "Cấu hình giá tạm thời không khả dụng — vui lòng liên hệ hỗ trợ.",
+  UPSTREAM_MALFORMED:
+    "Freepik trả về không đúng định dạng — đã hoàn tiền, vui lòng thử lại.",
   AUTH: "Bạn cần kích hoạt mã trước khi tạo video.",
+  // Both legacy CODE_* and current bare names map to the same string.
+  NOT_FOUND: "Không tìm thấy mã kích hoạt.",
   CODE_NOT_FOUND: "Không tìm thấy mã kích hoạt.",
+  INACTIVE: "Mã kích hoạt đã bị thu hồi.",
   CODE_REVOKED: "Mã kích hoạt đã bị thu hồi.",
+  EXPIRED: "Mã kích hoạt đã hết hạn.",
   CODE_EXPIRED: "Mã kích hoạt đã hết hạn.",
+  RATE_LIMIT: "Quá nhiều yêu cầu — vui lòng chờ một chút.",
   RATE_LIMITED: "Quá nhiều yêu cầu — vui lòng chờ một chút.",
   TIMEOUT: "Tạo video quá thời gian — vui lòng thử lại.",
   UNKNOWN: "Có lỗi không xác định — vui lòng thử lại.",

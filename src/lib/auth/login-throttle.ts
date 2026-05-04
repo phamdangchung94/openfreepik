@@ -113,17 +113,20 @@ export async function recordFailedLogin(
     .onConflictDoUpdate({
       target: failedLogins.ip,
       set: {
+        // Audit P2-5: dropped sql.raw — multiply a parameterised
+        // numeric literal by an interval instead. Same plan, no
+        // false-positive in SAST scans.
         attempts: sql`CASE
-          WHEN ${failedLogins.lastAttempt} < now() - interval '${sql.raw(String(COUNTER_RESET_MINUTES))} minutes'
+          WHEN ${failedLogins.lastAttempt} < now() - (${COUNTER_RESET_MINUTES}::int * interval '1 minute')
           THEN 1
           ELSE ${failedLogins.attempts} + 1
         END`,
         lastAttempt: sql`now()`,
         lockedUntil: sql`CASE
-          WHEN ${failedLogins.lastAttempt} < now() - interval '${sql.raw(String(COUNTER_RESET_MINUTES))} minutes'
+          WHEN ${failedLogins.lastAttempt} < now() - (${COUNTER_RESET_MINUTES}::int * interval '1 minute')
           THEN NULL
           WHEN ${failedLogins.attempts} + 1 >= ${MAX_FAILURES}
-          THEN now() + interval '${sql.raw(String(LOCKOUT_MINUTES))} minutes'
+          THEN now() + (${LOCKOUT_MINUTES}::int * interval '1 minute')
           ELSE ${failedLogins.lockedUntil}
         END`,
       },

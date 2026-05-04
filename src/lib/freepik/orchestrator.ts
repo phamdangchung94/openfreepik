@@ -241,7 +241,11 @@ async function runOrchestrate<T>(
   // All retries used up — last error was a quota-exhaustion on every key.
   await refundIfCharged(codeId, opts.costEur);
   await logUsage(opts, codeId, null, null, "refunded");
-  log.warn("ALL_KEYS_EXHAUSTED", {
+  // Audit P1-11: bumped from warn → error. This is the panic path —
+  // every key in the pool is dead and customers are getting refunded
+  // requests. Log drains often filter `warn` out of alert pipelines
+  // so this needs to surface at the highest level.
+  log.error("ALL_KEYS_EXHAUSTED", {
     requestId,
     endpoint: opts.endpoint,
     codeId,

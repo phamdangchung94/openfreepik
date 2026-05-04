@@ -24,7 +24,11 @@ export async function GET() {
       lastUsedAt: freepikKeys.lastUsedAt,
     })
     .from(freepikKeys)
-    .orderBy(desc(freepikKeys.createdAt));
+    .orderBy(desc(freepikKeys.createdAt))
+    // Audit P1-6: ceiling at 100. We don't expect 100+ Freepik keys
+    // ever — this is just a defensive cap so a future bug that creates
+    // duplicates doesn't pull a million rows.
+    .limit(100);
 
   return NextResponse.json({ ok: true, keys: rows });
 }

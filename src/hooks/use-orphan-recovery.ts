@@ -55,9 +55,9 @@ function runRecovery() {
   );
 
   if (orphans.length > 0) {
-    console.log(
-      `[orphan-recovery] Found ${orphans.length} orphaned task(s), resuming polling...`,
-    );
+    // Audit P1-8: dropped the console.log — customer's browser console
+    // doesn't need diagnostic output. Recovery itself is observable
+    // via the History sidebar's task status flip.
     for (const task of orphans) {
       recovering.add(task.id);
       recoverTask(task.id, task.taskId!).finally(() => {

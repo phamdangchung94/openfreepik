@@ -22,12 +22,21 @@ export async function parseJsonBody(request: Request): Promise<unknown> {
  * Accepts: `Authorization: Bearer <code>` (case-insensitive scheme).
  * Returns null if missing or malformed.
  */
+/**
+ * Minimum bearer length we accept. Activation codes are issued at 32+
+ * chars; anything shorter is either a typo or a probe and we'd rather
+ * surface a clean 401 than do a DB roundtrip. Keeps bearer-length
+ * logic in one place (audit P2-9).
+ */
+export const MIN_BEARER_LENGTH = 8;
+
 export function extractActivationCode(request: Request): string | null {
   const auth = request.headers.get("authorization");
   if (!auth) return null;
   const match = auth.match(/^Bearer\s+(.+)$/i);
   const code = match?.[1]?.trim();
-  return code && code.length > 0 ? code : null;
+  if (!code || code.length < MIN_BEARER_LENGTH) return null;
+  return code;
 }
 
 interface TaskGetHandlerOptions<T> {

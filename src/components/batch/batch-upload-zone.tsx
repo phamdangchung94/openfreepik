@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { Upload, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -63,8 +64,11 @@ export function BatchUploadZone({
 
         onAddItems(newItems);
       } catch (err) {
-        console.error("[batch-upload] Error:", err);
-        alert(err instanceof Error ? err.message : "Tải ảnh thất bại");
+        // Audit P1-9: replaced blocking alert() with non-blocking toast
+        // so mobile dismissal works and the rest of the app stays
+        // interactive while the customer reads the error.
+        const msg = err instanceof Error ? err.message : "Tải ảnh thất bại";
+        toast.error(msg);
       } finally {
         setIsUploading(false);
       }

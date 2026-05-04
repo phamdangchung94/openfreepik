@@ -72,7 +72,11 @@ export async function POST(request: Request) {
   response.cookies.set(ADMIN_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    // Audit P2-6: "strict" was breaking the cross-site link flow (admin
+    // pastes the dashboard link to themselves on Slack → click sends
+    // the request without the cookie). "lax" still blocks CSRF on
+    // top-level POST and the per-route admin check guards the rest.
+    sameSite: "lax",
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE,
   });
