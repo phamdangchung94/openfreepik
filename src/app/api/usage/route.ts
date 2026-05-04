@@ -19,14 +19,19 @@ export async function GET(request: Request) {
     return await handle(request);
   } catch (err) {
     log.error("USAGE_500", errFields(err));
+    // Include error name + message in the JSON so the customer (or
+    // browser DevTools) can paste it back for diagnosis. Stack stays
+    // server-side. Will tighten this when the bug is fixed; right now
+    // the goal is to surface the actual failure mode.
+    const e = err as Error;
     return NextResponse.json(
       {
         error: "INTERNAL",
         message: "Lỗi nội bộ — vui lòng thử lại.",
-        ref:
-          typeof err === "object" && err && "name" in err
-            ? String((err as Error).name)
-            : "unknown",
+        debug: {
+          name: e?.name ?? "unknown",
+          msg: String(e?.message ?? err).slice(0, 400),
+        },
       },
       { status: 500 },
     );

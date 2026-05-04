@@ -39,21 +39,17 @@ export async function GET(
   try {
     return await handle(request, params);
   } catch (err) {
-    // Last-resort catch — anything thrown above this would otherwise
-    // surface to the customer as an opaque 500 with no JSON body. Log
-    // with structured fields so the admin can grep for DOWNLOAD_PROXY_500
-    // in the function log drain.
     const { taskId } = (await params.catch(() => ({ taskId: "?" }))) as { taskId: string };
     log.error("DOWNLOAD_PROXY_500", { taskId, ...errFields(err) });
+    const e = err as Error;
     return Response.json(
       {
         error: "INTERNAL",
         message: "Lỗi nội bộ — vui lòng thử lại.",
-        // Echo the stable signature so admin can correlate with logs
-        // without exposing the full stack to the customer.
-        ref: typeof err === "object" && err && "name" in err
-          ? String((err as Error).name)
-          : "unknown",
+        debug: {
+          name: e?.name ?? "unknown",
+          msg: String(e?.message ?? err).slice(0, 400),
+        },
       },
       { status: 500 },
     );
