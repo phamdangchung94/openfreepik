@@ -108,7 +108,23 @@ export async function GET() {
     };
   }
 
-  // 3. Reproduce /api/download's lookup — pick a recent succeeded row.
+  // 3a. Schema introspection — list usage_logs columns to verify
+  //     migration 0002 actually ran on this DB.
+  try {
+    const cols = await db.execute<{ column_name: string; data_type: string }>(
+      sql`SELECT column_name, data_type FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='usage_logs'
+          ORDER BY ordinal_position`,
+    );
+    const rows = (cols as unknown as { rows?: Array<{ column_name: string; data_type: string }> }).rows
+      ?? (cols as unknown as Array<{ column_name: string; data_type: string }>);
+    out.usage_logs_columns = rows;
+  } catch (err) {
+    const e = err as Error;
+    out.schema_error = { name: e?.name, msg: String(e?.message ?? err).slice(0, 400) };
+  }
+
+  // 3b. Reproduce /api/download's lookup — pick a recent succeeded row.
   try {
     const [anyLog] = await db
       .select({
