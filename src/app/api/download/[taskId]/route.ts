@@ -163,8 +163,10 @@ async function handle(
   }
 
   // neon-http returns timestamptz as ISO string; node-postgres returns
-  // Date. Normalise to ms so the comparison works either way.
-  if (row.expiresAt) {
+  // Date. Normalise to ms so the comparison works either way. Note:
+  // `row` is guaranteed defined here because if it were undefined the
+  // upstreamUrl resolution block would have returned 404 above.
+  if (row?.expiresAt) {
     const expiresMs =
       row.expiresAt instanceof Date
         ? row.expiresAt.getTime()
