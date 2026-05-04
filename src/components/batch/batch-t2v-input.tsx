@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-import { ListPlus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { FileSpreadsheet, ListPlus, Type } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BatchSettings } from "./batch-settings";
+import { BatchExcelImport } from "./batch-excel-import";
 import type { BatchItem } from "@/lib/form/generator-schema";
 
 const MAX_PROMPTS = 100;
@@ -17,15 +19,64 @@ interface BatchT2VInputProps {
   onItemsChange: (items: BatchItem[]) => void;
 }
 
+type Mode = "paste" | "excel";
+
 export function BatchT2VInput({
+  value,
+  onChange,
+  onItemsChange,
+}: BatchT2VInputProps) {
+  const [mode, setMode] = useState<Mode>("paste");
+
+  // Switching tabs clears the items so the customer doesn't accidentally
+  // submit prompts from the inactive tab. Each tab owns its own state
+  // (the textarea via `value` prop, the Excel parser internally).
+  function handleModeChange(next: string) {
+    if (next !== mode) {
+      onItemsChange([]);
+      setMode(next as Mode);
+    }
+  }
+
+  return (
+    <Tabs value={mode} onValueChange={handleModeChange} className="space-y-3">
+      <TabsList className="grid w-full grid-cols-2">
+        <TabsTrigger value="paste" className="gap-1.5">
+          <Type className="size-3.5" />
+          Dán prompt
+        </TabsTrigger>
+        <TabsTrigger value="excel" className="gap-1.5">
+          <FileSpreadsheet className="size-3.5" />
+          Tải Excel/CSV
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="paste" className="m-0">
+        <PasteMode
+          value={value}
+          onChange={onChange}
+          onItemsChange={onItemsChange}
+        />
+      </TabsContent>
+
+      <TabsContent value="excel" className="m-0">
+        <BatchExcelImport onItemsChange={onItemsChange} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/**
+ * Original textarea-based "one prompt per line" input — extracted so the
+ * tab system can mount/unmount it without losing keystrokes mid-typing.
+ */
+function PasteMode({
   value,
   onChange,
   onItemsChange,
 }: BatchT2VInputProps) {
   const items = useMemo(() => parsePrompts(value), [value]);
 
-  // Push parsed items up so the form/queue see them.
-  // useMemo above is pure; the side-effect lives in the change handler.
   function handleChange(next: string) {
     onChange(next);
     onItemsChange(parsePrompts(next));
