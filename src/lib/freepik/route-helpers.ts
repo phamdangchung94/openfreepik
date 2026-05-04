@@ -7,6 +7,74 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
 
 /**
+ * DRY helper: validate the bearer once, gate by per-code rate limit,
+ * then run the handler with the validation result so the orchestrator
+ * doesn't double-fetch from the DB.
+ *
+ * Audit P2-10: lifted out of /api/freepik/kling-v3 and improve-prompt
+ * which had near-identical bodies.
+ *
+ * Returns:
+ *   - 401 if no bearer or validation fails
+ *   - 429 if the per-code rate limit fires
+ *   - whatever the handler returns otherwise (passes through)
+ */
+export interface RateLimitedCodeOpts {
+  resource: string;
+  limit: number;
+  windowSeconds: number;
+}
+
+export async function withRateLimitedCode(
+  request: Request,
+  opts: RateLimitedCodeOpts,
+  handler: (
+    bearer: string,
+    validation: ValidationResult & { ok: true },
+  ) => Promise<Response>,
+): Promise<Response> {
+  const bearer = extractActivationCode(request);
+  if (!bearer) {
+    return NextResponse.json(
+      { error: "AUTH", message: "Activation code is required." },
+      { status: 401 },
+    );
+  }
+
+  const validation = await validateCode(bearer);
+  if (!validation.ok) {
+    return NextResponse.json(
+      {
+        error: validation.reason.toUpperCase(),
+        message: "Auth failed.",
+      },
+      { status: 401 },
+    );
+  }
+
+  const rl = await checkRateLimit({
+    resource: opts.resource,
+    scope: validation.metadata.codeId,
+    limit: opts.limit,
+    windowSeconds: opts.windowSeconds,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error: "RATE_LIMIT",
+        message: `Limit ${opts.limit} requests per ${opts.windowSeconds}s. Wait ${rl.retryAfterSeconds}s and retry.`,
+      },
+      {
+        status: 429,
+        headers: { "retry-after": String(rl.retryAfterSeconds) },
+      },
+    );
+  }
+
+  return handler(bearer, validation);
+}
+
+/**
  * Parse JSON body from a NextRequest, returning null on failure.
  */
 export async function parseJsonBody(request: Request): Promise<unknown> {

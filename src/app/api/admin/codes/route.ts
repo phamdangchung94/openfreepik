@@ -11,10 +11,30 @@ import {
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
 
-/** GET /api/admin/codes — list all codes with succeeded-usage rollup. */
-export async function GET() {
+/**
+ * GET /api/admin/codes?limit=50&offset=0 — list codes with succeeded-usage rollup.
+ *
+ * Audit P1-5: paginated. The LEFT JOIN aggregating succeeded usage_logs
+ * per code is O(codes × usage_rows) and was returning every row — fine
+ * at 4 codes, problematic past ~200 customers. Default limit 50, capped
+ * at 200.
+ */
+const LIST_DEFAULT_LIMIT = 50;
+const LIST_MAX_LIMIT = 200;
+
+export async function GET(request: Request) {
   const denied = await requireAdminApi();
   if (denied) return denied;
+
+  const url = new URL(request.url);
+  const rawLimit = Number(url.searchParams.get("limit") ?? LIST_DEFAULT_LIMIT);
+  const rawOffset = Number(url.searchParams.get("offset") ?? 0);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0
+      ? Math.min(Math.floor(rawLimit), LIST_MAX_LIMIT)
+      : LIST_DEFAULT_LIMIT;
+  const offset =
+    Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
 
   // LEFT JOIN + GROUP BY beats a correlated subquery here — drizzle's sql
   // template doesn't always alias correlated references the way Postgres
@@ -35,9 +55,20 @@ export async function GET() {
     .from(activationCodes)
     .leftJoin(usageLogs, eq(usageLogs.codeId, activationCodes.id))
     .groupBy(activationCodes.id)
-    .orderBy(desc(activationCodes.createdAt));
+    .orderBy(desc(activationCodes.createdAt))
+    .limit(limit)
+    .offset(offset);
 
-  return NextResponse.json({ ok: true, codes: rows });
+  // Cheap total — separate query so the dashboard can paginate UI.
+  const [{ total } = { total: 0 }] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(activationCodes);
+
+  return NextResponse.json({
+    ok: true,
+    codes: rows,
+    pagination: { limit, offset, total },
+  });
 }
 
 const createSchema = z.object({
