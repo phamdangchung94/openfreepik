@@ -56,18 +56,12 @@ export async function GET(
   try {
     return await handle(request, params);
   } catch (err) {
+    // Server-side log keeps the stack; client gets a generic message.
+    // Drizzle SQL error text + Neon hostnames must NOT leak. Audit P0-3.
     const { taskId } = (await params.catch(() => ({ taskId: "?" }))) as { taskId: string };
     log.error("DOWNLOAD_PROXY_500", { taskId, ...errFields(err) });
-    const e = err as Error;
     return Response.json(
-      {
-        error: "INTERNAL",
-        message: "Lỗi nội bộ — vui lòng thử lại.",
-        debug: {
-          name: e?.name ?? "unknown",
-          msg: String(e?.message ?? err).slice(0, 400),
-        },
-      },
+      { error: "INTERNAL", message: "Lỗi nội bộ — vui lòng thử lại." },
       { status: 500 },
     );
   }

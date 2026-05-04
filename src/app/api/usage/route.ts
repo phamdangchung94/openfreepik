@@ -18,21 +18,12 @@ export async function GET(request: Request) {
   try {
     return await handle(request);
   } catch (err) {
+    // Server-side log keeps the full stack — but the response body
+    // never includes Drizzle SQL error text or Neon connection
+    // hostnames. Audit P0-3.
     log.error("USAGE_500", errFields(err));
-    // Include error name + message in the JSON so the customer (or
-    // browser DevTools) can paste it back for diagnosis. Stack stays
-    // server-side. Will tighten this when the bug is fixed; right now
-    // the goal is to surface the actual failure mode.
-    const e = err as Error;
     return NextResponse.json(
-      {
-        error: "INTERNAL",
-        message: "Lỗi nội bộ — vui lòng thử lại.",
-        debug: {
-          name: e?.name ?? "unknown",
-          msg: String(e?.message ?? err).slice(0, 400),
-        },
-      },
+      { error: "INTERNAL", message: "Lỗi nội bộ — vui lòng thử lại." },
       { status: 500 },
     );
   }

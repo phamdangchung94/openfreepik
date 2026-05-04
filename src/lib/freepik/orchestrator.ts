@@ -150,9 +150,49 @@ async function runOrchestrate<T>(
 
     try {
       const data = await opts.callFreepik(key.decryptedKey);
-      await recordKeyCost(key.id, opts.costEur);
+
+      // P0-2: Freepik occasionally returns 200 with a malformed body. If
+      // we can't extract a task_id, the customer has nothing to poll —
+      // treat as a failure (refund + 502) instead of charging silently.
       const taskId = opts.extractTaskId?.(data) ?? null;
-      await logUsage(opts, codeId, key.id, taskId, "succeeded");
+      if (opts.extractTaskId && !taskId) {
+        log.error("EXTRACT_TASKID_FAILED", {
+          requestId,
+          endpoint: opts.endpoint,
+          codeId,
+          keyId: key.id,
+        });
+        await refundIfCharged(codeId, opts.costEur);
+        await logUsage(opts, codeId, key.id, null, "failed");
+        return fail(
+          502,
+          "UPSTREAM_MALFORMED",
+          "Freepik returned an unexpected response — refunded.",
+        );
+      }
+
+      // P0-1: tracking writes happen AFTER the Freepik task is created.
+      // If they throw, the catch below would refund + retry, but the
+      // task already exists on Freepik's side and pool credit is gone.
+      // Wrap in their own try so we keep `ok:true` and bill the
+      // customer; admin gets a POST_CHARGE_TRACKING_FAILED log to
+      // reconcile the pool spend manually.
+      try {
+        await recordKeyCost(key.id, opts.costEur);
+        await logUsage(opts, codeId, key.id, taskId, "succeeded");
+      } catch (trackErr) {
+        log.error("POST_CHARGE_TRACKING_FAILED", {
+          requestId,
+          endpoint: opts.endpoint,
+          codeId,
+          keyId: key.id,
+          freepikTaskId: taskId,
+          costEur: opts.costEur,
+          ...errFields(trackErr),
+        });
+        // Don't rethrow — customer's request DID succeed upstream.
+      }
+
       if (opts.costEur > 0) {
         log.info("CHARGE_COMMITTED", {
           requestId,
@@ -168,6 +208,16 @@ async function runOrchestrate<T>(
     } catch (err) {
       lastErr = err;
       if (isKeyExhaustedError(err)) {
+        // P0-7: emit the documented KEY_EXHAUSTED event so admin has
+        // observability when a key flips inactive. Without this the
+        // pool can drain silently and admin only finds out via the
+        // ALL_KEYS_EXHAUSTED panic at the end.
+        log.warn("KEY_EXHAUSTED", {
+          requestId,
+          keyId: key.id,
+          endpoint: opts.endpoint,
+          ...errFields(err),
+        });
         await markKeyExhausted(key.id);
         continue; // try the next key
       }

@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { freepik } from "@/lib/freepik";
 import { klingV3RouteInputSchema } from "@/lib/freepik/kling-v3-schema";
 import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
-import { calculateCost, lookupForKlingV3 } from "@/lib/pricing/calculator";
+import {
+  PricingNotFoundError,
+  calculateCost,
+  lookupForKlingV3,
+} from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
 import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
+import { errFields, log } from "@/lib/logger";
 
 const KLING_V3_RATE_LIMIT = 3;
 const KLING_V3_RATE_WINDOW_SEC = 60;
@@ -77,7 +82,27 @@ export async function POST(request: Request) {
   }
 
   const lookup = lookupForKlingV3(params, tier);
-  const cost = await calculateCost(lookup);
+  let cost: number;
+  try {
+    cost = await calculateCost(lookup);
+  } catch (err) {
+    // P0-5: an unhandled PricingNotFoundError used to bubble as 500 with
+    // no audit trail — the request would burn a Freepik request slot
+    // without billing the customer or logging anything. Now: emit the
+    // documented PRICING_MISSING event and short-circuit with 503.
+    if (err instanceof PricingNotFoundError) {
+      log.warn("PRICING_MISSING", { lookup, ...errFields(err) });
+      return NextResponse.json(
+        {
+          error: "PRICING_MISSING",
+          message:
+            "Cấu hình giá tạm thời không khả dụng — vui lòng liên hệ hỗ trợ.",
+        },
+        { status: 503 },
+      );
+    }
+    throw err;
+  }
 
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
