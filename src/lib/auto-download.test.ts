@@ -38,7 +38,7 @@ describe("buildFilename", () => {
         "this is a very long prompt that should be clamped to fifteen chars at the start",
       createdAt: 0,
     });
-    const slug = fn.split("_")[0];
+    const slug = fn.split("_")[0] ?? "";
     expect(slug.length).toBeLessThanOrEqual(15);
   });
 
