@@ -99,7 +99,11 @@ export async function pollTaskUntilDone(
     // since each poll fetch returns in ~50-100ms the queue drains fast.
     await acquirePollSlot();
 
-    let releasedEarly = false;
+    // Tracks whether release happened inside the try (currently never
+    // does — left here as documentation of intent for future paths
+    // that might want to release before the catch handler). Always
+    // false today; the finally block does the real release.
+    const releasedEarly = false;
     try {
       const res = await fetch(`/api/freepik/${endpoint}/${apiTaskId}`, {
         headers: getApiHeaders(),

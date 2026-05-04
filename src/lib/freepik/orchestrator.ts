@@ -13,11 +13,8 @@
  *   4. all retries exhausted → refund, log usage as refunded, 503
  */
 
-import { db } from "@/lib/db/client";
-import { usageLogs, type NewUsageLog } from "@/lib/db/schema";
 import {
   chargeCode,
-  refundCode,
   validateCode,
   type CodeMetadata,
   type ValidationResult,
@@ -29,6 +26,17 @@ import {
   recordKeyCost,
 } from "@/lib/freepik/key-pool";
 import { errFields, log } from "@/lib/logger";
+import {
+  fail,
+  isKeyExhaustedError,
+  logUsage,
+  reasonMessage,
+  refundIfCharged,
+  type OrchestrateResult,
+} from "./orchestrator-helpers";
+
+// Re-export for callers that import the result type from this module.
+export type { OrchestrateResult } from "./orchestrator-helpers";
 
 const MAX_KEY_RETRIES = 3;
 
@@ -59,14 +67,6 @@ export interface OrchestrateOptions<T> {
    */
   preValidated?: ValidationResult;
 }
-
-export type OrchestrateResult<T> =
-  | { ok: true; data: T; metadata: CodeMetadata }
-  | {
-      ok: false;
-      status: number;
-      body: { error: string; message: string };
-    };
 
 export async function orchestrateFreepikCall<T>(
   opts: OrchestrateOptions<T>,
@@ -313,91 +313,3 @@ export async function authedFreepikCall<T>(opts: {
   }
 }
 
-function isKeyExhaustedError(err: unknown): boolean {
-  if (!(err instanceof FreepikApiError)) return false;
-  // 402 is unambiguous quota exhaustion. 401 could be either invalid key
-  // or quota — treat as exhausted in both cases (the key is unusable
-  // either way, we should rotate to the next one).
-  return err.code === "QUOTA_EXHAUSTED" || err.code === "AUTH";
-}
-
-/**
- * Best-effort refund. The original Freepik error needs to surface to the
- * caller, so we never let a refund failure shadow it — the worst case
- * here is a customer permanently overcharged for a request that did
- * nothing, which audit #4 logs loudly so admin can manually reconcile.
- */
-async function refundIfCharged(codeId: string, costEur: number): Promise<void> {
-  if (costEur <= 0) return;
-  try {
-    await refundCode(codeId, costEur);
-  } catch (err) {
-    // CRITICAL — this event must alert admin. Customer was charged for a
-    // request that produced no video; reversing requires manual SQL.
-    log.error("REFUND_FAILED", {
-      codeId,
-      amountEur: costEur,
-      ...errFields(err),
-    });
-    // Future: insert into a pending_refunds table for cron-driven retry.
-  }
-}
-
-async function logUsage<T>(
-  opts: OrchestrateOptions<T>,
-  codeId: string,
-  keyId: string | null,
-  freepikTaskId: string | null,
-  status: NewUsageLog["status"],
-): Promise<void> {
-  try {
-    await db.insert(usageLogs).values({
-      codeId,
-      keyId,
-      endpoint: opts.endpoint,
-      tier: opts.tier ?? null,
-      durationSeconds: opts.durationSeconds ?? null,
-      withAudio: opts.withAudio ?? false,
-      costEur: opts.costEur.toFixed(2),
-      freepikTaskId,
-      status,
-    });
-  } catch (err) {
-    // Audit P1-4: include enough fields in this log line that admin can
-    // manually replay the missing usage_logs row from the log drain
-    // (cost_eur, status, freepik_task_id, tier, duration). Without this
-    // a Neon outage during a charge run leaves no audit trail for
-    // billed requests and reconciliation requires guessing.
-    log.error("USAGE_LOG_INSERT_FAILED", {
-      codeId,
-      keyId,
-      endpoint: opts.endpoint,
-      tier: opts.tier ?? null,
-      durationSeconds: opts.durationSeconds ?? null,
-      withAudio: opts.withAudio ?? false,
-      costEur: opts.costEur.toFixed(2),
-      freepikTaskId,
-      status,
-      ...errFields(err),
-    });
-  }
-}
-
-function reasonMessage(reason: "not_found" | "inactive" | "expired"): string {
-  switch (reason) {
-    case "not_found":
-      return "Activation code not found.";
-    case "inactive":
-      return "Activation code has been revoked.";
-    case "expired":
-      return "Activation code has expired.";
-  }
-}
-
-function fail(
-  status: number,
-  error: string,
-  message: string,
-): OrchestrateResult<never> {
-  return { ok: false, status, body: { error, message } };
-}
