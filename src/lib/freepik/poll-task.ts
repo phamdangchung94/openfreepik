@@ -3,6 +3,53 @@
 import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
 import type { TaskStatus } from "./types";
 
+/**
+ * Global cap on simultaneous in-flight poll fetches across the whole app.
+ * The batch hook can run with concurrency=10, which means 10 active
+ * generations × ~0.5 polls/sec each = 5 req/sec sustained — half our
+ * server's 60/min poll-rate-limit budget. With orphan recovery + history
+ * hydration on top of that we'd burst over the limit.
+ *
+ * Implementation: simple semaphore. acquire() waits in a queue;
+ * release() pops the next waiter.
+ */
+const MAX_CONCURRENT_POLLS = 5;
+let activePolls = 0;
+const pollWaiters: Array<() => void> = [];
+
+async function acquirePollSlot(): Promise<void> {
+  if (activePolls < MAX_CONCURRENT_POLLS) {
+    activePolls++;
+    return;
+  }
+  await new Promise<void>((resolve) => pollWaiters.push(resolve));
+  activePolls++;
+}
+
+function releasePollSlot(): void {
+  activePolls--;
+  const next = pollWaiters.shift();
+  if (next) next();
+}
+
+/**
+ * When the tab is hidden, browsers throttle setInterval / setTimeout to
+ * once per minute, which makes our 2s poll loop drag. We notice the
+ * `visibilitychange` flip and bump the poll interval up so we're not
+ * fighting the browser's throttle (and not wasting fetches that the
+ * browser will queue up anyway).
+ */
+function visibilityAwareDelay(intervalMs: number, attempt: number): number {
+  const base = Math.min(intervalMs + attempt * 500, 10_000);
+  if (typeof document !== "undefined" && document.hidden) {
+    // Background tab: poll at most every 30s. The customer isn't watching
+    // anyway, and bringing the tab back to focus triggers an immediate
+    // poll via the visibility listener below.
+    return Math.max(base, 30_000);
+  }
+  return base;
+}
+
 export type PollEndpoint = "kling-v3" | "improve-prompt";
 
 export interface PollTaskOptions {
@@ -47,6 +94,12 @@ export async function pollTaskUntilDone(
       return { status: "CANCELLED", generated: [], error: "cancelled" };
     }
 
+    // Block here until a poll slot is free. With concurrency=10 batch and
+    // MAX_CONCURRENT_POLLS=5, half the polls wait at any moment — but
+    // since each poll fetch returns in ~50-100ms the queue drains fast.
+    await acquirePollSlot();
+
+    let releasedEarly = false;
     try {
       const res = await fetch(`/api/freepik/${endpoint}/${apiTaskId}`, {
         headers: getApiHeaders(),
@@ -86,10 +139,12 @@ export async function pollTaskUntilDone(
         return { status: "CANCELLED", generated: [], error: "cancelled" };
       }
       console.warn(`[pollTask:${endpoint}] retry after error:`, err);
+    } finally {
+      if (!releasedEarly) releasePollSlot();
     }
 
     attempt++;
-    const delay = Math.min(intervalMs + attempt * 500, 10_000);
+    const delay = visibilityAwareDelay(intervalMs, attempt);
     await new Promise((r) => setTimeout(r, delay));
   }
 

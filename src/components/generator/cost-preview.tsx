@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useFormContext } from "react-hook-form";
 import { Coins, AlertCircle } from "lucide-react";
 import { lookupCost, usePricingRates } from "@/hooks/use-pricing-rates";
@@ -43,12 +44,18 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
     );
   }
 
-  const perItem = lookupCost(rates, {
-    endpoint: "kling-v3",
-    tier,
-    durationSeconds: Number(duration),
-    withAudio: !!audio,
-  });
+  // Memoize the lookup — `lookupCost` walks the rates array; with batch
+  // count=100 this component re-renders on every form keystroke.
+  const perItem = useMemo(
+    () =>
+      lookupCost(rates, {
+        endpoint: "kling-v3",
+        tier,
+        durationSeconds: Number(duration),
+        withAudio: !!audio,
+      }),
+    [rates, tier, duration, audio],
+  );
 
   if (perItem === null) {
     return (

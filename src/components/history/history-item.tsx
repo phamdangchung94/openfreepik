@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Check, CheckCircle2, Video, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,15 @@ function timeAgo(timestamp: number): string {
   return `${days} ngày trước`;
 }
 
-export function HistoryItem({
+/**
+ * Wrapped in React.memo with a custom equality so a 100-task history
+ * doesn't re-render every row on each store tick. We compare the bits
+ * that actually change the rendered output — primitives off `task` plus
+ * the selection/active flags. Function props (`onClick` etc.) are
+ * deliberately ignored: the parent recreates them per render but they
+ * always close over the same id so the visible behaviour is unchanged.
+ */
+function HistoryItemImpl({
   task,
   isActive,
   selectMode = false,
@@ -139,3 +148,28 @@ export function HistoryItem({
     </div>
   );
 }
+
+export const HistoryItem = memo(HistoryItemImpl, (prev, next) => {
+  // The set of fields the row actually paints with. If any of these differ,
+  // re-render. Otherwise skip — even though the parent passes a fresh
+  // `task` reference and new arrow-function callbacks each tick, the
+  // rendered DOM is identical.
+  const a = prev.task;
+  const b = next.task;
+  return (
+    a.id === b.id &&
+    a.status === b.status &&
+    a.prompt === b.prompt &&
+    a.videoUrl === b.videoUrl &&
+    a.videoUrlExpiresAt === b.videoUrlExpiresAt &&
+    a.downloadedAt === b.downloadedAt &&
+    a.imageUrl === b.imageUrl &&
+    a.mode === b.mode &&
+    a.tier === b.tier &&
+    a.createdAt === b.createdAt &&
+    prev.isActive === next.isActive &&
+    prev.selectMode === next.selectMode &&
+    prev.selectable === next.selectable &&
+    prev.selected === next.selected
+  );
+});

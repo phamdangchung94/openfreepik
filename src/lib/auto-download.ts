@@ -65,9 +65,11 @@ export async function downloadVideo(
   a.click();
   document.body.removeChild(a);
 
-  // Revoke after the click handler has had a chance to start the save —
-  // Chrome can race if we revoke synchronously.
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 1_000);
+  // Revoke after the click handler has had a chance to start the save.
+  // 100ms is plenty for the synthetic anchor click to register; the old
+  // 1s window meant a 100-video batch could keep ~2GB of blob bytes alive
+  // in memory at the peak. 100ms gets that to ≤200MB.
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
 
   return { ok: true };
 }

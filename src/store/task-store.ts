@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type GenerationTaskStatus =
   | "IDLE"
@@ -173,6 +173,64 @@ export const useTaskStore = create<TaskState>()(
     }),
     {
       name: "openfreepik-tasks",
+      // Debounced localStorage so a 100-task batch (each task can flip
+      // status 2-3 times) doesn't trigger 300 sync writes. Coalesce
+      // writes into one every 500ms — final state lands within half a
+      // second of the last update, which is fine for crash recovery.
+      storage: createJSONStorage(() => debouncedLocalStorage(500)),
     }
   )
 );
+
+/**
+ * Wraps localStorage with a 500ms debounce on setItem. The persist
+ * middleware writes through this on every state change; rapid bursts
+ * (e.g. 10 tasks all flipping IN_PROGRESS → COMPLETED inside the same
+ * tick) collapse into one final write.
+ *
+ * getItem/removeItem stay synchronous — they're only called once at
+ * hydrate, not in the hot path.
+ */
+function debouncedLocalStorage(delayMs: number): Storage {
+  if (typeof window === "undefined") {
+    // SSR fallback — persist middleware tolerates a no-op storage.
+    return {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+      clear: () => {},
+      key: () => null,
+      length: 0,
+    } as Storage;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: Record<string, string> = {};
+
+  return {
+    getItem: (key) => window.localStorage.getItem(key),
+    setItem: (key, value) => {
+      pending[key] = value;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        for (const [k, v] of Object.entries(pending)) {
+          window.localStorage.setItem(k, v);
+        }
+        pending = {};
+        timer = null;
+      }, delayMs);
+    },
+    removeItem: (key) => {
+      delete pending[key];
+      window.localStorage.removeItem(key);
+    },
+    clear: () => {
+      pending = {};
+      window.localStorage.clear();
+    },
+    key: (i) => window.localStorage.key(i),
+    get length() {
+      return window.localStorage.length;
+    },
+  } as Storage;
+}
