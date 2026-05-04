@@ -25,12 +25,32 @@ export interface PickedKey {
  * after the post-launch audit (#3) showed it caused spurious 503s under
  * burst traffic when the pool had only 1 active key.
  *
- * Returns null only if NO active key has enough remaining budget.
+ * `excludeKeyIds` lets the orchestrator's retry loop skip keys it has
+ * already tried this request — without this, a 1-key pool burns all 3
+ * retry slots on the same key (audit P1-3).
+ *
+ * Returns null only if NO active key has enough remaining budget AND
+ * isn't in the exclude list.
  */
 export async function pickActiveKey(
   estimatedCostEur: number,
+  excludeKeyIds: ReadonlySet<string> = new Set(),
 ): Promise<PickedKey | null> {
   const cost = Math.max(estimatedCostEur, 0).toFixed(2);
+  // Build the NOT-IN list as a SQL ARRAY[…] literal. UUIDs are validated
+  // shape-wise by Drizzle on the way in (they came from our own DB
+  // records originally), so straight `${id}::uuid` interpolation is fine.
+  const excludeArray =
+    excludeKeyIds.size === 0
+      ? sql`'{}'::uuid[]`
+      : sql.join(
+          [...excludeKeyIds].map((id) => sql`${id}::uuid`),
+          sql`,`,
+        );
+  const excludeClause =
+    excludeKeyIds.size === 0
+      ? sql`TRUE`
+      : sql`id <> ALL(ARRAY[${excludeArray}]::uuid[])`;
 
   const result = await db.execute<{
     id: string;
@@ -42,6 +62,7 @@ export async function pickActiveKey(
       FROM freepik_keys
       WHERE is_active
         AND (assigned_eur - used_eur) >= ${cost}::numeric
+        AND ${excludeClause}
       ORDER BY last_used_at ASC NULLS FIRST, created_at ASC
       FOR UPDATE
       LIMIT 1

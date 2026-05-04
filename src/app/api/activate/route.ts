@@ -27,30 +27,41 @@ const ACTIVATE_RATE_WINDOW_SEC = 60;
  * Does NOT charge anything — this is a pure read.
  */
 export async function POST(request: Request) {
-  // Throttle by IP first — failures aren't free (they still hit the DB to
-  // look up the code). Allow truly anonymous callers (no IP header) to
-  // pass through; in practice Vercel always populates x-forwarded-for.
+  // Audit P1-1: fail-CLOSED when the IP can't be extracted. Previously
+  // we let the request through unrate-limited, which a self-hosted
+  // proxy could exploit by stripping x-forwarded-for / x-real-ip and
+  // brute-forcing activation codes with no ceiling. Vercel always
+  // populates these headers, so legitimate requests still get an IP.
   const ip = getClientIp(request);
-  if (ip) {
-    const rl = await checkRateLimit({
-      resource: "activate",
-      scope: ip,
-      limit: ACTIVATE_RATE_LIMIT,
-      windowSeconds: ACTIVATE_RATE_WINDOW_SEC,
-    });
-    if (!rl.allowed) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "RATE_LIMIT",
-          message: `Too many attempts. Wait ${rl.retryAfterSeconds}s and retry.`,
-        },
-        {
-          status: 429,
-          headers: { "retry-after": String(rl.retryAfterSeconds) },
-        },
-      );
-    }
+  if (!ip) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "BAD_REQUEST",
+        message: "Could not identify request source.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const rl = await checkRateLimit({
+    resource: "activate",
+    scope: ip,
+    limit: ACTIVATE_RATE_LIMIT,
+    windowSeconds: ACTIVATE_RATE_WINDOW_SEC,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "RATE_LIMIT",
+        message: `Too many attempts. Wait ${rl.retryAfterSeconds}s and retry.`,
+      },
+      {
+        status: 429,
+        headers: { "retry-after": String(rl.retryAfterSeconds) },
+      },
+    );
   }
 
   const body = await parseJsonBody(request);

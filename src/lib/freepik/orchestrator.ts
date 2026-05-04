@@ -135,9 +135,14 @@ async function runOrchestrate<T>(
   }
 
   let lastErr: unknown = null;
+  // Audit P1-3: track keys tried in this request so the retry loop
+  // doesn't pick the same key 3× when the pool has only 1 active key.
+  // Each attempt adds the key id to this set; pickActiveKey excludes
+  // them from the LRU candidate list.
+  const triedKeyIds = new Set<string>();
 
   for (let attempt = 0; attempt < MAX_KEY_RETRIES; attempt++) {
-    const key = await pickActiveKey(opts.costEur);
+    const key = await pickActiveKey(opts.costEur, triedKeyIds);
     if (!key) {
       await refundIfCharged(codeId, opts.costEur);
       await logUsage(opts, codeId, null, null, "refunded");
@@ -219,6 +224,7 @@ async function runOrchestrate<T>(
           ...errFields(err),
         });
         await markKeyExhausted(key.id);
+        triedKeyIds.add(key.id); // P1-3
         continue; // try the next key
       }
       // Non-quota error — refund and bubble up.
@@ -357,11 +363,21 @@ async function logUsage<T>(
       status,
     });
   } catch (err) {
-    // Logging is best-effort — don't fail the request if the log insert fails.
+    // Audit P1-4: include enough fields in this log line that admin can
+    // manually replay the missing usage_logs row from the log drain
+    // (cost_eur, status, freepik_task_id, tier, duration). Without this
+    // a Neon outage during a charge run leaves no audit trail for
+    // billed requests and reconciliation requires guessing.
     log.error("USAGE_LOG_INSERT_FAILED", {
       codeId,
       keyId,
       endpoint: opts.endpoint,
+      tier: opts.tier ?? null,
+      durationSeconds: opts.durationSeconds ?? null,
+      withAudio: opts.withAudio ?? false,
+      costEur: opts.costEur.toFixed(2),
+      freepikTaskId,
+      status,
       ...errFields(err),
     });
   }

@@ -115,6 +115,11 @@ export const usageLogs = pgTable(
   (t) => [
     index("usage_logs_code_id_idx").on(t.codeId),
     index("usage_logs_created_at_idx").on(t.createdAt),
+    // Audit P1-12: covers the admin /api/admin/usage filter shape
+    // `WHERE status=? ORDER BY created_at DESC`. Without this the
+    // single-column created_at index forces a sort over status-matching
+    // rows; with 10K+ usage rows that's measurably slow.
+    index("usage_logs_status_created_at_idx").on(t.status, t.createdAt),
   ],
 );
 

@@ -33,9 +33,17 @@ export async function checkLoginAllowed(
   ip: string,
 ): Promise<LoginThrottleStatus> {
   if (!ip) {
-    // No IP captured (proxy misconfiguration?) — fail safe and allow,
-    // but the caller should log this case for review.
-    return { locked: false, retryAfterSeconds: 0, attemptsRemaining: MAX_FAILURES };
+    // Audit P1-1: fail-CLOSED. Previously we let admin login through
+    // when the IP couldn't be extracted — meaning a misconfigured proxy
+    // or someone stripping x-forwarded-for had unlimited brute-force
+    // attempts. Now we treat unknown IPs like a locked-out IP and
+    // reject. Vercel always sets x-forwarded-for in production so a
+    // legitimate request never hits this branch.
+    return {
+      locked: true,
+      retryAfterSeconds: 60,
+      attemptsRemaining: 0,
+    };
   }
 
   const [row] = await db
