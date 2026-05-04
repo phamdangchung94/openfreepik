@@ -17,6 +17,7 @@ import { useHistoryHydration } from "@/hooks/use-history-hydration";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
+import { BatchProgressWidget } from "@/components/batch/batch-progress-widget";
 import { toApiParams } from "@/lib/form/to-api-params";
 import type { GenerationTask } from "@/store/task-store";
 
@@ -24,7 +25,7 @@ import type { GeneratorFormValues, BatchItem } from "@/lib/form/generator-schema
 
 export default function HomePage() {
   const { generate, activeCount } = useGenerateVideo();
-  const { startBatch, cancelBatch, isProcessing } = useBatchQueue();
+  const { startBatch, cancelBatch, retryFailed, isProcessing, progress } = useBatchQueue();
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
   useAutoDownload(); // Browser-download videos when their tasks complete
   useHistoryHydration(); // Pull completed videos from server on activation (cross-device)
@@ -128,6 +129,23 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Sticky bottom-right batch progress widget. Replaces the per-task
+          toast spam — one piece of UI tracks all in-flight work. Hides
+          itself when there's nothing in flight. */}
+      <BatchProgressWidget
+        total={progress.total}
+        completed={progress.completed}
+        failed={progress.failed}
+        isProcessing={isProcessing}
+        onCancel={cancelBatch}
+        onRetryFailed={() => {
+          const n = retryFailed();
+          if (n === 0) toast.error("Không còn task lỗi để thử lại");
+          else toast.success(`Đang thử lại ${n} video`);
+          return n;
+        }}
+      />
     </div>
   );
 }

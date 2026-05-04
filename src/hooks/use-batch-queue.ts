@@ -13,6 +13,12 @@ import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema
 interface UseBatchQueueResult {
   startBatch: (items: BatchItem[], formValues: GeneratorFormValues) => void;
   cancelBatch: () => void;
+  /**
+   * Re-queue every FAILED/TIMEOUT task from the most recent batch. Resets
+   * their status to CREATED and uses the previously-stored prompt/mode/
+   * formValues — no need to re-upload anything.
+   */
+  retryFailed: () => number;
   isProcessing: boolean;
   progress: { completed: number; total: number; failed: number };
 }
@@ -196,5 +202,42 @@ export function useBatchQueue(): UseBatchQueueResult {
     useTaskStore.getState().clearQueue();
   }, []);
 
-  return { startBatch, cancelBatch, isProcessing, progress };
+  const retryFailed = useCallback(() => {
+    const store = useTaskStore.getState();
+    const ids = batchIdsRef.current;
+    const failedIds: string[] = [];
+
+    for (const id of ids) {
+      const t = store.tasks[id];
+      if (!t) continue;
+      if (t.status !== "FAILED" && t.status !== "TIMEOUT") continue;
+      // Need a prompt-mode-tier triple in itemMapRef to re-run; if missing,
+      // bail on that one (e.g. tasks rehydrated from server have no entry).
+      if (!itemMapRef.current.has(id)) continue;
+      failedIds.push(id);
+    }
+
+    if (failedIds.length === 0 || !formRef.current) return 0;
+
+    // Reset task status so the UI flips back to CREATED. updateTask refuses
+    // to clobber a non-existent task, so this is safe even if the customer
+    // manually deleted some history items mid-batch.
+    for (const id of failedIds) {
+      store.updateTask(id, {
+        status: "CREATED",
+        videoUrl: null,
+        videoUrlExpiresAt: null,
+        error: null,
+        taskId: null,
+      });
+    }
+
+    cancelledRef.current = false;
+    store.enqueueTasks(failedIds);
+    store.setProcessing(true);
+    fillSlotsRef.current();
+    return failedIds.length;
+  }, []);
+
+  return { startBatch, cancelBatch, retryFailed, isProcessing, progress };
 }
