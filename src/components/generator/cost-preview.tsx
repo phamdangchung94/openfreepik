@@ -32,6 +32,22 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   const rates = usePricingRates();
   const metadata = useAuthStore((s) => s.metadata);
 
+  // Memoize the lookup — `lookupCost` walks the rates array; with batch
+  // count=100 this component re-renders on every form keystroke. Note:
+  // hooks must precede every early return below (Rules of Hooks).
+  const perItem = useMemo(
+    () =>
+      rates
+        ? lookupCost(rates, {
+            endpoint: "kling-v3",
+            tier,
+            durationSeconds: Number(duration),
+            withAudio: !!audio,
+          })
+        : null,
+    [rates, tier, duration, audio],
+  );
+
   if (!rates) {
     // Skeleton matches the loaded card's footprint (rounded-2xl + same
     // padding) so the layout doesn't shift when rates fetch resolves
@@ -43,19 +59,6 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
       </div>
     );
   }
-
-  // Memoize the lookup — `lookupCost` walks the rates array; with batch
-  // count=100 this component re-renders on every form keystroke.
-  const perItem = useMemo(
-    () =>
-      lookupCost(rates, {
-        endpoint: "kling-v3",
-        tier,
-        durationSeconds: Number(duration),
-        withAudio: !!audio,
-      }),
-    [rates, tier, duration, audio],
-  );
 
   if (perItem === null) {
     return (
