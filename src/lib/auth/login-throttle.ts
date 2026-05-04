@@ -46,17 +46,27 @@ export async function checkLoginAllowed(
 
   const now = Date.now();
 
+  // Drizzle's neon-http driver returns timestamptz as ISO strings, not
+  // Date — calling .getTime() on a string throws TypeError. Normalise
+  // both shapes to ms before comparing.
+  const lockedUntilMs = tsToMs(row?.lockedUntil ?? null);
+  const lastAttemptMs = tsToMs(row?.lastAttempt ?? null);
+
   // Currently locked?
-  if (row?.lockedUntil && row.lockedUntil.getTime() > now) {
+  if (lockedUntilMs !== null && lockedUntilMs > now) {
     return {
       locked: true,
-      retryAfterSeconds: Math.ceil((row.lockedUntil.getTime() - now) / 1000),
+      retryAfterSeconds: Math.ceil((lockedUntilMs - now) / 1000),
       attemptsRemaining: 0,
     };
   }
 
   // Counter reset window has passed?
-  if (row && row.lastAttempt.getTime() < now - COUNTER_RESET_MINUTES * 60_000) {
+  if (
+    row &&
+    lastAttemptMs !== null &&
+    lastAttemptMs < now - COUNTER_RESET_MINUTES * 60_000
+  ) {
     return {
       locked: false,
       retryAfterSeconds: 0,
@@ -164,3 +174,14 @@ export async function purgeStaleFailedLogins(): Promise<void> {
  * by rate-limit middleware without dragging in the throttle DB layer.
  */
 export { getClientIp } from "@/lib/request-ip";
+
+/**
+ * Coerce a Drizzle timestamp (Date from node-postgres OR ISO string from
+ * neon-http) to epoch ms, or null if absent / unparseable.
+ */
+function tsToMs(v: Date | string | null): number | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.getTime();
+  const ms = Date.parse(String(v));
+  return Number.isFinite(ms) ? ms : null;
+}

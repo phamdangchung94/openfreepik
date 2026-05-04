@@ -47,8 +47,17 @@ export async function validateCode(code: string): Promise<ValidationResult> {
   const [row] = rows;
   if (!row) return { ok: false, reason: "not_found" };
   if (!row.isActive) return { ok: false, reason: "inactive" };
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) {
-    return { ok: false, reason: "expired" };
+  // Drizzle's neon-http driver returns timestamptz as ISO strings, not
+  // Date. Calling .getTime() on a string throws TypeError and bubbles
+  // up as a 500 to the customer. Normalise to ms either way.
+  if (row.expiresAt) {
+    const expiresMs =
+      row.expiresAt instanceof Date
+        ? row.expiresAt.getTime()
+        : Date.parse(String(row.expiresAt));
+    if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) {
+      return { ok: false, reason: "expired" };
+    }
   }
 
   return { ok: true, metadata: toMetadata(row) };
@@ -129,6 +138,16 @@ function toMetadata(row: typeof activationCodes.$inferSelect): CodeMetadata {
   const remaining =
     row.mode === "unlimited" || quota === null ? null : quota - used;
 
+  // Normalise neon-http's ISO-string timestamps into Date so downstream
+  // consumers can rely on the typed `Date | null` shape.
+  let expiresAt: Date | null = null;
+  if (row.expiresAt) {
+    expiresAt =
+      row.expiresAt instanceof Date
+        ? row.expiresAt
+        : new Date(String(row.expiresAt));
+  }
+
   return {
     codeId: row.id,
     label: row.customerLabel,
@@ -136,6 +155,6 @@ function toMetadata(row: typeof activationCodes.$inferSelect): CodeMetadata {
     quotaEur: quota,
     usedEur: used,
     remainingEur: remaining,
-    expiresAt: row.expiresAt,
+    expiresAt,
   };
 }

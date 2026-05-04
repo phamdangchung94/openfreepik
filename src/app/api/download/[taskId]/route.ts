@@ -28,12 +28,41 @@ import { validateCode } from "@/lib/auth/activation";
 import { errFields, log } from "@/lib/logger";
 
 // Generous Vercel function timeout; large videos (~30MB) can take 5-10s
-// over a slow connection. The Hobby tier maxes out at 60s anyway.
+// over a slow connection. Fluid runtime (Vercel default for Next 16) caps
+// at 300s so 60s here is comfortable.
 export const maxDuration = 60;
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ taskId: string }> },
+) {
+  try {
+    return await handle(request, params);
+  } catch (err) {
+    // Last-resort catch — anything thrown above this would otherwise
+    // surface to the customer as an opaque 500 with no JSON body. Log
+    // with structured fields so the admin can grep for DOWNLOAD_PROXY_500
+    // in the function log drain.
+    const { taskId } = (await params.catch(() => ({ taskId: "?" }))) as { taskId: string };
+    log.error("DOWNLOAD_PROXY_500", { taskId, ...errFields(err) });
+    return Response.json(
+      {
+        error: "INTERNAL",
+        message: "Lỗi nội bộ — vui lòng thử lại.",
+        // Echo the stable signature so admin can correlate with logs
+        // without exposing the full stack to the customer.
+        ref: typeof err === "object" && err && "name" in err
+          ? String((err as Error).name)
+          : "unknown",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+async function handle(
+  request: Request,
+  params: Promise<{ taskId: string }>,
 ) {
   const { taskId } = await params;
   if (!taskId) {
@@ -82,11 +111,19 @@ export async function GET(
     );
   }
 
-  if (row.expiresAt && row.expiresAt.getTime() < Date.now()) {
-    return Response.json(
-      { error: "EXPIRED", message: "Link đã hết hạn." },
-      { status: 410 },
-    );
+  // neon-http returns timestamptz as ISO string; node-postgres returns
+  // Date. Normalise to ms so the comparison works either way.
+  if (row.expiresAt) {
+    const expiresMs =
+      row.expiresAt instanceof Date
+        ? row.expiresAt.getTime()
+        : Date.parse(String(row.expiresAt));
+    if (Number.isFinite(expiresMs) && expiresMs < Date.now()) {
+      return Response.json(
+        { error: "EXPIRED", message: "Link đã hết hạn." },
+        { status: 410 },
+      );
+    }
   }
 
   // Forward Range header so seek + resume work. Most browsers don't send
@@ -146,8 +183,15 @@ export async function GET(
   // bytes locally beyond a session.
   out.set("Cache-Control", "private, max-age=300");
 
+  // Response constructor accepts statuses 200-599. Freepik CDN should
+  // only return 200/206 here (we already filtered 4xx/5xx above), but
+  // guard anyway — a non-standard upstream status would otherwise throw
+  // a RangeError that bubbles up as a generic 500 to the customer.
+  const safeStatus =
+    upstream.status >= 200 && upstream.status <= 599 ? upstream.status : 200;
+
   return new Response(upstream.body, {
-    status: upstream.status,
+    status: safeStatus,
     headers: out,
   });
 }

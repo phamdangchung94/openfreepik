@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { usageLogs } from "@/lib/db/schema";
 import { extractActivationCode } from "@/lib/freepik/route-helpers";
 import { validateCode } from "@/lib/auth/activation";
+import { errFields, log } from "@/lib/logger";
 
 /**
  * GET /api/usage
@@ -14,6 +15,39 @@ import { validateCode } from "@/lib/auth/activation";
  * own code's data; the admin dashboard (Phase 10) shows all codes.
  */
 export async function GET(request: Request) {
+  try {
+    return await handle(request);
+  } catch (err) {
+    log.error("USAGE_500", errFields(err));
+    return NextResponse.json(
+      {
+        error: "INTERNAL",
+        message: "Lỗi nội bộ — vui lòng thử lại.",
+        ref:
+          typeof err === "object" && err && "name" in err
+            ? String((err as Error).name)
+            : "unknown",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Drizzle's neon-http driver returns timestamptz columns as ISO strings,
+ * NOT Date objects (unlike the node-postgres driver). Calling
+ * `.toISOString()` directly throws a TypeError. Normalise both shapes
+ * into ISO so the customer-facing JSON is consistent regardless of
+ * which driver Drizzle picks.
+ */
+function toIso(v: Date | string | null | undefined): string | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString();
+  // Already a string from neon-http; trust it.
+  return String(v);
+}
+
+async function handle(request: Request) {
   const code = extractActivationCode(request);
   const validation = await validateCode(code ?? "");
   if (!validation.ok) {
@@ -83,8 +117,8 @@ export async function GET(request: Request) {
     recent: recent.map((r) => ({
       ...r,
       costEur: Number(r.costEur),
-      createdAt: r.createdAt.toISOString(),
-      videoUrlExpiresAt: r.videoUrlExpiresAt?.toISOString() ?? null,
+      createdAt: toIso(r.createdAt),
+      videoUrlExpiresAt: toIso(r.videoUrlExpiresAt),
     })),
   });
 }
