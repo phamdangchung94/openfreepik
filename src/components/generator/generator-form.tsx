@@ -77,6 +77,10 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [t2vBatchText, setT2vBatchText] = useState("");
   const [t2vBatchOpen, setT2vBatchOpen] = useState(false);
+  // "Số bản sao" — when ≥2 in single-prompt mode, the form fans out
+  // the same prompt into N batch items so the existing batch infra
+  // (concurrency queueing, progress widget, retry-failed) handles them.
+  const [singleQty, setSingleQty] = useState(1);
 
   const isBatchMode =
     (mode === "i2v" && batchItems.length > 0) ||
@@ -103,6 +107,19 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const onFormSubmit = (values: GeneratorFormValues) => {
     if (isBatchMode && onSubmitBatch) {
       onSubmitBatch(batchItems, values);
+    } else if (singleQty > 1 && onSubmitBatch) {
+      // Multi-copy single-prompt path. Reuse the batch hook so we get
+      // concurrency queueing, the progress widget, and retry-failed for
+      // free. Each copy gets its own localId via the batch infra.
+      const items: BatchItem[] = Array.from({ length: singleQty }, () => ({
+        id: `single-x${singleQty}-${crypto.randomUUID()}`,
+        mode: values.mode,
+        prompt: values.prompt ?? "",
+        ...(values.mode === "i2v" && values.start_image_url
+          ? { imageUrl: values.start_image_url }
+          : {}),
+      }));
+      onSubmitBatch(items, values);
     } else if (onSubmitSingle) {
       const params = toApiParams(values);
       onSubmitSingle(params, values.tier);
@@ -195,8 +212,36 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         <GeneratorAdvancedSettings />
         <GeneratorMultiShotSection />
 
-        {/* Real-time cost preview — updates as tier/duration/audio change. */}
-        <CostPreview count={isBatchMode ? batchItems.length : 1} />
+        {/* Real-time cost preview — updates as tier/duration/audio change.
+            When the customer sets singleQty > 1, multiply by qty so the
+            preview reflects total batch cost. */}
+        <CostPreview
+          count={
+            isBatchMode ? batchItems.length : singleQty
+          }
+        />
+
+        {/* Quantity selector — only shown in single-prompt mode. Hidden
+            in batch mode where the customer's Excel/textarea already
+            controls count. Keeping the layout flat (one row with the
+            Generate button) so screen estate is preserved. */}
+        {!isBatchMode && (
+          <div className="flex items-center justify-end gap-2">
+            <label className="text-xs text-muted-foreground">Số bản sao</label>
+            <select
+              value={singleQty}
+              onChange={(e) => setSingleQty(Number(e.target.value))}
+              className="h-8 rounded-md border bg-background px-2 text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Số bản sao của prompt này"
+            >
+              {[1, 2, 3, 5, 10].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Submit — never disabled, user can fire multiple generations */}
         <Button
@@ -207,6 +252,8 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         >
           {isBatchMode ? (
             `Tạo ${batchItems.length} Video`
+          ) : singleQty > 1 ? (
+            `Tạo ${singleQty} Video`
           ) : (
             <>
               Tạo Video

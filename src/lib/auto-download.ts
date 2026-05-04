@@ -80,15 +80,42 @@ export interface FilenameInputs {
   createdAt: number;
 }
 
+/**
+ * Filename pattern: `{slug15}_kling-{tier}_{date}.mp4`
+ *
+ * Example: "ABC123 cinematic shot of a cat" →
+ *          "abc123-cinemati_kling-pro_20260504-1430.mp4"
+ *
+ * The 15-char prompt slug at the FRONT means customers who put a
+ * tracking code at the start of the prompt (e.g. "ABC123 do this video")
+ * can sort or grep their Downloads folder by that code. Underscores
+ * separate the prompt-derived part from the system-generated metadata
+ * so the visual boundary is unambiguous even when the slug ends in `-`.
+ */
 export function buildFilename(opts: FilenameInputs): string {
   const d = new Date(opts.createdAt);
   const pad = (n: number) => String(n).padStart(2, "0");
   const datePart = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  const slug =
-    opts.prompt
+  // 15 chars is enough for a typical "ABC123 + 8 chars description" code
+  // prefix. Strip diacritics first so Vietnamese prompts produce ASCII
+  // filenames the OS won't mangle.
+  const slug = sluggify(opts.prompt, 15);
+  return `${slug}_kling-${opts.tier}_${datePart}.mp4`;
+}
+
+function sluggify(input: string, maxChars: number): string {
+  // Strip Unicode combining marks (Vietnamese đ/ô/ế/etc.) so we end up
+  // with plain ASCII. NFD splits diacritics into separate code points,
+  // then the regex drops anything outside [a-z0-9] after lowercase.
+  const ascii = input
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, "d");
+  return (
+    ascii
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "video";
-  return `kling-${opts.tier}-${datePart}-${slug}.mp4`;
+      .slice(0, maxChars) || "video"
+  );
 }
