@@ -105,6 +105,7 @@ export function HistorySidebar() {
       toast.loading(`Đang tải ${fired + 1}/${ids.length} video...`, { id: loading });
       const result = await downloadVideo({
         freepikTaskId: task.taskId,
+        videoUrl: task.videoUrl,
         filename: buildFilename({
           tier: task.tier,
           prompt: task.prompt,

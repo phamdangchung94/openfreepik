@@ -19,6 +19,14 @@ import { getApiHeaders } from "@/lib/api-headers";
 export interface DownloadInputs {
   /** The Freepik task_id stored in the task — what /api/download[taskId] expects. */
   freepikTaskId: string | null;
+  /**
+   * Optional fallback URL the server uses when the DB row has no
+   * video_url (e.g. tasks completed before the schema migration landed).
+   * Server enforces a Freepik-host allowlist before accepting it, so
+   * the worst a tampered client can achieve is downloading their own
+   * Freepik URL.
+   */
+  videoUrl?: string | null;
   /** Used as the saved filename. */
   filename: string;
 }
@@ -38,9 +46,17 @@ export async function downloadVideo(
   if (typeof document === "undefined") return { ok: false, error: "network" };
   if (!inputs.freepikTaskId) return { ok: false, error: "no_task_id" };
 
+  // Append the localStorage videoUrl as a query param. Server prefers
+  // the DB value but falls back to this when the row's video_url is null
+  // (existing tasks from before migration 0002 landed have null URL).
+  const params = new URLSearchParams();
+  if (inputs.videoUrl) params.set("url", inputs.videoUrl);
+  const qs = params.toString();
+  const route = `/api/download/${inputs.freepikTaskId}${qs ? `?${qs}` : ""}`;
+
   let res: Response;
   try {
-    res = await fetch(`/api/download/${inputs.freepikTaskId}`, {
+    res = await fetch(route, {
       headers: getApiHeaders(),
     });
   } catch {

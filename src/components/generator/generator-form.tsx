@@ -221,25 +221,43 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           }
         />
 
-        {/* Quantity selector — only shown in single-prompt mode. Hidden
-            in batch mode where the customer's Excel/textarea already
-            controls count. Keeping the layout flat (one row with the
-            Generate button) so screen estate is preserved. */}
+        {/* Quantity input — only shown in single-prompt mode. Hidden in
+            batch mode where the customer's Excel/textarea controls count.
+            Free 1–100 number input so customers can request large fan-outs
+            (e.g. 50 takes of one prompt for a montage). The submit button
+            label updates to "Tạo N Video" so the cost preview stays
+            honest. */}
         {!isBatchMode && (
           <div className="flex items-center justify-end gap-2">
-            <label className="text-xs text-muted-foreground">Số bản sao</label>
-            <select
-              value={singleQty}
-              onChange={(e) => setSingleQty(Number(e.target.value))}
-              className="h-8 rounded-md border bg-background px-2 text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Số bản sao của prompt này"
+            <label
+              htmlFor="single-qty"
+              className="text-xs text-muted-foreground"
             >
-              {[1, 2, 3, 5, 10].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+              Số bản sao
+            </label>
+            <input
+              id="single-qty"
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={singleQty}
+              onChange={(e) => {
+                // Clamp at write-time so the rest of the form sees a
+                // sane number (cost preview multiplies by qty, etc.).
+                // Empty input → fall back to 1; out-of-range → clamp.
+                const raw = e.target.value;
+                if (raw === "") {
+                  setSingleQty(1);
+                  return;
+                }
+                const n = Math.floor(Number(raw));
+                if (!Number.isFinite(n)) return;
+                setSingleQty(Math.min(100, Math.max(1, n)));
+              }}
+              className="h-8 w-20 rounded-md border bg-background px-2 text-center text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Số bản sao của prompt này (1–100)"
+            />
           </div>
         )}
 

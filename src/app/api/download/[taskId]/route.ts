@@ -26,6 +26,23 @@ import { usageLogs } from "@/lib/db/schema";
 import { extractActivationCode } from "@/lib/freepik/route-helpers";
 import { validateCode } from "@/lib/auth/activation";
 import { errFields, log } from "@/lib/logger";
+import { VIDEO_URL_TTL_MS } from "@/lib/video-url-ttl";
+
+/**
+ * Allowlist for the `url=` fallback query param. The client sends a
+ * URL it already has in localStorage when the DB row is missing one.
+ * Restricting to Freepik hosts means a bored user can't turn this
+ * into an open proxy by editing their browser request.
+ */
+function isAllowedFreepikUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return false;
+    return u.host === "freepik.com" || u.host.endsWith(".freepik.com");
+  } catch {
+    return false;
+  }
+}
 
 // Generous Vercel function timeout; large videos (~30MB) can take 5-10s
 // over a slow connection. Fluid runtime (Vercel default for Next 16) caps
@@ -100,7 +117,45 @@ async function handle(
     )
     .limit(1);
 
-  if (!row?.videoUrl) {
+  // Resolve the upstream URL. Preferred: row.videoUrl (server-recorded
+  // when the poll endpoint observed COMPLETED). Fallback: a `url=`
+  // query param the client passes from its localStorage copy of the
+  // task. Why we need this fallback: rows from before migration 0002
+  // applied have video_url=NULL because the UPDATE silently failed on
+  // a missing column. The client still has the URL on disk, so let
+  // it ride — but only if the URL points at Freepik (no open proxy).
+  let upstreamUrl: string | null = row?.videoUrl ?? null;
+  if (!upstreamUrl && row) {
+    const fallback = new URL(request.url).searchParams.get("url");
+    if (fallback && isAllowedFreepikUrl(fallback)) {
+      upstreamUrl = fallback;
+      // Best-effort backfill: persist the URL we got from the client so
+      // future downloads + cross-device hydration stop relying on the
+      // client-side fallback. Don't await — UPDATE failures shouldn't
+      // block the customer's download.
+      const expiresAtMs = Date.now() + VIDEO_URL_TTL_MS;
+      void db
+        .update(usageLogs)
+        .set({
+          videoUrl: fallback,
+          videoUrlExpiresAt: new Date(expiresAtMs),
+        })
+        .where(
+          and(
+            eq(usageLogs.codeId, validation.metadata.codeId),
+            eq(usageLogs.freepikTaskId, taskId),
+          ),
+        )
+        .catch((err) =>
+          log.warn("DOWNLOAD_PROXY_BACKFILL_FAILED", {
+            taskId,
+            ...errFields(err),
+          }),
+        );
+    }
+  }
+
+  if (!upstreamUrl) {
     return Response.json(
       { error: "NOT_FOUND", message: "Video chưa sẵn sàng hoặc không tồn tại." },
       { status: 404 },
@@ -132,7 +187,7 @@ async function handle(
 
   let upstream: Response;
   try {
-    upstream = await fetch(row.videoUrl, { headers: upstreamHeaders });
+    upstream = await fetch(upstreamUrl, { headers: upstreamHeaders });
   } catch (err) {
     log.error("DOWNLOAD_PROXY_FETCH_FAILED", {
       taskId,

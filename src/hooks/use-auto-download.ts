@@ -103,6 +103,7 @@ async function fireSingleDownload(id: string, task: GenerationTask) {
   const loading = toast.loading(`Đang tải ${filename}...`);
   const result = await downloadVideo({
     freepikTaskId: task.taskId,
+    videoUrl: task.videoUrl,
     filename,
   });
   toast.dismiss(loading);
@@ -148,6 +149,7 @@ async function downloadBatch(ids: string[]) {
     toast.loading(`Đang tải ${fired + 1}/${ids.length} video...`, { id: loading });
     const result = await downloadVideo({
       freepikTaskId: t.taskId,
+      videoUrl: t.videoUrl,
       filename: buildFilename({
         tier: t.tier,
         prompt: t.prompt,

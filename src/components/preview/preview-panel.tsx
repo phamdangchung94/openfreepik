@@ -131,6 +131,7 @@ function CompletedState({
     const loading = toast.loading(`Đang tải ${filename}...`);
     const result = await downloadVideo({
       freepikTaskId: task.taskId,
+      videoUrl: task.videoUrl,
       filename,
     });
     toast.dismiss(loading);
