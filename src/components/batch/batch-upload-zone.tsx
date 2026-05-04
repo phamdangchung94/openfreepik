@@ -47,7 +47,8 @@ export function BatchUploadZone({
       setIsUploading(true);
 
       try {
-        // Upload directly from browser to litterbox (bypasses Vercel 4.5MB body limit)
+        // Upload directly from browser to temporary public hosts (tmpfiles
+        // → litterbox fallback). Bypasses Vercel's 4.5MB body limit.
         const uploaded = await Promise.all(
           validFiles.map((file) => uploadImageToHost(file)),
         );
