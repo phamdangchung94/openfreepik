@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, RotateCcw } from "lucide-react";
+import { Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -142,12 +142,35 @@ function KeyCard({ row, onChanged }: { row: KeyRow; onChanged: () => void }) {
     }
   }
 
+  async function remove() {
+    if (
+      !confirm(
+        `Delete key "${row.label}"? Lịch sử usage_logs giữ lại nhưng key blob mất vĩnh viễn — phải nhập lại plaintext nếu muốn dùng lại.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/keys/${row.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Delete failed");
+        return;
+      }
+      toast.success(`Đã xoá "${row.label}"`);
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-medium">{row.label}</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="truncate text-sm font-medium">{row.label}</h3>
             {row.notes && (
               <p className="text-[11px] text-muted-foreground">{row.notes}</p>
             )}
@@ -170,24 +193,143 @@ function KeyCard({ row, onChanged }: { row: KeyRow; onChanged: () => void }) {
           <Progress value={pct} className="h-1.5" />
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-          <span>
+        <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+          <span className="truncate">
             Last used:{" "}
             {row.lastUsedAt
               ? new Date(row.lastUsedAt).toLocaleString()
               : "never"}
           </span>
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={toggle}
-            disabled={busy}
-          >
-            {row.isActive ? "Deactivate" : "Reactivate"}
-          </Button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={toggle}
+              disabled={busy}
+              title={row.isActive ? "Deactivate" : "Reactivate"}
+            >
+              {row.isActive ? "Deactivate" : "Reactivate"}
+            </Button>
+            <EditKeyDialog row={row} onSaved={onChanged} />
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={remove}
+              disabled={busy}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              title="Delete key"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function EditKeyDialog({
+  row,
+  onSaved,
+}: {
+  row: KeyRow;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState(row.label);
+  const [notes, setNotes] = useState(row.notes ?? "");
+  const [assignedEur, setAssignedEur] = useState(row.assignedEur);
+  const [busy, setBusy] = useState(false);
+
+  // Reset form when reopened so cancelling discards edits.
+  useEffect(() => {
+    if (open) {
+      setLabel(row.label);
+      setNotes(row.notes ?? "");
+      setAssignedEur(row.assignedEur);
+    }
+  }, [open, row]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/keys/${row.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          label,
+          notes: notes.trim() === "" ? null : notes,
+          assignedEur: Number(assignedEur),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Update failed");
+        return;
+      }
+      toast.success("Đã lưu");
+      setOpen(false);
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button variant="ghost" size="xs" title="Edit key">
+            <Pencil className="size-3.5" />
+          </Button>
+        }
+      />
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Sửa key</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={save} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Label</Label>
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Assigned budget (EUR)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={assignedEur}
+              onChange={(e) => setAssignedEur(e.target.value)}
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Đã chi: {Number(row.usedEur).toFixed(2)} EUR. Đặt budget mới
+              cao hơn số đã chi.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Notes (optional)</Label>
+            <Textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+          <p className="rounded bg-muted p-2 text-[11px] text-muted-foreground">
+            Plaintext key không sửa được — nếu cần đổi, hãy xoá rồi thêm
+            mới (lịch sử usage_logs vẫn được giữ).
+          </p>
+          <Button type="submit" className="w-full" disabled={busy}>
+            {busy ? "Saving..." : "Lưu"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

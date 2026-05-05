@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { freepikKeys } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
+import { log } from "@/lib/logger";
 
 const patchSchema = z.object({
   isActive: z.boolean().optional(),
@@ -65,4 +66,35 @@ export async function PATCH(
     );
   }
   return NextResponse.json({ ok: true, updated });
+}
+
+/**
+ * DELETE /api/admin/keys/[id] — permanently remove a key from the pool.
+ * usage_logs.key_id has ON DELETE SET NULL, so historical billing rows
+ * stay intact (just lose their key attribution). The encrypted key blob
+ * is gone for good — admin must re-add the plaintext if they ever want
+ * the key back.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const denied = await requireAdminApi();
+  if (denied) return denied;
+
+  const { id } = await params;
+  const [deleted] = await db
+    .delete(freepikKeys)
+    .where(eq(freepikKeys.id, id))
+    .returning({ id: freepikKeys.id, label: freepikKeys.label });
+
+  if (!deleted) {
+    return NextResponse.json(
+      { ok: false, error: "NOT_FOUND", message: "Key not found." },
+      { status: 404 },
+    );
+  }
+
+  log.info("KEY_DELETED", { id: deleted.id, label: deleted.label });
+  return NextResponse.json({ ok: true, deleted });
 }
