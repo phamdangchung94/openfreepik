@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Activity,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  Zap,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,9 +37,23 @@ interface KeyRow {
   lastUsedAt: string | null;
 }
 
+interface ProbeResult {
+  ok: boolean;
+  status: number;
+  headers: Record<string, string>;
+  bodySnippet: string;
+  elapsedMs: number;
+  errorMessage?: string;
+  fetchedAt: number;
+}
+
 export default function AdminKeysPage() {
   const [rows, setRows] = useState<KeyRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // Probe results live here so the parent owns them — refresh-all writes
+  // them all at once, single-key refresh writes one entry.
+  const [probes, setProbes] = useState<Record<string, ProbeResult>>({});
+  const [probingIds, setProbingIds] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
@@ -63,6 +85,58 @@ export default function AdminKeysPage() {
     }
   }
 
+  async function refreshOne(id: string) {
+    setProbingIds((s) => new Set(s).add(id));
+    try {
+      const res = await fetch(`/api/admin/keys/${id}/refresh-quota`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Probe failed");
+        return;
+      }
+      setProbes((p) => ({
+        ...p,
+        [id]: { ...json.probe, fetchedAt: Date.now() },
+      }));
+      toast.success(`Cập nhật xong: HTTP ${json.probe.status}`);
+    } finally {
+      setProbingIds((s) => {
+        const next = new Set(s);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
+  async function refreshAllQuotas() {
+    const ids = rows.map((r) => r.id);
+    setProbingIds(new Set(ids));
+    try {
+      const res = await fetch("/api/admin/keys/refresh-all-quotas", {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Refresh failed");
+        return;
+      }
+      const now = Date.now();
+      const next: Record<string, ProbeResult> = {};
+      for (const r of json.results as Array<{ id: string; probe: ProbeResult }>) {
+        next[r.id] = { ...r.probe, fetchedAt: now };
+      }
+      setProbes((p) => ({ ...p, ...next }));
+      const okCount = (json.results as Array<{ probe: { ok: boolean } }>).filter(
+        (r) => r.probe.ok,
+      ).length;
+      toast.success(`Đã probe ${json.count} key — ${okCount} OK / ${json.count - okCount} fail`);
+    } finally {
+      setProbingIds(new Set());
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -79,6 +153,18 @@ export default function AdminKeysPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshAllQuotas}
+            disabled={loading || probingIds.size > 0 || rows.length === 0}
+            title="Probe every key against Magnific. Captures rate-limit/quota response headers."
+          >
+            <Activity
+              className={`size-3.5 ${probingIds.size > 0 ? "animate-pulse" : ""}`}
+            />
+            Cập nhật all
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -104,7 +190,14 @@ export default function AdminKeysPage() {
 
       <div className="grid gap-3 md:grid-cols-2">
         {rows.map((k) => (
-          <KeyCard key={k.id} row={k} onChanged={load} />
+          <KeyCard
+            key={k.id}
+            row={k}
+            onChanged={load}
+            probe={probes[k.id]}
+            probing={probingIds.has(k.id)}
+            onRefresh={() => refreshOne(k.id)}
+          />
         ))}
         {rows.length === 0 && (
           <Card className="md:col-span-2">
@@ -118,7 +211,19 @@ export default function AdminKeysPage() {
   );
 }
 
-function KeyCard({ row, onChanged }: { row: KeyRow; onChanged: () => void }) {
+function KeyCard({
+  row,
+  onChanged,
+  probe,
+  probing,
+  onRefresh,
+}: {
+  row: KeyRow;
+  onChanged: () => void;
+  probe?: ProbeResult;
+  probing: boolean;
+  onRefresh: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const used = Number(row.usedEur);
   const assigned = Number(row.assignedEur);
@@ -204,6 +309,17 @@ function KeyCard({ row, onChanged }: { row: KeyRow; onChanged: () => void }) {
             <Button
               variant="ghost"
               size="xs"
+              onClick={onRefresh}
+              disabled={probing}
+              title="Probe Magnific for quota / rate-limit headers"
+            >
+              <Zap
+                className={`size-3.5 ${probing ? "animate-pulse text-amber-500" : ""}`}
+              />
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={toggle}
               disabled={busy}
               title={row.isActive ? "Deactivate" : "Reactivate"}
@@ -223,8 +339,60 @@ function KeyCard({ row, onChanged }: { row: KeyRow; onChanged: () => void }) {
             </Button>
           </div>
         </div>
+
+        {probe && <ProbeResultPanel probe={probe} />}
       </CardContent>
     </Card>
+  );
+}
+
+function ProbeResultPanel({ probe }: { probe: ProbeResult }) {
+  const ageSec = Math.floor((Date.now() - probe.fetchedAt) / 1000);
+  const ageStr = ageSec < 60 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`;
+  const headerEntries = Object.entries(probe.headers);
+
+  const statusColor = probe.ok
+    ? "text-emerald-600"
+    : probe.status === 401
+      ? "text-destructive"
+      : "text-amber-600";
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-2 text-[11px]">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-medium">Magnific probe</span>
+        <span className="text-muted-foreground">
+          {ageStr} ago · {probe.elapsedMs}ms
+        </span>
+      </div>
+      <div className={`font-mono ${statusColor}`}>
+        HTTP {probe.status || "ERR"} {probe.ok ? "✓ key valid" : ""}
+      </div>
+      {probe.errorMessage && (
+        <div className="mt-1 truncate font-mono text-destructive">
+          {probe.errorMessage}
+        </div>
+      )}
+      {headerEntries.length > 0 ? (
+        <div className="mt-1.5 space-y-0.5">
+          {headerEntries.map(([k, v]) => (
+            <div key={k} className="flex gap-2 font-mono">
+              <span className="shrink-0 text-muted-foreground">{k}:</span>
+              <span className="truncate">{v}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-1 text-muted-foreground">
+          (Không có header quota/rate-limit nào trả về)
+        </div>
+      )}
+      {!probe.ok && probe.bodySnippet && (
+        <div className="mt-1.5 truncate font-mono text-muted-foreground">
+          {probe.bodySnippet}
+        </div>
+      )}
+    </div>
   );
 }
 
