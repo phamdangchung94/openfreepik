@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,25 @@ export default function AdminKeysPage() {
     }
   }
 
+  async function reactivateAll() {
+    if (!confirm("Reactivate every inactive key? Use only when the pool was drained by a transient failure.")) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/keys/reactivate-all", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Reactivate failed");
+        return;
+      }
+      toast.success(`${json.count} key(s) reactivated`);
+      await load();
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     load();
   }, []);
@@ -60,6 +79,16 @@ export default function AdminKeysPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reactivateAll}
+            disabled={loading}
+            title="Flip every is_active=false back to true. Emergency pool recovery."
+          >
+            <RotateCcw className="size-3.5" />
+            Reactivate all
+          </Button>
           <Button
             variant="outline"
             size="sm"

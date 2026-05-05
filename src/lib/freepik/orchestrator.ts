@@ -234,6 +234,7 @@ async function runOrchestrate<T>(
         // observability when a key flips inactive. Without this the
         // pool can drain silently and admin only finds out via the
         // ALL_KEYS_EXHAUSTED panic at the end.
+        // Now ONLY fires on QUOTA_EXHAUSTED (402) — see helpers comment.
         log.warn("KEY_EXHAUSTED", {
           requestId,
           keyId: key.id,
@@ -244,7 +245,32 @@ async function runOrchestrate<T>(
         triedKeyIds.add(key.id); // P1-3
         continue; // try the next key
       }
-      // Non-quota error — refund and bubble up.
+      // Transient failures: 401, 403 (non-PLAN_LIMIT, non-BAD_REQUEST),
+      // 429, 5xx, network. These often mean Magnific is temporarily
+      // unhappy with this specific account/key — rotate per-request
+      // but DO NOT auto-disable, since the next request might succeed.
+      // BAD_REQUEST is excluded (request body issue, retry won't help).
+      if (
+        err instanceof FreepikApiError &&
+        (err.code === "AUTH" ||
+          err.code === "RATE_LIMIT" ||
+          err.code === "SERVER" ||
+          err.code === "NETWORK" ||
+          err.code === "INVALID_RESPONSE")
+      ) {
+        log.warn("KEY_TRANSIENT_FAILURE", {
+          requestId,
+          keyId: key.id,
+          label: key.label,
+          endpoint: opts.endpoint,
+          code: err.code,
+          status: err.status,
+          message: err.message.slice(0, 200),
+        });
+        triedKeyIds.add(key.id); // exclude from THIS request's retries
+        continue; // rotate, but key stays is_active=true
+      }
+      // BAD_REQUEST or non-Freepik error — refund and bubble up.
       await refundIfCharged(codeId, opts.costEur);
       await logUsage(opts, codeId, key.id, null, "failed");
       if (err instanceof FreepikApiError) {

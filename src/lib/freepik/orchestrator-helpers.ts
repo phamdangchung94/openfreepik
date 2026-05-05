@@ -29,15 +29,23 @@ export type OrchestrateResult<T> =
     };
 
 /**
- * Decide whether a Freepik error means "this key is dead, rotate to
- * the next one". Quota exhaustion (402) is unambiguous; 401 = invalid
- * or revoked key (rotate). 403 is split: BAD_REQUEST stays as a
- * customer-facing error (don't drain the pool over a bad payload),
- * AUTH-ish 403 rotates. See base-client.ts for the discriminator.
+ * Decide whether a Freepik error means "this key is permanently dead,
+ * flip is_active=false". CONSERVATIVE on purpose — auto-disabling on
+ * vague 401/403s caused a whack-a-mole loop where customers exhausted
+ * the pool every time Magnific had a transient hiccup.
+ *
+ * Only QUOTA_EXHAUSTED (HTTP 402) qualifies: that's Magnific saying
+ * "this account is out of credit", which is unambiguous and permanent
+ * until the customer tops up.
+ *
+ * Everything else — 401, 403, 5xx, network — is treated as "rotate for
+ * THIS request only" by the orchestrator's per-request `triedKeyIds`
+ * set. Admin sees a `KEY_TRANSIENT_FAILURE` log and can disable a key
+ * by hand if needed.
  */
 export function isKeyExhaustedError(err: unknown): boolean {
   if (!(err instanceof FreepikApiError)) return false;
-  return err.code === "QUOTA_EXHAUSTED" || err.code === "AUTH";
+  return err.code === "QUOTA_EXHAUSTED";
 }
 
 /**
