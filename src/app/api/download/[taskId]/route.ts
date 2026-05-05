@@ -38,7 +38,24 @@ function isAllowedFreepikUrl(raw: string): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
-    return u.host === "freepik.com" || u.host.endsWith(".freepik.com");
+    // Magnific/Freepik original CDN
+    if (u.host === "freepik.com" || u.host.endsWith(".freepik.com")) return true;
+    if (u.host === "magnific.com" || u.host.endsWith(".magnific.com")) return true;
+    // Cloudflare R2 mirror — accept the project's specific public URL
+    // when configured, plus the generic r2.dev pattern as a safety net.
+    const r2Base = process.env.R2_PUBLIC_URL_BASE;
+    if (r2Base) {
+      try {
+        const allowedHost = new URL(r2Base).host;
+        if (u.host === allowedHost) return true;
+      } catch {
+        // Misconfigured env var — skip the strict match, fall through.
+      }
+    }
+    if (u.host.endsWith(".r2.dev") || u.host.endsWith(".r2.cloudflarestorage.com")) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }

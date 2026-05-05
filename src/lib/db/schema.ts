@@ -95,7 +95,19 @@ export const usageLogs = pgTable(
       .notNull()
       .default("0.00"),
     freepikTaskId: text("freepik_task_id"),
+    /**
+     * Customer-facing URL — preferred to be the R2 mirror (cheaper egress,
+     * Cloudflare CDN, controlled 6h lifecycle). Falls back to the original
+     * Magnific URL when the mirror upload fails so customers still get a
+     * working link.
+     */
     videoUrl: text("video_url"),
+    /**
+     * Original Magnific signed URL, kept even after R2 lifecycle expires
+     * the mirrored copy. Permanent record per audit + admin re-mirror flow.
+     * Migration 0005.
+     */
+    magnificVideoUrl: text("magnific_video_url"),
     /**
      * When the videoUrl is expected to stop working. Set by the poll endpoint
      * when COMPLETED is first observed (capturedAt + VIDEO_URL_TTL_HOURS).

@@ -26,6 +26,7 @@
     "admin:add-key": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/admin-add-key.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1042.0",
     "@base-ui/react": "^1.4.0",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.1.0",
