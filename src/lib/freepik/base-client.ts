@@ -144,6 +144,24 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
     });
   }
   if (status === 429) {
+    // Magnific uses HTTP 429 for two semantically different things:
+    //   1. True rate-limit (transient — retry in a few seconds works)
+    //   2. "Free trial usage exhausted" / "upgrade to paid plan" — this
+    //      is permanent for the account until billing is upgraded;
+    //      retrying a thousand times won't help, the key is dead.
+    // Distinguish by message content. The free-trial path maps to
+    // QUOTA_EXHAUSTED so isKeyExhaustedError flips is_active=false and
+    // the key stops draining retry slots on every subsequent request.
+    if (
+      msg &&
+      /free trial|free-tier|trial usage|upgrade.*paid|paid plan/i.test(msg)
+    ) {
+      return new FreepikApiError({
+        message: msg,
+        code: "QUOTA_EXHAUSTED",
+        status,
+      });
+    }
     return new FreepikApiError({
       message: msg || "Rate limit exceeded. Try again shortly.",
       code: "RATE_LIMIT",
