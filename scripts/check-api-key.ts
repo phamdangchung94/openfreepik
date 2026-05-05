@@ -1,10 +1,14 @@
 /**
- * Sanity check — verifies the Freepik API key is valid by calling a
+ * Sanity check — verifies the Magnific API key is valid by calling a
  * zero-cost list endpoint. Run: pnpm check:api
+ *
+ * Defaults to Magnific (api.magnific.com); override via env vars if you
+ * need to test against api.freepik.com.
  */
 import "dotenv/config";
 
-const FREEPIK_BASE_URL = "https://api.freepik.com";
+const API_BASE_URL = process.env.FREEPIK_API_BASE_URL ?? "https://api.magnific.com";
+const API_KEY_HEADER = process.env.FREEPIK_API_KEY_HEADER ?? "x-magnific-api-key";
 const API_KEY = process.env.FREEPIK_API_KEY;
 
 async function main() {
@@ -17,9 +21,9 @@ async function main() {
 
   try {
     const res = await fetch(
-      `${FREEPIK_BASE_URL}/v1/ai/video/kling-v3?limit=1`,
+      `${API_BASE_URL}/v1/ai/video/kling-v3?limit=1`,
       {
-        headers: { "x-freepik-api-key": API_KEY },
+        headers: { [API_KEY_HEADER]: API_KEY },
       }
     );
 

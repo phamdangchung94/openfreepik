@@ -95,7 +95,7 @@ Server (Next.js API Routes)
 
          |
          v
-  Freepik REST API (https://api.freepik.com)
+  Magnific/Freepik REST API (https://api.magnific.com — default; override via FREEPIK_API_BASE_URL)
   |-- POST /v1/ai/video/kling-v3-{pro|std}   (create video task)
   |-- GET  /v1/ai/video/kling-v3/{taskId}     (poll status)
   |-- POST /v1/ai/improve-prompt              (enhance prompt)

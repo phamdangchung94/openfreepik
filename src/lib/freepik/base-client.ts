@@ -1,12 +1,18 @@
 /**
- * Low-level HTTP wrapper for the Freepik API.
+ * Low-level HTTP wrapper for the Magnific/Freepik API.
  * Every endpoint function calls `request()` — it attaches the API key,
  * handles errors, and returns typed JSON.
+ *
+ * Default host is Magnific (post-2024 acquisition; Magnific-issued keys
+ * are rejected at api.freepik.com with 401 "Invalid API key"). Override
+ * with FREEPIK_API_BASE_URL / FREEPIK_API_KEY_HEADER env vars if you
+ * ever need to revert to api.freepik.com without redeploying.
  */
 
 import { FreepikApiError, type InvalidParam } from "./errors";
 
-const FREEPIK_BASE_URL = "https://api.freepik.com";
+const API_BASE_URL = process.env.FREEPIK_API_BASE_URL ?? "https://api.magnific.com";
+const API_KEY_HEADER = process.env.FREEPIK_API_KEY_HEADER ?? "x-magnific-api-key";
 
 export async function request<T>(opts: {
   method: "GET" | "POST";
@@ -25,7 +31,7 @@ export async function request<T>(opts: {
     });
   }
 
-  const url = new URL(path, FREEPIK_BASE_URL);
+  const url = new URL(path, API_BASE_URL);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
       url.searchParams.set(k, v);
@@ -33,7 +39,7 @@ export async function request<T>(opts: {
   }
 
   const headers: Record<string, string> = {
-    "x-freepik-api-key": apiKey,
+    [API_KEY_HEADER]: apiKey,
   };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";

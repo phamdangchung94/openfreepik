@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "check:api": "tsx --env-file=.env.local scripts/check-api-key.ts",
+    "check:endpoints": "tsx scripts/test-key-endpoints.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",
