@@ -5,6 +5,14 @@ export type FreepikErrorCode =
   | "BAD_REQUEST"
   | "RATE_LIMIT"
   | "QUOTA_EXHAUSTED"
+  /**
+   * Magnific/Freepik plan-level usage cap reached on the upstream
+   * account. Distinct from QUOTA_EXHAUSTED (which we treat as the key
+   * being permanently dead): PLAN_LIMIT means "this account is over
+   * its monthly/plan ceiling, will reset on renewal". Orchestrator
+   * rotates to the next key but doesn't flip is_active=false.
+   */
+  | "PLAN_LIMIT"
   | "SERVER"
   | "NETWORK"
   | "INVALID_RESPONSE"

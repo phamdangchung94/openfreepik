@@ -212,6 +212,23 @@ async function runOrchestrate<T>(
       return { ok: true, data, metadata: metadataAfterCharge };
     } catch (err) {
       lastErr = err;
+      // PLAN_LIMIT: Magnific account hit its plan ceiling. The key
+      // itself is fine — it'll work again when the plan resets. Rotate
+      // to the next key for THIS request, but DON'T flip is_active so
+      // the next request a few minutes later doesn't see an empty pool.
+      // (Without this branch, every plan-limited request silently drains
+      // the pool — the customer's "Tạm thời chưa có key khả dụng" loop.)
+      if (err instanceof FreepikApiError && err.code === "PLAN_LIMIT") {
+        log.warn("KEY_PLAN_LIMIT", {
+          requestId,
+          keyId: key.id,
+          label: key.label,
+          endpoint: opts.endpoint,
+          message: err.message.slice(0, 200),
+        });
+        triedKeyIds.add(key.id); // exclude from THIS request's retries
+        continue; // try the next key — but key stays is_active=true
+      }
       if (isKeyExhaustedError(err)) {
         // P0-7: emit the documented KEY_EXHAUSTED event so admin has
         // observability when a key flips inactive. Without this the

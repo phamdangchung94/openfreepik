@@ -7,7 +7,7 @@
  * once the customer's "NO_KEYS_AVAILABLE" issue is diagnosed.
  */
 
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { freepikKeys } from "@/lib/db/schema";
 import { pickActiveKey } from "@/lib/freepik/key-pool";
@@ -15,11 +15,29 @@ import { pickActiveKey } from "@/lib/freepik/key-pool";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const cost = Number(url.searchParams.get("cost") ?? "1");
+  const reactivate = url.searchParams.get("reactivate") === "1";
 
   const out: Record<string, unknown> = {
     region: process.env.VERCEL_REGION ?? "unknown",
     requestedCost: cost,
+    reactivateRequested: reactivate,
   };
+
+  // 0. Optional: flip every is_active=false back to true. Used once
+  //    after the PLAN_LIMIT classification fix lands so the keys that
+  //    were wrongly auto-disabled come back online.
+  if (reactivate) {
+    try {
+      const result = await db
+        .update(freepikKeys)
+        .set({ isActive: true })
+        .where(eq(freepikKeys.isActive, false))
+        .returning({ id: freepikKeys.id, label: freepikKeys.label });
+      out.reactivated = result;
+    } catch (err) {
+      out.reactivate_error = String((err as Error).message ?? err);
+    }
+  }
 
   // 1. List ALL keys (including inactive) so admin can see what the
   //    pickActiveKey filter is actually filtering against.

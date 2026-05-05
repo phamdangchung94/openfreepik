@@ -95,21 +95,32 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
     });
   }
   if (status === 403) {
-    // Freepik returns 403 for several distinct reasons:
-    //   1. Account suspended / plan-gated / region-blocked
-    //      → key is genuinely unusable; orchestrator should rotate.
-    //   2. Bad request body (missing/invalid field they reject at the
-    //      WAF layer rather than 400) → key is fine, request is the
-    //      problem; rotating would drain the entire pool over one bad
-    //      customer payload (audit P0-6).
-    // Freepik's "invalid_params" / "problem" body is the discriminator:
-    // its presence means the key was accepted and validation failed.
+    // Freepik / Magnific returns 403 for several distinct reasons:
+    //   1. Plan-level usage limit reached on the upstream account.
+    //      Message looks like: "Hello! You've reached the default usage
+    //      limit of your Magnific API plan. ..."
+    //      → key is FINE, just temporarily over its plan ceiling. We
+    //        should rotate to the next key but NOT permanently mark
+    //        this one inactive (it'll work again on plan reset).
+    //   2. Bad request body (missing/invalid field rejected at WAF
+    //      rather than 400) → key fine, request is the problem;
+    //      rotating would drain the entire pool over one bad payload.
+    //   3. Account suspended / plan-gated / region-blocked
+    //      → key is genuinely unusable; orchestrator should rotate
+    //        AND mark inactive.
     if (invalidParams.length > 0) {
       return new FreepikApiError({
         message: msg || "Bad request — check your parameters.",
         code: "BAD_REQUEST",
         status,
         invalidParams,
+      });
+    }
+    if (msg && /usage limit|api plan|plan limit/i.test(msg)) {
+      return new FreepikApiError({
+        message: msg,
+        code: "PLAN_LIMIT",
+        status,
       });
     }
     return new FreepikApiError({

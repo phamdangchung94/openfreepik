@@ -21,6 +21,8 @@ const CODE_MAP: Record<string, string> = {
     "Cấu hình giá tạm thời không khả dụng — vui lòng liên hệ hỗ trợ.",
   UPSTREAM_MALFORMED:
     "Freepik trả về không đúng định dạng — đã hoàn tiền, vui lòng thử lại.",
+  PLAN_LIMIT:
+    "Hệ thống đang chạm giới hạn nhà cung cấp — vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
   AUTH: "Bạn cần kích hoạt mã trước khi tạo video.",
   // Both legacy CODE_* and current bare names map to the same string.
   NOT_FOUND: "Không tìm thấy mã kích hoạt.",
