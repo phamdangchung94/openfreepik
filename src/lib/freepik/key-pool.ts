@@ -95,6 +95,41 @@ export async function markKeyExhausted(keyId: string): Promise<void> {
 }
 
 /**
+ * Diagnostic snapshot of the pool — used by the orchestrator's
+ * NO_KEYS_AVAILABLE warning so admin can tell from Vercel logs
+ * whether the pool was empty because keys are inactive, out of
+ * budget, or simply none exist. Cheap aggregate query, no
+ * sensitive data returned.
+ */
+export async function keyPoolStats(costEur: number): Promise<{
+  totalKeys: number;
+  activeKeys: number;
+  activeWithBudget: number;
+}> {
+  const cost = Math.max(costEur, 0).toFixed(2);
+  const result = await db.execute<{
+    total: string;
+    active: string;
+    active_with_budget: string;
+  }>(sql`
+    SELECT
+      COUNT(*)::text AS total,
+      COUNT(*) FILTER (WHERE is_active)::text AS active,
+      COUNT(*) FILTER (
+        WHERE is_active AND (assigned_eur - used_eur) >= ${cost}::numeric
+      )::text AS active_with_budget
+    FROM freepik_keys;
+  `);
+  const rows = (result as unknown as { rows: Array<{ total: string; active: string; active_with_budget: string }> }).rows;
+  const row = rows[0] ?? { total: "0", active: "0", active_with_budget: "0" };
+  return {
+    totalKeys: Number(row.total),
+    activeKeys: Number(row.active),
+    activeWithBudget: Number(row.active_with_budget),
+  };
+}
+
+/**
  * Increment a key's tracked spend. Called on every successful Freepik
  * request (and never refunded — server-side accounting is the source of
  * truth for "how much have we burned on this Freepik account").

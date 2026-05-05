@@ -21,6 +21,7 @@ import {
 } from "@/lib/auth/activation";
 import { FreepikApiError } from "@/lib/freepik/errors";
 import {
+  keyPoolStats,
   markKeyExhausted,
   pickActiveKey,
   recordKeyCost,
@@ -144,6 +145,19 @@ async function runOrchestrate<T>(
   for (let attempt = 0; attempt < MAX_KEY_RETRIES; attempt++) {
     const key = await pickActiveKey(opts.costEur, triedKeyIds);
     if (!key) {
+      // Diagnostic: when this fires, admin needs to know WHY the pool
+      // looked empty — was every key inactive, or just out of budget,
+      // or was every key already in triedKeyIds for this request?
+      // Cheap query (single row) with no sensitive data.
+      const stats = await keyPoolStats(opts.costEur);
+      log.warn("NO_KEYS_AVAILABLE_DIAG", {
+        requestId,
+        endpoint: opts.endpoint,
+        attempt,
+        triedKeyCount: triedKeyIds.size,
+        costEur: opts.costEur,
+        ...stats,
+      });
       await refundIfCharged(codeId, opts.costEur);
       await logUsage(opts, codeId, null, null, "refunded");
       return fail(
