@@ -12,6 +12,30 @@ export type GenerationTaskStatus =
   | "TIMEOUT"
   | "CANCELLED";
 
+/**
+ * Snapshot of the request params used to generate a video. Preserved
+ * on the task so the preview panel can show the customer exactly what
+ * settings produced the result, and a "Tạo lại với cùng config" /
+ * Regenerate flow can replay them. Optional fields stay undefined when
+ * the customer left the form default.
+ */
+export interface TaskParams {
+  /** Duration in seconds — string form per Magnific schema ("5", "10"). */
+  duration?: string;
+  /** "16:9" | "9:16" | "1:1". */
+  aspectRatio?: string;
+  /** Whether native audio was generated. */
+  audio?: boolean;
+  /** Optional creativity vs adherence slider 0..1. */
+  cfgScale?: number;
+  /** Customer's negative prompt — empty when omitted. */
+  negativePrompt?: string;
+  /** Multi-shot mode flag. */
+  multiShot?: boolean;
+  /** Number of shots when multi-shot. */
+  shotCount?: number;
+}
+
 export interface GenerationTask {
   id: string;
   taskId: string | null;
@@ -34,6 +58,14 @@ export interface GenerationTask {
   thumbnailUrl: string | null;
   imageUrl: string | null;
   error: string | null;
+  /**
+   * Snapshot of the request params used to generate this video. Optional
+   * for backward compat — older tasks created before this field shipped
+   * will lack it; the preview panel falls back to "—" for missing values.
+   */
+  params?: TaskParams;
+  /** Cost charged at submission time (EUR). Optional for back-compat. */
+  costEur?: number;
 }
 
 interface TaskState {

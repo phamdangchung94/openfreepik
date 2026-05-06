@@ -59,6 +59,18 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         thumbnailUrl: null,
         imageUrl: opts.imageUrl ?? null,
         error: null,
+        // Snapshot params at submission so the preview panel can show
+        // exactly what produced the result (and a future "Tạo lại với
+        // cùng config" replay path has somewhere to read from).
+        params: {
+          duration: params.duration,
+          aspectRatio: params.aspect_ratio,
+          audio: params.generate_audio,
+          cfgScale: params.cfg_scale,
+          negativePrompt: params.negative_prompt,
+          multiShot: params.multi_shot,
+          shotCount: params.multi_prompt?.length,
+        },
       });
 
       activeCountRef.current++;

@@ -232,6 +232,18 @@ export function useBatchQueue(): UseBatchQueueResult {
           thumbnailUrl: null,
           imageUrl: item.imageUrl ?? null,
           error: null,
+          // Form values are shared across the whole batch — snapshot
+          // them on every task so the preview shows the params even
+          // after the customer changes the form for the next batch.
+          params: {
+            duration: formValues.duration,
+            aspectRatio: formValues.aspect_ratio,
+            audio: formValues.generate_audio,
+            cfgScale: formValues.cfg_scale,
+            negativePrompt: formValues.negative_prompt,
+            multiShot: formValues.multi_shot,
+            shotCount: formValues.multi_prompt?.length,
+          },
         });
       }
 

@@ -16,6 +16,7 @@ import { VideoPlayer } from "./video-player";
 import { UrlCountdown } from "./url-countdown";
 import { friendlyError } from "@/lib/error-messages";
 import { buildFilename, downloadVideo } from "@/lib/auto-download";
+import { ParametersBlock } from "./parameters-block";
 
 interface PreviewPanelProps {
   onRegenerate?: (task: GenerationTask) => void;
@@ -169,6 +170,7 @@ function CompletedState({
           </p>
           <UrlCountdown expiresAt={task.videoUrlExpiresAt} />
         </div>
+        <ParametersBlock task={task} />
         {task.videoUrl && (
           <Button
             variant="outline"
