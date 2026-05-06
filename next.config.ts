@@ -5,9 +5,20 @@ const isDev = process.env.NODE_ENV === "development";
 /**
  * Allow-listed origins for img-src / media-src / connect-src.
  * Keep this list narrow — every entry expands the XSS blast radius.
+ *
+ * Hosts:
+ *   - *.freepik.com / *.magnific.com — Magnific-issued media URLs
+ *   - litterbox.catbox.moe / tmpfiles.org — image upload fallbacks
+ *   - *.r2.dev — Cloudflare R2 mirror (video preview + download)
  */
 const FREEPIK_ORIGIN = "https://*.freepik.com";
-const UPLOAD_ORIGIN = "https://litterbox.catbox.moe";
+const MAGNIFIC_ORIGIN = "https://*.magnific.com";
+const LITTERBOX_ORIGIN = "https://litterbox.catbox.moe";
+const TMPFILES_ORIGIN = "https://tmpfiles.org";
+const R2_ORIGIN = "https://*.r2.dev";
+
+const MEDIA_ORIGINS = `${FREEPIK_ORIGIN} ${MAGNIFIC_ORIGIN} ${R2_ORIGIN}`;
+const UPLOAD_ORIGINS = `${LITTERBOX_ORIGIN} ${TMPFILES_ORIGIN}`;
 
 /**
  * Static CSP. `'unsafe-inline'` and `'unsafe-eval'` are concessions to
@@ -18,10 +29,10 @@ const csp = [
   `default-src 'self'`,
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   `style-src 'self' 'unsafe-inline'`,
-  `img-src 'self' data: blob: ${FREEPIK_ORIGIN} ${UPLOAD_ORIGIN}`,
-  `media-src 'self' ${FREEPIK_ORIGIN}`,
+  `img-src 'self' data: blob: ${MEDIA_ORIGINS} ${UPLOAD_ORIGINS}`,
+  `media-src 'self' ${MEDIA_ORIGINS}`,
   `font-src 'self' data:`,
-  `connect-src 'self' ${FREEPIK_ORIGIN} ${UPLOAD_ORIGIN}`,
+  `connect-src 'self' ${MEDIA_ORIGINS} ${UPLOAD_ORIGINS}`,
   `frame-ancestors 'none'`,
   `base-uri 'self'`,
   `form-action 'self'`,
