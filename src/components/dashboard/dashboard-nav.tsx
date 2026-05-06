@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", icon: Home, exact: true },
   { href: "/dashboard/codes", label: "Codes", icon: KeyRound, exact: false },
-  { href: "/dashboard/keys", label: "Freepik keys", icon: Server, exact: false },
+  { href: "/dashboard/keys", label: "API keys", icon: Server, exact: false },
   { href: "/dashboard/pricing", label: "Pricing", icon: Tag, exact: false },
   { href: "/dashboard/usage", label: "Usage logs", icon: Activity, exact: false },
 ] as const;
@@ -32,7 +32,7 @@ export function DashboardNav() {
   return (
     <aside className="flex h-screen w-56 shrink-0 flex-col border-r bg-card">
       <div className="border-b px-4 py-4">
-        <h1 className="text-sm font-semibold">OpenFreepik Admin</h1>
+        <h1 className="text-sm font-semibold">Admin Console</h1>
         <p className="text-[11px] text-muted-foreground">Dashboard</p>
       </div>
 

@@ -133,7 +133,7 @@ export function BatchProgressWidget({
       {isProcessing && (running > 0 || queued > 0) && (
         <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
           {running > 0 && (
-            <span title="Đang gọi Freepik">
+            <span title="Đang xử lý trên máy chủ AI">
               <span className="font-medium text-foreground">{running}</span>{" "}
               đang chạy
             </span>

@@ -185,7 +185,7 @@ function downloadErrorToast(
     case "network":
       return "Lỗi mạng — kiểm tra kết nối và thử lại";
     case "upstream":
-      return "Freepik không trả về video — thử lại sau";
+      return "Máy chủ không trả về video — thử lại sau";
     case "no_task_id":
       return "Video chưa hoàn tất — không thể tải";
   }

@@ -25,7 +25,7 @@ export async function request<T>(opts: {
 
   if (!apiKey) {
     throw new FreepikApiError({
-      message: "API key is required. Please enter your Freepik API key.",
+      message: "API key is required.",
       code: "AUTH",
       status: 401,
     });
@@ -69,7 +69,7 @@ export async function request<T>(opts: {
       throw mapHttpError(res.status, null);
     }
     throw new FreepikApiError({
-      message: "Freepik returned a non-JSON response.",
+      message: "Upstream returned a non-JSON response.",
       code: "INVALID_RESPONSE",
       status: res.status,
     });
@@ -82,8 +82,29 @@ export async function request<T>(opts: {
   return json as T;
 }
 
+/**
+ * Strip upstream brand names from a message before it can be surfaced
+ * to the customer. Magnific / Freepik responses say things like "Hello!
+ * You've reached the default usage limit of your Magnific API plan" or
+ * "verify your API key at https://www.magnific.com/...". We keep the
+ * useful part (the actual reason) but redact identifying brand text +
+ * URLs so customers don't see which upstream service we're using.
+ */
+function sanitizeUpstreamMessage(raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  return raw
+    // Brand names (case-insensitive, word-boundary-anchored).
+    .replace(/\bMagnific\b/gi, "máy chủ AI")
+    .replace(/\bFreepik\b/gi, "máy chủ AI")
+    // URLs pointing to either domain — strip the whole href.
+    .replace(/https?:\/\/(?:www\.)?(?:magnific|freepik)\.com\S*/gi, "")
+    // Whitespace cleanup left by the redactions above.
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function mapHttpError(status: number, body: unknown): FreepikApiError {
-  const msg = extractMessage(body);
+  const msg = sanitizeUpstreamMessage(extractMessage(body));
   const invalidParams = extractInvalidParams(body);
 
   if (status === 401) {
@@ -95,7 +116,7 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
   }
   if (status === 402) {
     return new FreepikApiError({
-      message: msg || "Freepik account is out of credit.",
+      message: msg || "Account is out of credit.",
       code: "QUOTA_EXHAUSTED",
       status,
     });
@@ -130,7 +151,7 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
       });
     }
     return new FreepikApiError({
-      message: msg || "Freepik refused the request — key likely suspended or limited.",
+      message: msg || "Upstream refused the request — key likely suspended or limited.",
       code: "AUTH",
       status,
     });
@@ -170,7 +191,7 @@ function mapHttpError(status: number, body: unknown): FreepikApiError {
   }
   if (status >= 500) {
     return new FreepikApiError({
-      message: msg || "Freepik server error. Try again later.",
+      message: msg || "Upstream server error. Try again later.",
       code: "SERVER",
       status,
     });

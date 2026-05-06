@@ -20,7 +20,7 @@ const CODE_MAP: Record<string, string> = {
   PRICING_MISSING:
     "Cấu hình giá tạm thời không khả dụng — vui lòng liên hệ hỗ trợ.",
   UPSTREAM_MALFORMED:
-    "Freepik trả về không đúng định dạng — đã hoàn tiền, vui lòng thử lại.",
+    "Máy chủ trả về dữ liệu lỗi — đã hoàn tiền, vui lòng thử lại.",
   PLAN_LIMIT:
     "Hệ thống đang chạm giới hạn nhà cung cấp — vui lòng thử lại sau hoặc liên hệ hỗ trợ.",
   AUTH: "Bạn cần kích hoạt mã trước khi tạo video.",
@@ -39,9 +39,25 @@ const CODE_MAP: Record<string, string> = {
 
 const PHRASE_MAP: Array<[RegExp, string]> = [
   [/insufficient balance/i, "Mã kích hoạt không đủ số dư cho video này."],
-  [/all freepik keys ran out/i, "Hệ thống đang quá tải — vui lòng liên hệ hỗ trợ."],
-  [/no freepik keys/i, "Tạm thời chưa có key khả dụng — vui lòng thử lại sau."],
-  [/freepik refused|key (likely )?suspended|account suspended|unexpected http 403/i, "Hệ thống đang gặp sự cố tạm thời — vui lòng thử lại sau ít phút."],
+  // Pool-state phrases (legacy "freepik" + new neutral wording both caught).
+  [
+    /all (freepik|upstream) (keys|credits) (ran out|exhausted)/i,
+    "Hệ thống đang quá tải — vui lòng liên hệ hỗ trợ.",
+  ],
+  [
+    /no (freepik|active video) (keys|credits)/i,
+    "Tạm thời chưa có key khả dụng — vui lòng thử lại sau.",
+  ],
+  [
+    /(freepik|upstream) refused|key (likely )?suspended|account suspended|unexpected http 403/i,
+    "Hệ thống đang gặp sự cố tạm thời — vui lòng thử lại sau ít phút.",
+  ],
+  // Free-trial / plan-limit (Magnific 429 message). Map to a neutral
+  // "out of credits" line so the brand never reaches the customer.
+  [
+    /free trial|trial usage|upgrade.*paid|paid plan|usage limit|api plan|plan limit/i,
+    "Hệ thống tạm thời hết credit — vui lòng thử lại sau.",
+  ],
   [/activation code is required/i, "Bạn cần kích hoạt mã trước khi tạo video."],
   [/activation code/i, "Mã kích hoạt không hợp lệ."],
   [/network|fetch failed|enotfound|timeout/i, "Lỗi mạng — vui lòng kiểm tra kết nối và thử lại."],
@@ -49,6 +65,21 @@ const PHRASE_MAP: Array<[RegExp, string]> = [
   [/interrupted before submission/i, "Bị gián đoạn trước khi gửi — vui lòng tạo lại."],
   [/recovered/i, "(đã khôi phục)"],
 ];
+
+/**
+ * Strip upstream brand names from any message that's about to be shown
+ * to the customer. Defense-in-depth — base-client.ts also sanitizes at
+ * extract time, but this pass catches anything that bypasses the API
+ * layer (e.g. log strings copy-pasted into errors, future regressions).
+ */
+function stripBrandNames(s: string): string {
+  return s
+    .replace(/\bMagnific\b/gi, "máy chủ AI")
+    .replace(/\bFreepik\b/gi, "máy chủ AI")
+    .replace(/https?:\/\/(?:www\.)?(?:magnific|freepik)\.com\S*/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 export function friendlyError(input: string | null | undefined): string {
   if (!input) return "";
@@ -64,6 +95,8 @@ export function friendlyError(input: string | null | undefined): string {
     if (pattern.test(trimmed)) return vi;
   }
 
-  // Unknown — return the original so devs can still debug.
-  return trimmed;
+  // Unknown — return the original so devs can still debug, BUT scrub
+  // brand names first so the customer never sees "Magnific" or "Freepik"
+  // in a fallthrough error.
+  return stripBrandNames(trimmed);
 }

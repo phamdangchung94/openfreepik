@@ -163,7 +163,7 @@ async function runOrchestrate<T>(
       return fail(
         503,
         "NO_KEYS_AVAILABLE",
-        "No Freepik keys with sufficient budget — please contact support.",
+        "No active video credits available — please contact support.",
       );
     }
 
@@ -186,7 +186,7 @@ async function runOrchestrate<T>(
         return fail(
           502,
           "UPSTREAM_MALFORMED",
-          "Freepik returned an unexpected response — refunded.",
+          "Upstream returned an unexpected response — refunded.",
         );
       }
 
@@ -318,7 +318,7 @@ async function runOrchestrate<T>(
   return fail(
     503,
     "ALL_KEYS_EXHAUSTED",
-    "All Freepik keys ran out of credit — please contact support.",
+    "All upstream credits exhausted — please contact support.",
   );
 }
 
@@ -349,7 +349,7 @@ export async function authedFreepikCall<T>(opts: {
 
   const key = await pickActiveKey(0);
   if (!key) {
-    return fail(503, "NO_KEYS_AVAILABLE", "No Freepik keys available.");
+    return fail(503, "NO_KEYS_AVAILABLE", "No active video credits available.");
   }
 
   try {

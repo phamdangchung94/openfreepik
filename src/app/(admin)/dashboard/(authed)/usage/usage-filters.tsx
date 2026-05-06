@@ -107,7 +107,7 @@ export function UsageFilters({
         onValueChange={(v) => v && onChange({ ...value, keyId: v })}
       >
         <SelectTrigger className="w-[200px]">
-          <SelectValue placeholder="Key Magnific" />
+          <SelectValue placeholder="API Key" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ALL}>Tất cả key</SelectItem>

@@ -145,11 +145,11 @@ export default function AdminKeysPage() {
     <div className="space-y-4 p-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Freepik keys</h1>
+          <h1 className="text-2xl font-semibold">API keys</h1>
           <p className="text-sm text-muted-foreground">
             {rows.length} {rows.length === 1 ? "key" : "keys"} in the rotation
-            pool. Spend tracked locally — Freepik exposes no balance API, so
-            verify against the Magnific dashboard periodically.
+            pool. Spend tracked locally — upstream exposes no balance API, so
+            verify against the provider dashboard periodically.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export default function AdminKeysPage() {
             size="sm"
             onClick={refreshAllQuotas}
             disabled={loading || probingIds.size > 0 || rows.length === 0}
-            title="Probe every key against Magnific. Captures rate-limit/quota response headers."
+            title="Probe every key against upstream. Captures rate-limit/quota response headers."
           >
             <Activity
               className={`size-3.5 ${probingIds.size > 0 ? "animate-pulse" : ""}`}
@@ -202,7 +202,7 @@ export default function AdminKeysPage() {
         {rows.length === 0 && (
           <Card className="md:col-span-2">
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              No Freepik keys yet — add one so customers can generate.
+              No API keys yet — add one so customers can generate.
             </CardContent>
           </Card>
         )}
@@ -311,7 +311,7 @@ function KeyCard({
               size="xs"
               onClick={onRefresh}
               disabled={probing}
-              title="Probe Magnific for quota / rate-limit headers"
+              title="Probe upstream for quota / rate-limit headers"
             >
               <Zap
                 className={`size-3.5 ${probing ? "animate-pulse text-amber-500" : ""}`}
@@ -360,7 +360,7 @@ function ProbeResultPanel({ probe }: { probe: ProbeResult }) {
   return (
     <div className="rounded-md border bg-muted/30 p-2 text-[11px]">
       <div className="mb-1 flex items-center justify-between">
-        <span className="font-medium">Magnific probe</span>
+        <span className="font-medium">Upstream probe</span>
         <span className="text-muted-foreground">
           {ageStr} ago · {probe.elapsedMs}ms
         </span>
@@ -552,7 +552,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
       />
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Freepik key</DialogTitle>
+          <DialogTitle>Add API key</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
@@ -565,7 +565,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Freepik API key (plaintext)</Label>
+            <Label className="text-xs">API key (plaintext)</Label>
             <Input
               type="password"
               placeholder="FPSX..."
@@ -588,7 +588,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
               onChange={(e) => setAssignedEur(e.target.value)}
             />
             <p className="text-[10px] text-muted-foreground">
-              Default 500 — Freepik&apos;s free-tier credit per account.
+              Default 500 — provider&apos;s free-tier credit per account.
             </p>
           </div>
           <div className="space-y-1.5">

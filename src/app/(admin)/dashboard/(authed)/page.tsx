@@ -80,7 +80,7 @@ export default async function DashboardOverviewPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Freepik key pool budget</CardTitle>
+          <CardTitle className="text-sm">API key pool budget</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <div className="flex items-baseline justify-between text-xs">

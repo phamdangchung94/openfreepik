@@ -207,7 +207,7 @@ async function handle(
       ...errFields(err),
     });
     return Response.json(
-      { error: "UPSTREAM", message: "Không lấy được video từ Freepik." },
+      { error: "UPSTREAM", message: "Không lấy được video từ máy chủ." },
       { status: 502 },
     );
   }

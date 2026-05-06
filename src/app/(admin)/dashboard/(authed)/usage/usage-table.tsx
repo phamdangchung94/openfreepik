@@ -61,8 +61,8 @@ const COLUMN_LABEL: Record<ColId, string> = {
   tier: "Tier",
   eur: "EUR",
   status: "Trạng thái",
-  magnific: "URL Magnific",
-  r2: "URL R2",
+  magnific: "URL gốc",
+  r2: "URL CDN",
   taskId: "Task ID",
 };
 
