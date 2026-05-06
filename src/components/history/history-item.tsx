@@ -23,7 +23,25 @@ interface HistoryItemProps {
   onDelete: () => void;
 }
 
-function timeAgo(timestamp: number): string {
+/**
+ * Compact time-ago for the sidebar — Vietnamese long forms ("18 phút
+ * trước") wrap onto 2-3 lines on narrow screens. Single-letter unit
+ * keeps the meta row at one line; full label sits in the title attr
+ * for the curious. Pattern matches Twitter / GitHub.
+ */
+function timeAgoCompact(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}p`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+/** Long form for the tooltip — accessible read on hover. */
+function timeAgoLong(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "vừa xong";
   const minutes = Math.floor(seconds / 60);
@@ -91,44 +109,49 @@ function HistoryItemImpl({
         </div>
       )}
 
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
         {safeThumb ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={safeThumb}
             alt="Source"
-            className="size-10 rounded-lg object-cover"
+            className="size-9 rounded-md object-cover"
           />
         ) : (
           <Video className="size-4 text-muted-foreground" />
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="line-clamp-2 text-sm leading-snug">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {/* Single-line prompt — long Vietnamese stays on one row, full
+            text in the title tooltip for accessibility. Vastly more
+            videos visible per scroll than the old 2-line clamp. */}
+        <p
+          className="truncate text-sm leading-snug"
+          title={task.prompt || undefined}
+        >
           {task.prompt || "Video chưa đặt tên"}
         </p>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <StatusBadge status={task.status} className="scale-90 origin-left" />
-            <span className="text-[10px] text-muted-foreground">
-              {timeAgo(task.createdAt)}
+        {/* Compact meta row — never wraps. Status dot + age + download
+            check + countdown all on one line using single-letter units. */}
+        <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+          <StatusBadge status={task.status} className="scale-90 origin-left" />
+          <span title={timeAgoLong(task.createdAt)}>
+            {timeAgoCompact(task.createdAt)}
+          </span>
+          {task.status === "COMPLETED" && task.downloadedAt && (
+            <span
+              className="inline-flex items-center gap-0.5 text-green-500"
+              title={`Đã tải lúc ${new Date(task.downloadedAt).toLocaleString()}`}
+            >
+              <CheckCircle2 className="size-3" />
             </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {task.status === "COMPLETED" && task.downloadedAt && (
-              <span
-                className="inline-flex items-center gap-0.5 text-[10px] text-green-500"
-                title={`Đã tải lúc ${new Date(task.downloadedAt).toLocaleString()}`}
-              >
-                <CheckCircle2 className="size-3" />
-                Đã tải
-              </span>
-            )}
-            {task.status === "COMPLETED" && task.videoUrlExpiresAt && (
+          )}
+          {task.status === "COMPLETED" && task.videoUrlExpiresAt && (
+            <span className="ml-auto">
               <UrlCountdown expiresAt={task.videoUrlExpiresAt} compact />
-            )}
-          </div>
+            </span>
+          )}
         </div>
       </div>
 

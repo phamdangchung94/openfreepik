@@ -32,16 +32,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    // forceDark: dark theme is now the only theme — toggle removed from
+    // header. The `dark` class is hard-coded so the OS preference / any
+    // stale localStorage value can't flip it back to light.
     <html
       lang="en"
-      className={`${monaSans.variable} ${monaSansMono.variable}`}
+      className={`dark ${monaSans.variable} ${monaSansMono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-background text-foreground antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          enableSystem
+          forcedTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <TooltipProvider>

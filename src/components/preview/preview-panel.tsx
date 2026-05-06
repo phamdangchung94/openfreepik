@@ -158,36 +158,55 @@ function CompletedState({
         src={task.videoUrl ?? ""}
         poster={task.thumbnailUrl ?? undefined}
       />
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
+      <div className="space-y-3">
+        {/* Prompt + meta-row condensed: badges instead of long Vietnamese
+            phrases — saves vertical space while staying readable. */}
+        <p className="text-sm leading-snug text-foreground/90">
           {task.prompt}
         </p>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            {task.mode === "t2v" ? "Văn bản → Video" : "Ảnh → Video"}
-            {" / "}
-            {task.tier === "pro" ? "Pro" : "Tiêu chuẩn"}
-          </p>
-          <UrlCountdown expiresAt={task.videoUrlExpiresAt} />
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+            {task.mode === "t2v" ? "T2V" : "I2V"}
+          </span>
+          <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+            {task.tier === "pro" ? "Pro" : "Std"}
+          </span>
+          <span className="ml-auto">
+            <UrlCountdown expiresAt={task.videoUrlExpiresAt} />
+          </span>
         </div>
+
+        {/* Action bar: Tải về + Regenerate side-by-side instead of two
+            full-width stacked buttons. Frees ~36px vertical space. */}
+        {(task.videoUrl || onRegenerate) && (
+          <div className="grid grid-cols-2 gap-2">
+            {task.videoUrl && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleDownload}
+              >
+                <Download className="size-3.5 mr-1.5" />
+                {task.downloadedAt ? "Tải lại" : "Tải về"}
+              </Button>
+            )}
+            {onRegenerate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRegenerate}
+                // When download isn't available (no URL yet), span both
+                // columns so the regenerate button doesn't look orphaned.
+                className={!task.videoUrl ? "col-span-2" : undefined}
+              >
+                <RotateCcw className="size-3.5 mr-1.5" />
+                Tạo lại
+              </Button>
+            )}
+          </div>
+        )}
+
         <ParametersBlock task={task} />
-        {task.videoUrl && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={handleDownload}
-          >
-            <Download className="size-3.5 mr-1.5" />
-            {task.downloadedAt ? "Tải lại" : "Tải về"}
-          </Button>
-        )}
-        {onRegenerate && (
-          <Button variant="outline" size="sm" className="w-full" onClick={onRegenerate}>
-            <RotateCcw className="size-3.5 mr-1.5" />
-            Regenerate
-          </Button>
-        )}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Volume2,
   VolumeX,
@@ -9,101 +10,120 @@ import {
   Hash,
   Slash,
   Settings2,
+  ChevronDown,
 } from "lucide-react";
 import type { GenerationTask } from "@/store/task-store";
+import { cn } from "@/lib/utils";
 
 /**
  * Read-only parameter summary shown under the prompt in the preview
  * panel. Reads from the task snapshot (task.params), so customers can
- * verify exactly what settings produced the result they're looking at
- * — useful when regenerating, comparing outputs, or debugging which
- * shot broke.
+ * verify exactly what settings produced the result they're looking at.
+ *
+ * Defaults to a single-line summary ("5s · 16:9 · 🔊 · CFG 0.50") to
+ * keep the panel compact. Click to expand for full details (negative
+ * prompt, multi-shot, task_id).
  *
  * Older tasks created before the params snapshot shipped will lack the
- * field; this component renders an "—" placeholder for missing values
- * and stays compact so it doesn't clutter the panel.
+ * field; the row shows "Không có params" placeholder.
  */
 export function ParametersBlock({ task }: { task: GenerationTask }) {
+  const [open, setOpen] = useState(false);
   const p = task.params;
+  const hasParams = !!p;
 
-  // Always-visible cells — covers the most-asked questions when a
-  // customer says "why does this video look like this".
-  const cells: Array<{ icon: React.ReactNode; label: string; value: string }> = [
-    {
-      icon: <Clock className="size-3" />,
-      label: "Thời lượng",
-      value: p?.duration ? `${p.duration}s` : "—",
-    },
-    {
-      icon: <Maximize2 className="size-3" />,
-      label: "Tỷ lệ",
-      value: p?.aspectRatio ?? "—",
-    },
-    {
-      icon:
-        p?.audio === true ? (
-          <Volume2 className="size-3" />
-        ) : (
-          <VolumeX className="size-3" />
-        ),
-      label: "Âm thanh",
-      value:
-        p?.audio === true ? "Có" : p?.audio === false ? "Không" : "—",
-    },
-    {
-      icon: <Settings2 className="size-3" />,
-      label: "CFG",
-      value: typeof p?.cfgScale === "number" ? p.cfgScale.toFixed(2) : "—",
-    },
-  ];
+  // Inline summary chips for the collapsed row.
+  const summary = hasParams ? (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/80">
+      {p.duration && (
+        <span className="inline-flex items-center gap-1">
+          <Clock className="size-3 text-muted-foreground" />
+          {p.duration}s
+        </span>
+      )}
+      {p.aspectRatio && (
+        <span className="inline-flex items-center gap-1">
+          <Maximize2 className="size-3 text-muted-foreground" />
+          {p.aspectRatio}
+        </span>
+      )}
+      {p.audio !== undefined && (
+        <span className="inline-flex items-center gap-1">
+          {p.audio ? (
+            <Volume2 className="size-3 text-muted-foreground" />
+          ) : (
+            <VolumeX className="size-3 text-muted-foreground" />
+          )}
+          {p.audio ? "Có audio" : "Không audio"}
+        </span>
+      )}
+      {typeof p.cfgScale === "number" && (
+        <span className="inline-flex items-center gap-1">
+          <Settings2 className="size-3 text-muted-foreground" />
+          CFG {p.cfgScale.toFixed(2)}
+        </span>
+      )}
+    </div>
+  ) : (
+    <span className="text-[11px] text-muted-foreground/70">
+      Không có params (video cũ)
+    </span>
+  );
 
-  // Multi-shot row — only render if multi-shot was used (clutter avoidance).
-  const multiShotRow =
-    p?.multiShot && p.shotCount ? (
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Layers className="size-3 shrink-0" />
-        <span>{p.shotCount} cảnh (multi-shot)</span>
-      </div>
-    ) : null;
-
-  // Negative prompt — only render if non-empty.
+  // Detail-only fields — only meaningful when expanded.
   const negPrompt = p?.negativePrompt?.trim();
-  const negRow = negPrompt ? (
-    <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
-      <Slash className="mt-0.5 size-3 shrink-0" />
-      <span className="line-clamp-2">
-        <span className="text-foreground/60">Negative:</span> {negPrompt}
-      </span>
-    </div>
-  ) : null;
-
-  // Task ID — small monospace at bottom for support / debug. Truncated
-  // because Magnific UUIDs are 36 chars.
-  const taskIdRow = task.taskId ? (
-    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
-      <Hash className="size-2.5 shrink-0" />
-      <span className="truncate font-mono">{task.taskId}</span>
-    </div>
-  ) : null;
+  const showMultiShot = p?.multiShot && p.shotCount;
+  const hasDetails = negPrompt || showMultiShot || task.taskId;
 
   return (
-    <div className="space-y-2 rounded-md border bg-muted/20 p-2.5">
-      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        {cells.map((c) => (
-          <div
-            key={c.label}
-            className="flex items-center gap-1.5 text-[11px]"
-            title={c.label}
-          >
-            <span className="text-muted-foreground">{c.icon}</span>
-            <span className="text-muted-foreground">{c.label}:</span>
-            <span className="font-medium text-foreground">{c.value}</span>
-          </div>
-        ))}
-      </div>
-      {multiShotRow}
-      {negRow}
-      {taskIdRow}
+    <div className="rounded-md border bg-muted/20">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-muted/40"
+        aria-expanded={open}
+      >
+        {summary}
+        {hasDetails && (
+          <ChevronDown
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        )}
+      </button>
+
+      {open && hasDetails && (
+        <div className="space-y-1 border-t border-border/60 px-2.5 py-2 text-[11px]">
+          {showMultiShot && (
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Layers className="size-3 shrink-0" />
+              <span>{p.shotCount} cảnh (multi-shot)</span>
+            </div>
+          )}
+          {negPrompt && (
+            <div className="flex items-start gap-1.5 text-muted-foreground">
+              <Slash className="mt-0.5 size-3 shrink-0" />
+              <span className="line-clamp-3">
+                <span className="text-foreground/60">Negative:</span>{" "}
+                {negPrompt}
+              </span>
+            </div>
+          )}
+          {task.taskId && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+              <Hash className="size-2.5 shrink-0" />
+              <span
+                className="truncate font-mono"
+                title={`Magnific task_id: ${task.taskId}`}
+              >
+                {task.taskId}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
