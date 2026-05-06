@@ -2,8 +2,12 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { getApiHeaders, extractErrorMessage, requireActivationCode } from "@/lib/api-headers";
-import { useAuthStore } from "@/store/auth-store";
+import {
+  getApiHeaders,
+  extractErrorBody,
+  requireActivationCode,
+} from "@/lib/api-headers";
+import { useAuthStore, type BalanceUpdate } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import { expiresFromNow } from "@/lib/video-url-ttl";
 import type {
@@ -121,25 +125,56 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           ? { params: payload.params, tier: payload.tier }
           : { params: payload.params };
 
-      // Fire-and-forget: POST + poll runs in background
-      (async () => {
-        try {
-          const res = await fetch(`/api/freepik/${endpointPath}`, {
-            method: "POST",
-            headers: getApiHeaders(),
-            body: JSON.stringify(requestBody),
-          });
+      // Fire-and-forget: POST + poll runs in background.
+      //
+      // Retry policy for NO_KEYS_AVAILABLE: pool is saturated by the
+      // per-key concurrency cap (8/key). Customer's request goes into
+      // a client-side queue and retries every 5s for up to 5 minutes
+      // before giving up. Other errors fail immediately.
+      const RETRY_DELAY_MS = 5_000;
+      const MAX_RETRY_MS = 5 * 60_000; // 5 minutes
+      const startMs = Date.now();
 
-          if (!res.ok) {
-            const errMsg = await extractErrorMessage(res);
+      (async () => {
+        let json: { data: { task_id: string }; balance?: BalanceUpdate } | null = null;
+        try {
+          for (;;) {
+            const res = await fetch(`/api/freepik/${endpointPath}`, {
+              method: "POST",
+              headers: getApiHeaders(),
+              body: JSON.stringify(requestBody),
+            });
+
+            if (res.ok) {
+              json = await res.json();
+              break;
+            }
+
+            const err = await extractErrorBody(res);
+            // Pool saturated → keep waiting. Any other error fails fast.
+            if (err.code === "NO_KEYS_AVAILABLE" && Date.now() - startMs < MAX_RETRY_MS) {
+              useTaskStore.getState().updateTask(localId, {
+                status: "QUEUED",
+                error: null,
+              });
+              await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+              continue;
+            }
+
             useTaskStore.getState().updateTask(localId, {
               status: "FAILED",
-              error: errMsg,
+              error: err.message,
             });
             return;
           }
 
-          const json = await res.json();
+          if (!json) {
+            useTaskStore.getState().updateTask(localId, {
+              status: "FAILED",
+              error: "Hàng đợi quá tải — vui lòng thử lại sau",
+            });
+            return;
+          }
           const apiTaskId = json.data.task_id as string;
           useTaskStore.getState().updateTask(localId, {
             taskId: apiTaskId,

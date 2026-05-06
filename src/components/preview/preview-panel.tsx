@@ -43,16 +43,27 @@ function LoadingState({
   position: number;
   totalActive: number;
 }) {
+  // QUEUED = waiting for an upstream slot. Soft message + slower
+  // pulse so customers don't think their request is broken.
+  const isQueued = task.status === "QUEUED";
+  const headline = isQueued
+    ? "Đang xếp hàng — chờ slot trống"
+    : `Đang tạo video${totalActive > 1 ? ` — ${position}/${totalActive}` : "…"}`;
+
   return (
     <div className="space-y-4">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-muted">
         <Skeleton className="h-full w-full" />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm font-medium text-foreground/80">
-            Đang tạo video
-            {totalActive > 1 ? ` — ${position}/${totalActive}` : "…"}
-          </p>
+          <Loader2
+            className={`h-8 w-8 animate-spin ${isQueued ? "text-amber-500" : "text-primary"}`}
+          />
+          <p className="text-sm font-medium text-foreground/80">{headline}</p>
+          {isQueued && (
+            <p className="text-[11px] text-muted-foreground">
+              Pool đang đầy — sẽ tự động chạy khi có slot.
+            </p>
+          )}
           <p className="line-clamp-2 max-w-xs text-xs text-muted-foreground">
             &ldquo;{task.prompt}&rdquo;
           </p>
@@ -221,7 +232,7 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
   // Position context for LoadingState — "Generating video — 2 of 5"
   // gives the customer reassurance their batch is moving.
   const activeIds = Object.values(tasks)
-    .filter((t) => t.status === "IN_PROGRESS" || t.status === "CREATED")
+    .filter((t) => t.status === "IN_PROGRESS" || t.status === "CREATED" || t.status === "QUEUED")
     .sort((a, b) => a.createdAt - b.createdAt)
     .map((t) => t.id);
   const position = task ? activeIds.indexOf(task.id) + 1 : 0;
@@ -248,7 +259,7 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
             <ErrorState task={task} onRegenerate={handleRegenerate} />
           )}
         {task &&
-          (task.status === "CREATED" || task.status === "IN_PROGRESS") && (
+          (task.status === "CREATED" || task.status === "IN_PROGRESS" || task.status === "QUEUED") && (
             <LoadingState
               task={task}
               position={position}

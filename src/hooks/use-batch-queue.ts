@@ -2,8 +2,8 @@
 
 import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
-import { useAuthStore } from "@/store/auth-store";
-import { getApiHeaders, extractErrorMessage } from "@/lib/api-headers";
+import { useAuthStore, type BalanceUpdate } from "@/store/auth-store";
+import { getApiHeaders, extractErrorBody } from "@/lib/api-headers";
 import { toBatchApiParams, toBatchT2VParams } from "@/lib/form/to-api-params";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import { enhancePromptOnce } from "@/lib/improve-prompt-runner";
@@ -104,7 +104,10 @@ export function useBatchQueue(): UseBatchQueueResult {
         // terminal state. retryFailed() covers all three.
         failed++;
       } else if (t.status === "IN_PROGRESS") running++;
-      else if (t.status === "CREATED") queued++;
+      // CREATED = client picked it up, hasn't dispatched yet.
+      // QUEUED = dispatched but server pool was saturated; client
+      // is auto-retrying. Both count as "queued" for the widget.
+      else if (t.status === "CREATED" || t.status === "QUEUED") queued++;
     }
     return { completed, total: ids.size, failed, running, queued };
   })();
@@ -134,20 +137,52 @@ export function useBatchQueue(): UseBatchQueueResult {
         itemData.mode === "i2v" && itemData.imageUrl
           ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
           : toBatchT2VParams(formValues, prompt);
-      const res = await fetch("/api/freepik/kling-v3", {
-        method: "POST",
-        headers: getApiHeaders(),
-        body: JSON.stringify({ params, tier: formValues.tier }),
-        signal,
-      });
 
-      if (!res.ok) {
-        const errMsg = await extractErrorMessage(res);
-        useTaskStore.getState().updateTask(localId, { status: "FAILED", error: errMsg });
+      // Retry policy mirrors use-generate-video: when the upstream
+      // pool is saturated by the per-key concurrency cap, queue the
+      // request and retry every 5s for up to 5 minutes. The ABORT
+      // signal still wins — cancelling the batch interrupts the wait.
+      const QUEUE_RETRY_DELAY_MS = 5_000;
+      const QUEUE_MAX_WAIT_MS = 5 * 60_000;
+      const queueStart = Date.now();
+      let json: { data: { task_id: string }; balance?: BalanceUpdate } | null = null;
+      for (;;) {
+        if (signal.aborted) return;
+        const res = await fetch("/api/freepik/kling-v3", {
+          method: "POST",
+          headers: getApiHeaders(),
+          body: JSON.stringify({ params, tier: formValues.tier }),
+          signal,
+        });
+        if (res.ok) {
+          json = await res.json();
+          break;
+        }
+        const err = await extractErrorBody(res);
+        if (
+          err.code === "NO_KEYS_AVAILABLE" &&
+          Date.now() - queueStart < QUEUE_MAX_WAIT_MS
+        ) {
+          useTaskStore.getState().updateTask(localId, {
+            status: "QUEUED",
+            error: null,
+          });
+          await new Promise((r) => setTimeout(r, QUEUE_RETRY_DELAY_MS));
+          continue;
+        }
+        useTaskStore.getState().updateTask(localId, {
+          status: "FAILED",
+          error: err.message,
+        });
         return;
       }
-
-      const json = await res.json();
+      if (!json) {
+        useTaskStore.getState().updateTask(localId, {
+          status: "FAILED",
+          error: "Hàng đợi quá tải — vui lòng thử lại sau",
+        });
+        return;
+      }
       const apiTaskId = json.data.task_id as string;
       useTaskStore.getState().updateTask(localId, { taskId: apiTaskId, status: "IN_PROGRESS" });
       if (json.balance) {

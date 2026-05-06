@@ -14,6 +14,9 @@ const STATUS_CONFIG: Record<
   { label: string; variant: "default" | "secondary" | "destructive" | "outline"; extra?: string }
 > = {
   IDLE: { label: "Chờ", variant: "secondary" },
+  // QUEUED = pool saturated, waiting for an upstream slot. Soft pulse
+  // so the customer sees the request is alive, not stuck.
+  QUEUED: { label: "Đang xếp hàng", variant: "outline", extra: "animate-pulse" },
   CREATED: { label: "Đã tạo", variant: "outline" },
   IN_PROGRESS: { label: "Đang xử lý", variant: "default", extra: "animate-pulse" },
   COMPLETED: { label: "Hoàn tất", variant: "default", extra: "bg-primary text-primary-foreground" },

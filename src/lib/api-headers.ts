@@ -38,3 +38,22 @@ export async function extractErrorMessage(res: Response): Promise<string> {
     return `HTTP ${res.status}`;
   }
 }
+
+/**
+ * Same shape but also returns the discriminator `code` so callers can
+ * decide whether the failure is retryable (e.g. NO_KEYS_AVAILABLE
+ * means "wait for a slot, try again" — not a true error).
+ */
+export async function extractErrorBody(
+  res: Response,
+): Promise<{ code: string; message: string }> {
+  try {
+    const json = await res.json();
+    return {
+      code: String(json.error ?? `HTTP_${res.status}`),
+      message: String(json.message ?? json.error ?? `HTTP ${res.status}`),
+    };
+  } catch {
+    return { code: `HTTP_${res.status}`, message: `HTTP ${res.status}` };
+  }
+}

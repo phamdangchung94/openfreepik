@@ -66,14 +66,20 @@ function runRecovery() {
     }
   }
 
-  // Tasks without taskId (CREATED but never submitted) — mark as failed
+  // Tasks without taskId (CREATED or QUEUED but never submitted) — mark
+  // as failed. CREATED = page closed before the POST fired. QUEUED =
+  // client was retrying NO_KEYS_AVAILABLE when the page reloaded; the
+  // retry timer is gone, but the customer can hit "Tạo lại" and the
+  // request will go straight back through with the saved params.
   const noApiId = Object.values(tasks).filter(
-    (t) => t.status === "CREATED" && t.taskId === null,
+    (t) =>
+      (t.status === "CREATED" || t.status === "QUEUED") &&
+      t.taskId === null,
   );
   for (const task of noApiId) {
     useTaskStore.getState().updateTask(task.id, {
       status: "FAILED",
-      error: "Interrupted before submission — please regenerate",
+      error: "Bị gián đoạn trước khi gửi — vui lòng tạo lại.",
     });
   }
 }

@@ -5,6 +5,12 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 export type GenerationTaskStatus =
   | "IDLE"
+  /**
+   * Task is queued for an upstream slot — pool is saturated by the
+   * per-key concurrency cap. Client retries every few seconds until a
+   * slot frees up, then transitions to CREATED → IN_PROGRESS as normal.
+   */
+  | "QUEUED"
   | "CREATED"
   | "IN_PROGRESS"
   | "COMPLETED"
