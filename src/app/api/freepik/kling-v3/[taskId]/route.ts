@@ -18,18 +18,14 @@ import { errFields, log } from "@/lib/logger";
  *   2. Try to mirror the video to Cloudflare R2 (6h lifecycle on bucket).
  *      On success, video_url = R2 URL (faster from VN, cheaper egress).
  *      On failure, video_url = Magnific URL (customer always has a link).
- *
- * Idempotent — only fills rows where video_url is still null. The
- * mirror has its own 60s fetch timeout + 60s upload window, fits the
- * Vercel Pro 300s function budget comfortably.
- *
- * Requires Vercel Pro for the maxDuration > 10s (mirror takes 5-15s).
+ *   3. Mutate data.generated[0] to the R2 URL before returning so the
+ *      live poll response (not just DB hydration) gives the customer
+ *      the mirrored URL immediately.
  */
-export const config = {
-  // Allow time for: poll RTT (~1s) + mirror fetch (~10s) + R2 upload (~5s).
-  // Pad to 60s — Pro tier allows up to 300s; this is a comfortable cap.
-  maxDuration: 60,
-};
+
+// Next.js 16 App Router: standalone `maxDuration` export, NOT a config
+// object. Vercel Pro allows up to 300s on the Fluid runtime.
+export const maxDuration = 60;
 
 export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
   // Generous: 60/min = 1/sec sustained, fine for normal 2s polling.
@@ -39,10 +35,36 @@ export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
     const magnificUrl = data.generated[0];
     if (!magnificUrl) return;
 
+    // Skip work if we've already persisted this row (poll fires every
+    // 2s; the first COMPLETED poll wins, subsequent polls re-fire
+    // onSuccess but see video_url already set and short-circuit the
+    // expensive mirror download).
+    const [existing] = await db
+      .select({
+        videoUrl: usageLogs.videoUrl,
+        magnificVideoUrl: usageLogs.magnificVideoUrl,
+      })
+      .from(usageLogs)
+      .where(eq(usageLogs.freepikTaskId, taskId))
+      .limit(1);
+
+    if (existing?.videoUrl) {
+      // Already done — make sure the LIVE response uses our stored URL
+      // (R2 if mirror succeeded earlier, else Magnific). Mutate in place.
+      data.generated[0] = existing.videoUrl;
+      return;
+    }
+
     // Try R2 first, fall back to Magnific URL if mirror fails or
     // R2 isn't configured (e.g. local dev without env vars).
     let videoUrl = magnificUrl;
-    if (isR2Configured()) {
+    const r2Enabled = isR2Configured();
+    log.info("R2_MIRROR_START", {
+      taskId,
+      r2Enabled,
+      magnificHost: new URL(magnificUrl).host,
+    });
+    if (r2Enabled) {
       try {
         const mirroredUrl = await mirrorRemoteToR2({
           sourceUrl: magnificUrl,
@@ -77,5 +99,9 @@ export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
           isNull(usageLogs.videoUrl),
         ),
       );
+
+    // Bug B fix: rewrite the live response so the client receives the
+    // R2 URL on the very first COMPLETED poll, not later via /api/usage.
+    data.generated[0] = videoUrl;
   },
 });

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface PricingRow {
   id: string;
@@ -89,11 +88,16 @@ export default function AdminPricingPage() {
         </Button>
       </header>
 
+      {/* Native scroll on the page itself — base-ui ScrollArea was
+          intercepting wheel + touch events and blocking interaction
+          with rows below the fold. The table fits ~30 rows comfortably,
+          large enough that admin can scroll the whole page without
+          fighting a nested viewport. */}
       <Card>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[calc(100vh-200px)]">
+          <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-muted/60 backdrop-blur">
+              <thead className="bg-muted/60">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Endpoint</th>
                   <th className="px-3 py-2 text-left font-medium">Tier</th>
@@ -107,7 +111,7 @@ export default function AdminPricingPage() {
                 {rows.map((r) => {
                   const dirty = draft[r.id] !== undefined && draft[r.id] !== r.costEur;
                   return (
-                    <tr key={r.id} className="border-t">
+                    <tr key={r.id} className="border-t hover:bg-muted/30">
                       <td className="px-3 py-2 font-mono text-[11px]">
                         {r.endpoint}
                       </td>
@@ -139,6 +143,12 @@ export default function AdminPricingPage() {
                           onChange={(e) =>
                             setDraft((d) => ({ ...d, [r.id]: e.target.value }))
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              save(r.id);
+                            }
+                          }}
                           className="ml-auto h-7 w-24 text-right font-mono text-xs"
                         />
                       </td>
@@ -157,7 +167,12 @@ export default function AdminPricingPage() {
                 })}
               </tbody>
             </table>
-          </ScrollArea>
+          </div>
+          {rows.length === 0 && !loading && (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Chưa có pricing rule. Chạy `pnpm db:seed-pricing`.
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

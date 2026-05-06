@@ -30,14 +30,19 @@ export function VideoPlayer({ src, poster, className }: VideoPlayerProps) {
     );
   }
 
+  // Modern browsers block autoplay for unmuted video. We start muted so
+  // playback always works, then the user clicks the volume control to
+  // hear audio (matches YouTube / Twitter / TikTok preview UX).
   return (
     <video
       src={safeSrc}
       poster={safePoster ?? undefined}
       controls
       autoPlay
+      muted
       loop
       playsInline
+      preload="metadata"
       className={cn("aspect-video w-full rounded-lg bg-black", className)}
     />
   );

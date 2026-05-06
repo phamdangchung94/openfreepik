@@ -24,6 +24,7 @@ import { GeneratorI2VSource } from "./generator-i2v-source";
 import { GeneratorAdvancedSettings } from "./generator-advanced-settings";
 import { GeneratorMultiShotSection } from "./generator-multi-shot-section";
 import { BatchT2VInput } from "@/components/batch/batch-t2v-input";
+import { BatchSettings } from "@/components/batch/batch-settings";
 import { CostPreview } from "./cost-preview";
 
 interface GeneratorFormProps {
@@ -228,36 +229,48 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
             label updates to "Tạo N Video" so the cost preview stays
             honest. */}
         {!isBatchMode && (
-          <div className="flex items-center justify-end gap-2">
-            <label
-              htmlFor="single-qty"
-              className="text-xs text-muted-foreground"
-            >
-              Số bản sao
-            </label>
-            <input
-              id="single-qty"
-              type="number"
-              min={1}
-              max={100}
-              step={1}
-              value={singleQty}
-              onChange={(e) => {
-                // Clamp at write-time so the rest of the form sees a
-                // sane number (cost preview multiplies by qty, etc.).
-                // Empty input → fall back to 1; out-of-range → clamp.
-                const raw = e.target.value;
-                if (raw === "") {
-                  setSingleQty(1);
-                  return;
-                }
-                const n = Math.floor(Number(raw));
-                if (!Number.isFinite(n)) return;
-                setSingleQty(Math.min(100, Math.max(1, n)));
-              }}
-              className="h-8 w-20 rounded-md border bg-background px-2 text-center text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Số bản sao của prompt này (1–100)"
-            />
+          <div className="space-y-2">
+            <div className="flex items-center justify-end gap-2">
+              <label
+                htmlFor="single-qty"
+                className="text-xs text-muted-foreground"
+              >
+                Số bản sao
+              </label>
+              <input
+                id="single-qty"
+                type="number"
+                min={1}
+                max={100}
+                step={1}
+                value={singleQty}
+                onChange={(e) => {
+                  // Clamp at write-time so the rest of the form sees a
+                  // sane number (cost preview multiplies by qty, etc.).
+                  // Empty input → fall back to 1; out-of-range → clamp.
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setSingleQty(1);
+                    return;
+                  }
+                  const n = Math.floor(Number(raw));
+                  if (!Number.isFinite(n)) return;
+                  setSingleQty(Math.min(100, Math.max(1, n)));
+                }}
+                className="h-8 w-20 rounded-md border bg-background px-2 text-center text-xs font-mono outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Số bản sao của prompt này (1–100)"
+              />
+            </div>
+            {/* When fanning out > 1 copy, surface the same concurrency
+                control the batch flow uses. Without this the customer
+                couldn't tell the queue to run e.g. 3-at-a-time from the
+                single-prompt path — they'd be stuck on whatever the
+                store last had. */}
+            {singleQty > 1 && (
+              <div className="rounded-md border bg-muted/30 p-3">
+                <BatchSettings />
+              </div>
+            )}
           </div>
         )}
 
