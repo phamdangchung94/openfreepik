@@ -11,24 +11,21 @@ import { sql } from "drizzle-orm";
 
 // Per-second rates (EUR). Multiply by duration to get base cost.
 //
-// 2026-05-06: aligned to Magnific's public Kling 3 API rates so DB
-// charges match what Magnific bills our pool keys. Sources:
-//   - https://docs.magnific.com/api-reference/video/kling-v3/overview
-//   - https://invideo.io / soravideo.art / multiple resellers cross-checked
+// 2026-05-06: EMPIRICALLY MEASURED via 5-test calibration against the
+// Magnific dashboard balance (see scripts/calibrate-pricing.ts). Public
+// docs underreported audio multiplier (claimed 1.5x, actual 1.83x for
+// std and 1.75x for pro). Linearity in duration verified at 0% drift
+// between 5s and 10s pro+audio runs.
 //
-// Pricing in USD on those sources but Magnific bills accounts in EUR
-// at parity (free trial advertised as "500 EUR", balance display in EUR).
+// Standard:  0.168/s no audio,  0.308/s audio  (audio mult 1.833x)
+// Pro:       0.224/s no audio,  0.392/s audio  (audio mult 1.75x)
 //
-// Standard:  0.168/s no audio,  0.252/s audio  (1.5x multiplier)
-// Pro:       0.224/s no audio,  0.336/s audio  (1.5x multiplier)
-//
-// Pro is 33% pricier than Standard. Audio adds 50% on top of either.
-//
-// Replace with measured values once the per-call billing matrix has
-// been verified against Magnific dashboard's exact deltas.
+// Pro is 33% pricier than Standard. Audio multipliers differ by tier
+// so a single shared multiplier doesn't capture reality — using
+// per-tier audio rate now.
 const RATES = {
-  std: { perSecond: 0.168, audioMultiplier: 1.5 },
-  pro: { perSecond: 0.224, audioMultiplier: 1.5 },
+  std: { perSecond: 0.168, perSecondAudio: 0.308 },
+  pro: { perSecond: 0.224, perSecondAudio: 0.392 },
 } as const;
 
 const DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
@@ -39,22 +36,22 @@ function buildRules(): NewPricingRule[] {
   for (const tier of ["std", "pro"] as const) {
     const rate = RATES[tier];
     for (const duration of DURATIONS) {
-      const baseCost = rate.perSecond * duration;
       // Without audio
       rules.push({
         endpoint: "kling-v3",
         tier,
         durationSeconds: duration,
         withAudio: false,
-        costEur: baseCost.toFixed(2),
+        costEur: (rate.perSecond * duration).toFixed(2),
       });
-      // With audio
+      // With audio — uses tier-specific rate (audio multiplier
+      // differs between std and pro per measured data).
       rules.push({
         endpoint: "kling-v3",
         tier,
         durationSeconds: duration,
         withAudio: true,
-        costEur: (baseCost * rate.audioMultiplier).toFixed(2),
+        costEur: (rate.perSecondAudio * duration).toFixed(2),
       });
     }
   }
