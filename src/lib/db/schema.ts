@@ -29,6 +29,15 @@ export const freepikKeys = pgTable(
       .notNull()
       .default("0.00"),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Max simultaneous in-flight generations the orchestrator will
+     * route to this key. Default 8 per the Magnific account quota
+     * conventions; admin can raise/lower per-key. pickActiveKey
+     * filters by `inflight < max_concurrent` so a single key can't
+     * be hammered past the upstream's concurrency tolerance. Migration
+     * 0006.
+     */
+    maxConcurrent: integer("max_concurrent").notNull().default(8),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

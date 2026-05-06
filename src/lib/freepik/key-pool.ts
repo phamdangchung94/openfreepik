@@ -47,24 +47,49 @@ export async function pickActiveKey(
           [...excludeKeyIds].map((id) => sql`${id}::uuid`),
           sql`,`,
         );
+  // Reference k.id explicitly — the picked CTE joins inflight which
+  // also has a key_id column; bare `id` would error as ambiguous in
+  // some Postgres versions even though the join is LEFT.
   const excludeClause =
     excludeKeyIds.size === 0
       ? sql`TRUE`
-      : sql`id <> ALL(ARRAY[${excludeArray}]::uuid[])`;
+      : sql`k.id <> ALL(ARRAY[${excludeArray}]::uuid[])`;
 
+  // Per-key concurrency limit (migration 0006). "In-flight" =
+  // tasks created in the last 5 minutes whose poll hasn't yet
+  // observed COMPLETED (video_url IS NULL). Self-healing: a crashed
+  // task stops counting after 5 minutes regardless of explicit
+  // decrement, so leaks don't permanently block the key.
+  //
+  // The CTE chain:
+  //   1. inflight  — count of in-flight tasks per key.
+  //   2. picked    — first eligible key (LRU, has budget, not in
+  //                  exclude list, AND inflight < max_concurrent).
+  //   3. UPDATE    — touch last_used_at on the picked row.
   const result = await db.execute<{
     id: string;
     label: string;
     key_encrypted: string;
   }>(sql`
-    WITH picked AS (
-      SELECT id
-      FROM freepik_keys
-      WHERE is_active
-        AND (assigned_eur - used_eur) >= ${cost}::numeric
+    WITH inflight AS (
+      SELECT key_id, COUNT(*)::int AS n
+      FROM usage_logs
+      WHERE key_id IS NOT NULL
+        AND created_at > now() - interval '5 minutes'
+        AND status = 'succeeded'
+        AND video_url IS NULL
+      GROUP BY key_id
+    ),
+    picked AS (
+      SELECT k.id
+      FROM freepik_keys k
+      LEFT JOIN inflight i ON i.key_id = k.id
+      WHERE k.is_active
+        AND (k.assigned_eur - k.used_eur) >= ${cost}::numeric
         AND ${excludeClause}
-      ORDER BY last_used_at ASC NULLS FIRST, created_at ASC
-      FOR UPDATE
+        AND COALESCE(i.n, 0) < k.max_concurrent
+      ORDER BY k.last_used_at ASC NULLS FIRST, k.created_at ASC
+      FOR UPDATE OF k
       LIMIT 1
     )
     UPDATE freepik_keys
@@ -105,24 +130,45 @@ export async function keyPoolStats(costEur: number): Promise<{
   totalKeys: number;
   activeKeys: number;
   activeWithBudget: number;
+  /** Active keys not currently saturated by per-key concurrency limit. */
+  activeWithSlots: number;
 }> {
   const cost = Math.max(costEur, 0).toFixed(2);
   const result = await db.execute<{
     total: string;
     active: string;
     active_with_budget: string;
+    active_with_slots: string;
   }>(sql`
+    WITH inflight AS (
+      SELECT key_id, COUNT(*)::int AS n
+      FROM usage_logs
+      WHERE key_id IS NOT NULL
+        AND created_at > now() - interval '5 minutes'
+        AND status = 'succeeded'
+        AND video_url IS NULL
+      GROUP BY key_id
+    )
     SELECT
       COUNT(*)::text AS total,
       COUNT(*) FILTER (WHERE is_active)::text AS active,
       COUNT(*) FILTER (
         WHERE is_active AND (assigned_eur - used_eur) >= ${cost}::numeric
-      )::text AS active_with_budget
+      )::text AS active_with_budget,
+      COUNT(*) FILTER (
+        WHERE is_active
+          AND (assigned_eur - used_eur) >= ${cost}::numeric
+          AND COALESCE(
+                (SELECT n FROM inflight WHERE inflight.key_id = freepik_keys.id),
+                0
+              ) < freepik_keys.max_concurrent
+      )::text AS active_with_slots
     FROM freepik_keys;
   `);
-  const rows = (result as unknown as { rows: Array<{ total: string; active: string; active_with_budget: string }> }).rows;
-  const row = rows[0] ?? { total: "0", active: "0", active_with_budget: "0" };
+  const rows = (result as unknown as { rows: Array<{ total: string; active: string; active_with_budget: string; active_with_slots: string }> }).rows;
+  const row = rows[0] ?? { total: "0", active: "0", active_with_budget: "0", active_with_slots: "0" };
   return {
+    activeWithSlots: Number(row.active_with_slots),
     totalKeys: Number(row.total),
     activeKeys: Number(row.active),
     activeWithBudget: Number(row.active_with_budget),

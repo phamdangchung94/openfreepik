@@ -36,11 +36,44 @@ export function BatchUploadZone({
     async (fileList: FileList | null) => {
       if (!fileList || fileList.length === 0) return;
 
+      // Dedupe key — same filename + size means it's the same file
+      // logically. Customer dragging the same image twice (or selecting
+      // it from a 2nd Open dialog) was producing duplicate entries.
+      const existingKeys = new Set(
+        items.map((it) => `${it.filename ?? ""}::${it.file?.size ?? 0}`),
+      );
+
       const validFiles: File[] = [];
+      let skippedDup = 0;
+      let skippedInvalid = 0;
       for (const file of Array.from(fileList)) {
-        if (!file.type.startsWith("image/")) continue;
-        if (file.size > 10 * 1024 * 1024) continue;
+        if (!file.type.startsWith("image/")) {
+          skippedInvalid++;
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          skippedInvalid++;
+          continue;
+        }
+        const key = `${file.name}::${file.size}`;
+        if (existingKeys.has(key)) {
+          skippedDup++;
+          continue;
+        }
+        // Mark seen IN this batch too — prevents the customer from
+        // selecting the exact same file twice in one Open dialog.
+        existingKeys.add(key);
         validFiles.push(file);
+      }
+      if (skippedDup > 0) {
+        toast.info(
+          `Bỏ qua ${skippedDup} ảnh trùng (đã có sẵn cùng tên + dung lượng).`,
+        );
+      }
+      if (skippedInvalid > 0) {
+        toast.warning(
+          `Bỏ qua ${skippedInvalid} tệp không hợp lệ (không phải ảnh hoặc > 10MB).`,
+        );
       }
       if (validFiles.length === 0) return;
 
@@ -74,7 +107,7 @@ export function BatchUploadZone({
         setIsUploading(false);
       }
     },
-    [defaultPrompt, onAddItems],
+    [items, defaultPrompt, onAddItems],
   );
 
   const handleDrop = useCallback(
@@ -139,7 +172,13 @@ export function BatchUploadZone({
           accept="image/jpeg,image/png,image/webp"
           multiple
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => {
+            handleFiles(e.target.files);
+            // Reset so customer can re-select same file later (e.g.
+            // after removing it). Without this the input remembers
+            // the last selection and onChange won't fire again.
+            e.target.value = "";
+          }}
           disabled={isDisabled}
         />
       </div>
