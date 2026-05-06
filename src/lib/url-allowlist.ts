@@ -6,13 +6,42 @@
  * Allowed:
  *   - data: URIs (only image/* mimetypes — used for upload previews)
  *   - blob: URIs (used for transient browser-side previews)
- *   - https://*.freepik.com (Freepik CDN)
- *   - https://litterbox.catbox.moe (our upload host)
+ *   - https://*.freepik.com         (Magnific/Freepik original CDN)
+ *   - https://*.magnific.com        (alt host post-rebrand)
+ *   - https://litterbox.catbox.moe  (upload host fallback)
+ *   - https://tmpfiles.org          (upload host primary)
+ *   - https://*.r2.dev              (Cloudflare R2 mirrored videos)
+ *   - https://*.r2.cloudflarestorage.com (R2 raw bucket URL)
+ *   - NEXT_PUBLIC_R2_PUBLIC_URL_BASE host (project-specific R2 domain)
  *
  * Anything else returns null and the caller should render a fallback.
  */
 
-const ALLOWED_HOSTS = ["freepik.com", "litterbox.catbox.moe"] as const;
+// Suffix-matched hosts. Hostnames either equal or end with `.<host>`.
+const ALLOWED_HOSTS = [
+  "freepik.com",
+  "magnific.com",
+  "litterbox.catbox.moe",
+  "tmpfiles.org",
+  "r2.dev",
+  "r2.cloudflarestorage.com",
+] as const;
+
+/**
+ * Optional client-exposed R2 base URL — when set, its host is
+ * appended to the allowlist. Project-specific (e.g.
+ * "https://pub-81ac6059326648a489697b3c4ada49d8.r2.dev"). Falls back
+ * to the wildcard *.r2.dev rule above when not provided.
+ */
+function extraR2Host(): string | null {
+  const raw = process.env.NEXT_PUBLIC_R2_PUBLIC_URL_BASE;
+  if (!raw) return null;
+  try {
+    return new URL(raw).hostname;
+  } catch {
+    return null;
+  }
+}
 
 export function safeMediaUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -34,12 +63,16 @@ export function safeMediaUrl(raw: string | null | undefined): string | null {
   }
   if (url.protocol !== "https:") return null;
 
-  // Match host against allowlist (suffix match, e.g. cdn.freepik.com → freepik.com)
+  // Suffix match against the static allowlist.
   const hostOk = ALLOWED_HOSTS.some(
     (allowed) =>
       url.hostname === allowed || url.hostname.endsWith("." + allowed),
   );
-  if (!hostOk) return null;
+  if (hostOk) return trimmed;
 
-  return trimmed;
+  // Project-specific R2 host (exact match — env-driven).
+  const extra = extraR2Host();
+  if (extra && url.hostname === extra) return trimmed;
+
+  return null;
 }
