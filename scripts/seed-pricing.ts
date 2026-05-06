@@ -28,7 +28,17 @@ const RATES = {
   pro: { perSecond: 0.224, perSecondAudio: 0.392 },
 } as const;
 
+// WAN 2.7 placeholder rates — NOT calibrated yet. Run a 5-test run
+// against the Magnific dashboard (similar to Kling calibration on
+// 2026-05-06) and overwrite these values. We use the same `tier` slot
+// as Kling to carry resolution: std = 720P, pro = 1080P.
+const WAN_RATES = {
+  std: { perSecond: 0.20 }, // 720P — guess: ~Kling pro rate
+  pro: { perSecond: 0.30 }, // 1080P — higher resolution = more compute
+} as const;
+
 const DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+const WAN_DURATIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
 
 function buildRules(): NewPricingRule[] {
   const rules: NewPricingRule[] = [];
@@ -52,6 +62,21 @@ function buildRules(): NewPricingRule[] {
         durationSeconds: duration,
         withAudio: true,
         costEur: (rate.perSecondAudio * duration).toFixed(2),
+      });
+    }
+  }
+
+  // WAN 2.7 — placeholder rates (uncalibrated). std=720P, pro=1080P.
+  // No audio multiplier (WAN doesn't price audio separately).
+  for (const tier of ["std", "pro"] as const) {
+    const rate = WAN_RATES[tier];
+    for (const duration of WAN_DURATIONS) {
+      rules.push({
+        endpoint: "wan-v27",
+        tier,
+        durationSeconds: duration,
+        withAudio: false,
+        costEur: (rate.perSecond * duration).toFixed(2),
       });
     }
   }

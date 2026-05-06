@@ -26,9 +26,18 @@ import { GeneratorMultiShotSection } from "./generator-multi-shot-section";
 import { BatchT2VInput } from "@/components/batch/batch-t2v-input";
 import { BatchSettings } from "@/components/batch/batch-settings";
 import { CostPreview } from "./cost-preview";
+import { ModelPicker } from "./model-picker";
+import { ResolutionPicker } from "./resolution-picker";
+import { toWanParams } from "@/lib/form/to-api-params";
+import type { GeneratePayload } from "@/hooks/use-generate-video";
 
 interface GeneratorFormProps {
-  onSubmitSingle?: (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => void;
+  /**
+   * Single-prompt submit. Receives a discriminated payload so the
+   * page-level handler can dispatch to the right endpoint without
+   * re-introspecting form values.
+   */
+  onSubmitSingle?: (payload: GeneratePayload) => void;
   onSubmitBatch?: (
     items: BatchItem[],
     sharedParams: GeneratorFormValues
@@ -74,6 +83,8 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
 
   const { handleSubmit, watch } = methods;
   const mode = watch("mode");
+  const model = watch("model");
+  const isWan = model === "wan-v27";
 
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [t2vBatchText, setT2vBatchText] = useState("");
@@ -122,8 +133,20 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       }));
       onSubmitBatch(items, values);
     } else if (onSubmitSingle) {
-      const params = toApiParams(values);
-      onSubmitSingle(params, values.tier);
+      // Branch payload shape on model — Kling carries tier, WAN carries
+      // the resolution-encoded shape derived in toWanParams.
+      if (values.model === "wan-v27") {
+        onSubmitSingle({
+          model: "wan-v27",
+          params: toWanParams(values),
+        });
+      } else {
+        onSubmitSingle({
+          model: "kling-v3",
+          params: toApiParams(values),
+          tier: values.tier,
+        });
+      }
     }
   };
 
@@ -144,15 +167,21 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       >
         <Card>
           <CardContent className="pt-4 space-y-4">
-            <ModeToggle
-              onModeChange={() => {
-                // Switching mode invalidates the queued batch — different shape.
-                setBatchItems([]);
-                setT2vBatchText("");
-                setT2vBatchOpen(false);
-              }}
-            />
-            {mode === "t2v" && (
+            <ModelPicker />
+            {/* WAN 2.7 is image-to-video only — hide the t2v/i2v
+                toggle and any t2v-specific UI when WAN is selected.
+                The form schema already locks mode to "i2v" on switch. */}
+            {!isWan && (
+              <ModeToggle
+                onModeChange={() => {
+                  // Switching mode invalidates the queued batch — different shape.
+                  setBatchItems([]);
+                  setT2vBatchText("");
+                  setT2vBatchOpen(false);
+                }}
+              />
+            )}
+            {!isWan && mode === "t2v" && (
               <>
                 {!t2vBatchOpen && (
                   <PromptField improveButton={improveButton} />
@@ -179,7 +208,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 )}
               </>
             )}
-            {mode === "i2v" && (
+            {(mode === "i2v" || isWan) && (
               <>
                 <PromptField improveButton={improveButton} />
                 <GeneratorI2VSource
@@ -201,17 +230,29 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <AspectRatioPicker />
-              <QualityTierPicker />
-            </div>
-            <DurationSlider />
-            <GenerateAudioSwitch />
+            {isWan ? (
+              // WAN 2.7: only resolution + duration. No tier, no
+              // aspect-ratio (output ratio matches start_image_url),
+              // no audio toggle (audio is upload-based — Phase 3).
+              <>
+                <ResolutionPicker />
+                <DurationSlider />
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <AspectRatioPicker />
+                  <QualityTierPicker />
+                </div>
+                <DurationSlider />
+                <GenerateAudioSwitch />
+              </>
+            )}
           </CardContent>
         </Card>
 
-        <GeneratorAdvancedSettings />
-        <GeneratorMultiShotSection />
+        {!isWan && <GeneratorAdvancedSettings />}
+        {!isWan && <GeneratorMultiShotSection />}
 
         {/* Real-time cost preview — updates as tier/duration/audio change.
             When the customer sets singleQty > 1, multiply by qty so the

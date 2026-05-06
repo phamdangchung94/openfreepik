@@ -1,15 +1,55 @@
 /**
- * Pure function: maps form values → Kling V3 API params.
- * Strips empty strings, trims whitespace, and maps fields correctly.
+ * Pure function: maps form values → upstream API params (Kling V3 or
+ * WAN 2.7 depending on `v.model`). Strips empty strings, trims
+ * whitespace, and maps fields correctly per upstream schema.
  */
 
-import type { KlingV3GenerateParams } from "@/lib/freepik/types";
+import type {
+  KlingV3Duration,
+  KlingV3GenerateParams,
+  WanV27GenerateParams,
+} from "@/lib/freepik/types";
 import type { GeneratorFormValues } from "./generator-schema";
+
+/**
+ * Kling V3 duration enum is "3"–"15" — the form-wide schema also
+ * allows "2" (WAN-only). Coerce to a Kling-safe value when building
+ * Kling params so TypeScript stops complaining; if the customer
+ * somehow ended up with "2" + Kling, server pricing lookup rejects.
+ */
+function coerceKlingDuration(d: GeneratorFormValues["duration"]): KlingV3Duration {
+  return (d === "2" ? "3" : d) as KlingV3Duration;
+}
+
+/**
+ * Build WAN 2.7 image-to-video params. WAN uses different shapes than
+ * Kling — integer duration, resolution string, no aspect_ratio, no
+ * tier, no multi-shot, no audio toggle.
+ *
+ * Phase 1: only the first-frame mode is wired (start_image_url
+ * required). end_image_url, audio_url, video_url are deferred to
+ * later phases.
+ */
+export function toWanParams(v: GeneratorFormValues): WanV27GenerateParams {
+  const params: WanV27GenerateParams = {
+    resolution: v.resolution,
+    // Form schema enforces "2"–"15" so parseInt always succeeds.
+    duration: Number(v.duration),
+  };
+  const prompt = v.prompt?.trim();
+  if (prompt) params.prompt = prompt;
+  const neg = v.negative_prompt?.trim();
+  if (neg) params.negative_prompt = neg;
+  if (v.start_image_url?.trim()) {
+    params.start_image_url = v.start_image_url.trim();
+  }
+  return params;
+}
 
 export function toApiParams(v: GeneratorFormValues): KlingV3GenerateParams {
   const params: KlingV3GenerateParams = {
     aspect_ratio: v.aspect_ratio,
-    duration: v.duration,
+    duration: coerceKlingDuration(v.duration),
     cfg_scale: v.cfg_scale,
     generate_audio: v.generate_audio,
   };
@@ -38,7 +78,7 @@ export function toApiParams(v: GeneratorFormValues): KlingV3GenerateParams {
       .filter((s) => s.prompt?.trim() || s.duration)
       .map((s) => ({
         prompt: s.prompt?.trim() || undefined,
-        duration: s.duration,
+        duration: coerceKlingDuration(s.duration),
       }));
   }
 

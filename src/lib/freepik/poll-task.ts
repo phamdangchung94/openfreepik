@@ -50,7 +50,7 @@ function visibilityAwareDelay(intervalMs: number, attempt: number): number {
   return base;
 }
 
-export type PollEndpoint = "kling-v3" | "improve-prompt";
+export type PollEndpoint = "kling-v3" | "wan-v27" | "improve-prompt";
 
 export interface PollTaskOptions {
   apiTaskId: string;

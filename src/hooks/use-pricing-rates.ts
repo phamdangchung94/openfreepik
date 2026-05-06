@@ -52,7 +52,7 @@ export function usePricingRates(): PricingRule[] | null {
 }
 
 export interface CostLookup {
-  endpoint: "kling-v3" | "improve-prompt";
+  endpoint: "kling-v3" | "wan-v27" | "improve-prompt";
   tier?: "pro" | "std" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;

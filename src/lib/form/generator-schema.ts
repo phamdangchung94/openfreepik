@@ -6,8 +6,24 @@
 
 import { z } from "zod/v4";
 
+/**
+ * Allowed values across BOTH models — duration "2" is WAN-only,
+ * "3"–"15" overlap. Pricing lookup will reject incompatible combos
+ * (e.g. Kling + 2s) before charging.
+ */
+const DURATION_ENUM = z.enum([
+  "2", "3", "4", "5", "6", "7", "8",
+  "9", "10", "11", "12", "13", "14", "15",
+]);
+
 export const generatorFormSchema = z
   .object({
+    /**
+     * Which upstream video model to use. Drives both the form UI
+     * (Kling shows tier/aspect-ratio/audio/multi-shot; WAN shows
+     * resolution picker) AND the dispatch endpoint in use-generate-video.
+     */
+    model: z.enum(["kling-v3", "wan-v27"]).default("kling-v3"),
     mode: z.enum(["t2v", "i2v"]),
     prompt: z.string().default(""),
     negative_prompt: z.string().max(2500).default("blur, distort, and low quality"),
@@ -15,9 +31,9 @@ export const generatorFormSchema = z
     end_image_url: z.string().default(""),
     tier: z.enum(["pro", "std"]).default("pro"),
     aspect_ratio: z.enum(["16:9", "9:16", "1:1"]).default("16:9"),
-    duration: z
-      .enum(["3","4","5","6","7","8","9","10","11","12","13","14","15"])
-      .default("5"),
+    /** WAN-only: 720P / 1080P. Ignored when model="kling-v3". */
+    resolution: z.enum(["720P", "1080P"]).default("1080P"),
+    duration: DURATION_ENUM.default("5"),
     cfg_scale: z.number().min(0).max(1).default(0.5),
     generate_audio: z.boolean().default(true),
     multi_shot: z.boolean().default(false),
@@ -26,9 +42,7 @@ export const generatorFormSchema = z
       .array(
         z.object({
           prompt: z.string().max(2500).default(""),
-          duration: z
-            .enum(["3","4","5","6","7","8","9","10","11","12","13","14","15"])
-            .default("5"),
+          duration: DURATION_ENUM.default("5"),
         })
       )
       .max(6)
@@ -44,6 +58,19 @@ export const generatorFormSchema = z
     webhook_url: z.string().default(""),
   })
   .superRefine((data, ctx) => {
+    // WAN 2.7 is image-to-video only — no prompt-only path. Force i2v
+    // and require a start image.
+    if (data.model === "wan-v27") {
+      if (!data.start_image_url.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "WAN 2.7 yêu cầu ảnh đầu (start image).",
+          path: ["start_image_url"],
+        });
+      }
+      return;
+    }
+
     if (data.mode === "t2v" && !data.prompt.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

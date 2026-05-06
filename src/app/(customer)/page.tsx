@@ -8,7 +8,7 @@ import { GeneratorForm, type GeneratorFormHandle } from "@/components/generator/
 import { ImprovePromptDialog } from "@/components/generator/improve-prompt-dialog";
 import { PreviewPanel } from "@/components/preview/preview-panel";
 import { HistorySidebar } from "@/components/history/history-sidebar";
-import { useGenerateVideo } from "@/hooks/use-generate-video";
+import { useGenerateVideo, type GeneratePayload } from "@/hooks/use-generate-video";
 import { useBatchQueue } from "@/hooks/use-batch-queue";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
@@ -39,18 +39,18 @@ export default function HomePage() {
   const showOnboarding = !activationCode || Object.keys(tasks).length === 0;
 
   const handleSingleSubmit = useCallback(
-    async (params: ReturnType<typeof toApiParams>, tier: "pro" | "std") => {
+    async (payload: GeneratePayload) => {
       const { activationCode } = useAuthStore.getState();
       if (!activationCode) {
         toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
       try {
-        const localId = await generate(params, {
-          tier,
-          prompt: params.prompt ?? "",
-          mode: params.start_image_url ? "i2v" : "t2v",
-          imageUrl: params.start_image_url,
+        const localId = await generate(payload, {
+          prompt: payload.params.prompt ?? "",
+          // WAN is image-only; Kling t2v has no start_image_url.
+          mode: payload.params.start_image_url ? "i2v" : "t2v",
+          imageUrl: payload.params.start_image_url,
         });
         setActiveTaskId(localId);
         toast.success("Đã bắt đầu tạo video");

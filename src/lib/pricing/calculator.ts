@@ -81,3 +81,24 @@ export function lookupForImprovePrompt(): PricingLookup {
     withAudio: false,
   };
 }
+
+/**
+ * Convenience wrapper for WAN 2.7 image-to-video. WAN doesn't have
+ * tiers (all calls are equal quality at the chosen resolution); we
+ * encode the resolution into the `tier` slot of the lookup so admin
+ * can seed `720P` vs `1080P` rates without adding a column. Audio is
+ * not a price modifier on WAN — `withAudio` is always false.
+ */
+export function lookupForWanV27(
+  params: { duration?: number; resolution?: "720P" | "1080P" },
+): PricingLookup {
+  return {
+    endpoint: "wan-v27",
+    // Reuse `tier` to carry resolution since pricing_rules already
+    // splits by tier. "pro" = 1080P (default), "std" = 720P. Mapped
+    // back at admin dashboard for clarity in the seed file.
+    tier: params.resolution === "720P" ? "std" : "pro",
+    durationSeconds: params.duration ?? 5,
+    withAudio: false,
+  };
+}

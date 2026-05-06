@@ -51,7 +51,7 @@ const SLOW_CHARGE_WARN_MS = 5_000;
 
 export interface OrchestrateOptions<T> {
   bearerCode: string | null;
-  endpoint: "kling-v3" | "improve-prompt";
+  endpoint: "kling-v3" | "wan-v27" | "improve-prompt";
   costEur: number;
   /** Persisted to usage_logs for filtering — e.g. "pro"/"std" */
   tier?: "pro" | "std" | null;

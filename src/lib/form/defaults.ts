@@ -3,6 +3,7 @@
 import type { GeneratorFormValues } from "./generator-schema";
 
 export const FORM_DEFAULTS: GeneratorFormValues = {
+  model: "kling-v3",
   mode: "t2v",
   prompt: "",
   negative_prompt: "blur, distort, and low quality",
@@ -10,6 +11,7 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   end_image_url: "",
   tier: "pro",
   aspect_ratio: "16:9",
+  resolution: "1080P",
   duration: "5",
   cfg_scale: 0.5,
   generate_audio: true,

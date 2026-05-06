@@ -25,7 +25,9 @@ interface CostPreviewProps {
  */
 export function CostPreview({ count = 1 }: CostPreviewProps) {
   const { watch } = useFormContext<GeneratorFormValues>();
+  const model = watch("model");
   const tier = watch("tier");
+  const resolution = watch("resolution");
   const duration = watch("duration");
   const audio = watch("generate_audio");
 
@@ -35,18 +37,27 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   // Memoize the lookup — `lookupCost` walks the rates array; with batch
   // count=100 this component re-renders on every form keystroke. Note:
   // hooks must precede every early return below (Rules of Hooks).
-  const perItem = useMemo(
-    () =>
-      rates
-        ? lookupCost(rates, {
-            endpoint: "kling-v3",
-            tier,
-            durationSeconds: Number(duration),
-            withAudio: !!audio,
-          })
-        : null,
-    [rates, tier, duration, audio],
-  );
+  //
+  // Model branch: WAN encodes resolution into the tier slot of the
+  // pricing table (std=720P, pro=1080P) and ignores audio entirely;
+  // see lookupForWanV27 in lib/pricing/calculator.ts.
+  const perItem = useMemo(() => {
+    if (!rates) return null;
+    if (model === "wan-v27") {
+      return lookupCost(rates, {
+        endpoint: "wan-v27",
+        tier: resolution === "720P" ? "std" : "pro",
+        durationSeconds: Number(duration),
+        withAudio: false,
+      });
+    }
+    return lookupCost(rates, {
+      endpoint: "kling-v3",
+      tier,
+      durationSeconds: Number(duration),
+      withAudio: !!audio,
+    });
+  }, [rates, model, tier, resolution, duration, audio]);
 
   if (!rates) {
     // Skeleton matches the loaded card's footprint (rounded-2xl + same
