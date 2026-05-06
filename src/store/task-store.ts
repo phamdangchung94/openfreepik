@@ -111,22 +111,81 @@ export const useTaskStore = create<TaskState>()(
 
       upsertTaskFromServer: (task) =>
         set((state) => {
-          const existing = state.tasks[task.id];
-          if (!existing) return { tasks: { ...state.tasks, [task.id]: task } };
-          // Server wins on URL/expiry/status; local prompt/mode/tier preserved
-          // (they're identical anyway, but be conservative).
-          return {
-            tasks: {
-              ...state.tasks,
-              [task.id]: {
-                ...existing,
+          // Step 1: exact id match (rare — server uses usage_logs.id,
+          // local tasks use their own UUID, so this only hits for
+          // already-merged entries on subsequent hydrations).
+          const byId = state.tasks[task.id];
+          if (byId) {
+            return {
+              tasks: {
+                ...state.tasks,
+                [task.id]: {
+                  ...byId,
+                  status: task.status,
+                  videoUrl: task.videoUrl,
+                  videoUrlExpiresAt: task.videoUrlExpiresAt,
+                  updatedAt: Date.now(),
+                },
+              },
+            };
+          }
+
+          // Step 2: match by freepikTaskId — same physical task generated
+          // through both the local create path AND the server-side row.
+          // Without this match, the customer ends up with duplicate
+          // history items and an active task whose videoUrl is stale
+          // (e.g. expired Magnific URL) while the server has a fresh
+          // R2 mirror. Merging here picks up the R2 URL on F5 and the
+          // duplicate "(restored from server)" entry never appears.
+          if (task.taskId) {
+            const matches = Object.values(state.tasks).filter(
+              (t) => t.taskId === task.taskId,
+            );
+
+            // Prefer a local-origin entry (real prompt) over an orphan
+            // "(restored from server)" stub that earlier hydrations may
+            // have inserted before this merge logic existed. Sort by
+            // prompt presence: any non-restored entry wins.
+            matches.sort((a, b) => {
+              const aRestored = a.prompt.startsWith("(restored");
+              const bRestored = b.prompt.startsWith("(restored");
+              if (aRestored && !bRestored) return 1;
+              if (!aRestored && bRestored) return -1;
+              return a.createdAt - b.createdAt; // older first
+            });
+
+            const winner = matches[0];
+            if (winner) {
+              // Update the winner with server URL/status, drop everyone
+              // else (cleans up existing duplicates from past runs).
+              const next = { ...state.tasks };
+              for (const m of matches) {
+                if (m.id !== winner.id) delete next[m.id];
+              }
+              next[winner.id] = {
+                ...winner,
                 status: task.status,
                 videoUrl: task.videoUrl,
                 videoUrlExpiresAt: task.videoUrlExpiresAt,
                 updatedAt: Date.now(),
-              },
-            },
-          };
+              };
+              return {
+                tasks: next,
+                // Repoint activeTaskId if it was on a now-deleted dup.
+                activeTaskId:
+                  state.activeTaskId &&
+                  matches.some(
+                    (m) => m.id === state.activeTaskId && m.id !== winner.id,
+                  )
+                    ? winner.id
+                    : state.activeTaskId,
+              };
+            }
+          }
+
+          // Step 3: no local counterpart — insert as a new entry
+          // (cross-device hydration, or task created on another browser).
+          return { tasks: { ...state.tasks, [task.id]: task } };
         }),
 
       removeTask: (id) =>
