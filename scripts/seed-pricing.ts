@@ -11,16 +11,24 @@ import { sql } from "drizzle-orm";
 
 // Per-second rates (EUR). Multiply by duration to get base cost.
 //
-// Conservative bump applied 2026-05-03 per audit C1 finding:
-//   - third-party reseller signals (Atlas, Novita, EvoLink) suggest
-//     std at $0.084-0.168/s and pro at $0.112-0.224/s.
-//   - Kuaishou's own credit table shows audio multiplier 1.5x, not 1.4.
-// These rates target ~25% margin above the reseller floor. Replace
-// with measured Freepik billing values once the verification matrix
-// (audit #9 acceptance criteria) has been run.
+// 2026-05-06: aligned to Magnific's public Kling 3 API rates so DB
+// charges match what Magnific bills our pool keys. Sources:
+//   - https://docs.magnific.com/api-reference/video/kling-v3/overview
+//   - https://invideo.io / soravideo.art / multiple resellers cross-checked
+//
+// Pricing in USD on those sources but Magnific bills accounts in EUR
+// at parity (free trial advertised as "500 EUR", balance display in EUR).
+//
+// Standard:  0.168/s no audio,  0.252/s audio  (1.5x multiplier)
+// Pro:       0.224/s no audio,  0.336/s audio  (1.5x multiplier)
+//
+// Pro is 33% pricier than Standard. Audio adds 50% on top of either.
+//
+// Replace with measured values once the per-call billing matrix has
+// been verified against Magnific dashboard's exact deltas.
 const RATES = {
-  std: { perSecond: 0.10, audioMultiplier: 1.5 },
-  pro: { perSecond: 0.16, audioMultiplier: 1.5 },
+  std: { perSecond: 0.168, audioMultiplier: 1.5 },
+  pro: { perSecond: 0.224, audioMultiplier: 1.5 },
 } as const;
 
 const DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
