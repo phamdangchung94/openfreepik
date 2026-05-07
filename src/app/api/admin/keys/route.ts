@@ -19,6 +19,7 @@ export async function GET() {
       assignedEur: freepikKeys.assignedEur,
       usedEur: freepikKeys.usedEur,
       isActive: freepikKeys.isActive,
+      maxConcurrent: freepikKeys.maxConcurrent,
       notes: freepikKeys.notes,
       createdAt: freepikKeys.createdAt,
       lastUsedAt: freepikKeys.lastUsedAt,

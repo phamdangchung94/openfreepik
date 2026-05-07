@@ -32,6 +32,11 @@ interface KeyRow {
   assignedEur: string;
   usedEur: string;
   isActive: boolean;
+  /**
+   * Default 8 (set by migration 0006). Older rows fetched from a not-yet-
+   * deployed server may omit it; render as 8 in the UI for back-compat.
+   */
+  maxConcurrent?: number;
   notes: string | null;
   createdAt: string;
   lastUsedAt: string | null;
@@ -407,6 +412,10 @@ function EditKeyDialog({
   const [label, setLabel] = useState(row.label);
   const [notes, setNotes] = useState(row.notes ?? "");
   const [assignedEur, setAssignedEur] = useState(row.assignedEur);
+  const [usedEur, setUsedEur] = useState(row.usedEur);
+  const [maxConcurrent, setMaxConcurrent] = useState(
+    String(row.maxConcurrent ?? 8),
+  );
   const [busy, setBusy] = useState(false);
 
   // Reset form when reopened so cancelling discards edits.
@@ -415,21 +424,32 @@ function EditKeyDialog({
       setLabel(row.label);
       setNotes(row.notes ?? "");
       setAssignedEur(row.assignedEur);
+      setUsedEur(row.usedEur);
+      setMaxConcurrent(String(row.maxConcurrent ?? 8));
     }
   }, [open, row]);
+
+  const remaining = Math.max(Number(assignedEur) - Number(usedEur), 0);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
+      const body: Record<string, unknown> = {
+        label,
+        notes: notes.trim() === "" ? null : notes,
+        assignedEur: Number(assignedEur),
+        maxConcurrent: Number(maxConcurrent) || 8,
+      };
+      // Only PATCH usedEur when admin actually changed it — avoids
+      // racing with the orchestrator's recordKeyCost increments.
+      if (Number(usedEur) !== Number(row.usedEur)) {
+        body.usedEur = Number(usedEur);
+      }
       const res = await fetch(`/api/admin/keys/${row.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          label,
-          notes: notes.trim() === "" ? null : notes,
-          assignedEur: Number(assignedEur),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
@@ -466,20 +486,79 @@ function EditKeyDialog({
               required
             />
           </div>
+
+          {/* Budget block — assigned + used + computed remaining. The
+              "Số dư còn lại" line lets admin see the impact of any
+              edit without doing math in their head. */}
+          <div className="space-y-1.5 rounded-md border bg-muted/20 p-2.5">
+            <Label className="text-xs font-semibold">Ngân sách</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-[10px] text-muted-foreground">
+                  Tổng được cấp
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={assignedEur}
+                  onChange={(e) => setAssignedEur(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label className="text-[10px] text-muted-foreground">
+                  Đã chi (sửa nếu cần)
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={usedEur}
+                  onChange={(e) => setUsedEur(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <span className="text-[11px] text-muted-foreground">
+                Số dư còn lại:
+              </span>
+              <span className="font-mono text-sm font-semibold">
+                {remaining.toFixed(2)} EUR
+              </span>
+            </div>
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setUsedEur("0")}
+                className="h-6 text-[10px]"
+                title="Đặt số đã chi về 0 (sau khi nạp credit upstream)"
+              >
+                Reset đã chi → 0
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-1.5">
-            <Label className="text-xs">Assigned budget (EUR)</Label>
+            <Label className="text-xs">
+              Số luồng tối đa cùng lúc{" "}
+              <span className="text-muted-foreground">(mặc định 8)</span>
+            </Label>
             <Input
               type="number"
-              min="0"
-              step="0.01"
-              value={assignedEur}
-              onChange={(e) => setAssignedEur(e.target.value)}
+              min="1"
+              max="64"
+              step="1"
+              value={maxConcurrent}
+              onChange={(e) => setMaxConcurrent(e.target.value)}
             />
             <p className="text-[10px] text-muted-foreground">
-              Đã chi: {Number(row.usedEur).toFixed(2)} EUR. Đặt budget mới
-              cao hơn số đã chi.
+              Cap song song trên key này — khi đạt cap, request mới sẽ vào
+              hàng đợi cho tới khi có slot trống.
             </p>
           </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs">Notes (optional)</Label>
             <Textarea
@@ -488,6 +567,7 @@ function EditKeyDialog({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+
           <p className="rounded bg-muted p-2 text-[11px] text-muted-foreground">
             Plaintext key không sửa được — nếu cần đổi, hãy xoá rồi thêm
             mới (lịch sử usage_logs vẫn được giữ).

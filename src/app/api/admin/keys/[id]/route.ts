@@ -12,9 +12,20 @@ const patchSchema = z.object({
   label: z.string().min(1).max(120).optional(),
   notes: z.string().max(500).nullable().optional(),
   assignedEur: z.number().positive().optional(),
+  /**
+   * Edit the tracked spend directly. Two common admin flows:
+   *   1. After topping up the upstream account, reset usedEur to 0 so
+   *      the key shows full budget locally again.
+   *   2. After a refund flap (orchestrator credited but Magnific didn't),
+   *      adjust usedEur down by the refunded amount.
+   * Pass 0 to reset; any non-negative number to set explicitly.
+   */
+  usedEur: z.number().min(0).optional(),
+  /** Per-key cap on simultaneous in-flight generations. Default 8. */
+  maxConcurrent: z.number().int().min(1).max(64).optional(),
 });
 
-/** PATCH /api/admin/keys/[id] — toggle active, edit label/notes, adjust budget. */
+/** PATCH /api/admin/keys/[id] — toggle active, edit label/notes, adjust budget + spend + concurrency. */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -38,12 +49,26 @@ export async function PATCH(
   if (parsed.data.notes !== undefined) updates.notes = parsed.data.notes;
   if (parsed.data.assignedEur !== undefined)
     updates.assignedEur = parsed.data.assignedEur.toFixed(2);
+  if (parsed.data.usedEur !== undefined)
+    updates.usedEur = parsed.data.usedEur.toFixed(2);
+  if (parsed.data.maxConcurrent !== undefined)
+    updates.maxConcurrent = parsed.data.maxConcurrent;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(
       { ok: false, error: "BAD_REQUEST", message: "No fields to update." },
       { status: 400 },
     );
+  }
+
+  // Audit any direct usedEur manipulation — this isn't a normal flow,
+  // it bypasses the orchestrator's accounting. If something looks
+  // off later, this log is the trail.
+  if (parsed.data.usedEur !== undefined) {
+    log.info("KEY_USED_EUR_OVERRIDDEN", {
+      id,
+      newUsedEur: parsed.data.usedEur,
+    });
   }
 
   const [updated] = await db
@@ -56,6 +81,7 @@ export async function PATCH(
       isActive: freepikKeys.isActive,
       assignedEur: freepikKeys.assignedEur,
       usedEur: freepikKeys.usedEur,
+      maxConcurrent: freepikKeys.maxConcurrent,
       notes: freepikKeys.notes,
     });
 
