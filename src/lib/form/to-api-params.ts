@@ -107,6 +107,20 @@ export function toApiParams(v: GeneratorFormValues): KlingV3GenerateParams {
       }));
       // Avoid the global-vs-per-shot prompt collision described above.
       delete params.prompt;
+      // Replace top-level duration with the SUM of per-shot durations.
+      // Customer-reported failure: top-level "15" + shots summing to 14s
+      // → Magnific accepts the POST (CREATED) but the generation pipeline
+      // marks the task FAILED because the totals don't agree. Recomputing
+      // the sum here keeps the two values consistent on every submit so
+      // the customer never has to align them by hand. Clamp to the
+      // 3–15s enum so toFixed coercions stay valid.
+      const shotSum = items.reduce(
+        (acc, s) => acc + parseInt(s.duration ?? "0", 10),
+        0,
+      );
+      if (shotSum >= 3 && shotSum <= 15) {
+        params.duration = String(shotSum) as KlingV3Duration;
+      }
     }
   }
 

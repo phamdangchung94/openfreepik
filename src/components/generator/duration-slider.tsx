@@ -9,11 +9,36 @@ export function DurationSlider() {
   const { watch, setValue } = useFormContext<GeneratorFormValues>();
   const current = watch("duration");
   const model = watch("model");
-  const numValue = parseInt(current ?? "5", 10);
+  const multiShot = watch("multi_shot");
+  const shots = watch("multi_prompt") ?? [];
   // Kling supports 3–15s; WAN 2.7 supports 2–15s. Slider min/floor
   // adapts so the customer can hit the lower bound on WAN.
   const min = model === "wan-v27" ? 2 : 3;
 
+  // When multi-shot is on, total duration is the SUM of per-shot
+  // durations — derived, not picked. Mismatch between this slider and
+  // the per-shot sum was the root cause of "Task FAILED" reports.
+  // Hide the slider in that mode and show the computed total instead.
+  if (multiShot && shots.length > 0) {
+    const total = shots.reduce(
+      (sum, s) => sum + parseInt(s?.duration ?? "0", 10),
+      0,
+    );
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <Label className="text-muted-foreground">Thời lượng (tổng)</Label>
+          <span className="text-sm font-medium tabular-nums">{total}s</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Tự tính từ thời lượng các cảnh — chỉnh thời lượng từng cảnh ở
+          phần &ldquo;Cảnh&rdquo; bên dưới.
+        </p>
+      </div>
+    );
+  }
+
+  const numValue = parseInt(current ?? "5", 10);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
