@@ -72,6 +72,14 @@ export interface GenerationTask {
   params?: TaskParams;
   /** Cost charged at submission time (EUR). Optional for back-compat. */
   costEur?: number;
+  /**
+   * Epoch ms when admin/customer dismissed this task's error from the
+   * error log panel. Used by the header button's red-dot badge — only
+   * un-acknowledged failures count toward "new errors". Doesn't delete
+   * the task; just hides the notification. Resets if the task gets
+   * regenerated and fails again.
+   */
+  errorAcknowledgedAt?: number | null;
 }
 
 interface TaskState {
@@ -96,6 +104,10 @@ interface TaskState {
   markDownloaded: (id: string) => void;
   removeTask: (id: string) => void;
   clearAll: () => void;
+  /** Mark a single task's error as seen — hides the red dot for it. */
+  acknowledgeError: (id: string) => void;
+  /** Bulk: mark every failed task as seen (used by "Mark all as read"). */
+  acknowledgeAllErrors: () => void;
   setActiveTaskId: (id: string | null) => void;
   getActiveTasks: () => GenerationTask[];
 
@@ -145,6 +157,36 @@ export const useTaskStore = create<TaskState>()(
               [id]: { ...existing, downloadedAt: Date.now() },
             },
           };
+        }),
+
+      acknowledgeError: (id) =>
+        set((state) => {
+          const existing = state.tasks[id];
+          if (!existing) return state;
+          return {
+            tasks: {
+              ...state.tasks,
+              [id]: { ...existing, errorAcknowledgedAt: Date.now() },
+            },
+          };
+        }),
+
+      acknowledgeAllErrors: () =>
+        set((state) => {
+          const now = Date.now();
+          const next = { ...state.tasks };
+          for (const [id, t] of Object.entries(state.tasks)) {
+            // Only ack failed/timeout/cancelled with an unread error.
+            if (
+              (t.status === "FAILED" ||
+                t.status === "TIMEOUT" ||
+                t.status === "CANCELLED") &&
+              !t.errorAcknowledgedAt
+            ) {
+              next[id] = { ...t, errorAcknowledgedAt: now };
+            }
+          }
+          return { tasks: next };
         }),
 
       upsertTaskFromServer: (task) =>

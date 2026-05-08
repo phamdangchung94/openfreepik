@@ -115,14 +115,14 @@ function KlingSection({ rules }: { rules: PricingRule[] }) {
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-2">
           <TierCard
-            label="Pro"
+            label="1080p"
             sublabel="Chất lượng cao nhất"
             highlight
             durations={durations}
             getCost={(d, audio) => findCost(rules, "pro", d, audio)}
           />
           <TierCard
-            label="Standard"
+            label="720p"
             sublabel="Tốc độ nhanh, giá tiết kiệm"
             durations={durations}
             getCost={(d, audio) => findCost(rules, "std", d, audio)}

@@ -10,13 +10,13 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 const TIERS = [
   {
     value: "pro" as const,
-    label: "Pro",
+    label: "1080p",
     desc: "Chất lượng cao hơn",
     icon: Crown,
   },
   {
     value: "std" as const,
-    label: "Tiêu chuẩn",
+    label: "720p",
     desc: "Nhanh & rẻ hơn",
     icon: Zap,
   },

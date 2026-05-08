@@ -5,6 +5,7 @@ import { Coins } from "lucide-react";
 import { ActivationCodeInput } from "@/components/layout/activation-code-input";
 import { AutoDownloadToggle } from "@/components/layout/auto-download-toggle";
 import { UsageStatsButton } from "@/components/layout/usage-stats-button";
+import { ErrorLogButton } from "@/components/error-log/error-log-button";
 import { KlingLogo } from "@/components/kling-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function AppHeader() {
             <Coins className="size-3.5" />
             <span className="hidden sm:inline">Bảng giá</span>
           </Link>
+          <ErrorLogButton />
           <UsageStatsButton />
           <ActivationCodeInput />
           <AutoDownloadToggle />

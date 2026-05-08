@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ import { useAutoDownload } from "@/hooks/use-auto-download";
 import { useHistoryHydration } from "@/hooks/use-history-hydration";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
+import { useRegenerateHandler } from "@/store/regenerate-handler-store";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { BatchProgressWidget } from "@/components/batch/batch-progress-widget";
 import { toApiParams } from "@/lib/form/to-api-params";
@@ -85,6 +86,15 @@ export default function HomePage() {
     },
     [],
   );
+
+  // Register the regenerate handler with the global store so the
+  // header-mounted ErrorLogButton can trigger it. Cleanup on unmount
+  // prevents stale closures pointing at a defunct formRef.
+  const setRegenerateHandler = useRegenerateHandler((s) => s.setHandler);
+  useEffect(() => {
+    setRegenerateHandler(handleRegenerate);
+    return () => setRegenerateHandler(null);
+  }, [handleRegenerate, setRegenerateHandler]);
 
   useKeyboardShortcuts({
     onGenerate: () => {
