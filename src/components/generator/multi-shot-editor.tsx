@@ -17,7 +17,8 @@ import {
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
 export function MultiShotEditor() {
-  const { control, register, watch } = useFormContext<GeneratorFormValues>();
+  const { control, register, watch, setValue } =
+    useFormContext<GeneratorFormValues>();
   const { fields, append, remove } = useFieldArray({
     control,
     name: "multi_prompt",
@@ -29,6 +30,12 @@ export function MultiShotEditor() {
     0
   );
   const overCap = totalDuration > 15;
+  // Per-shot prompts are required when shot_type=customize (the default).
+  // Surface the count so the customer knows the model will respect their
+  // shot definitions only when every shot has a non-empty description.
+  const emptyPromptCount = shots.filter(
+    (s) => !s?.prompt || s.prompt.trim() === "",
+  ).length;
 
   return (
     <div className="space-y-3">
@@ -56,11 +63,20 @@ export function MultiShotEditor() {
                   Cảnh {index + 1}
                 </Badge>
                 <Select
-                  defaultValue={shots[index]?.duration ?? "5"}
-                  onValueChange={(v) => {
-                    const arr = [...shots];
-                    if (arr[index]) arr[index] = { ...arr[index], duration: v as GeneratorFormValues["duration"] };
-                  }}
+                  // Controlled — the previous version mutated a LOCAL
+                  // copy of `shots` and never wrote back via setValue,
+                  // so duration changes were silently dropped. Every
+                  // shot ended up at the default "5" regardless of
+                  // what the customer selected → multi-shot output
+                  // didn't follow per-shot timing at all.
+                  value={shots[index]?.duration ?? "5"}
+                  onValueChange={(v) =>
+                    setValue(
+                      `multi_prompt.${index}.duration`,
+                      v as GeneratorFormValues["duration"],
+                      { shouldDirty: true },
+                    )
+                  }
                 >
                   <SelectTrigger className="h-7 w-20">
                     <SelectValue />
@@ -108,6 +124,12 @@ export function MultiShotEditor() {
       {overCap && (
         <p className="text-sm text-destructive">
           Tổng thời lượng vượt quá 15 giây. Hãy bỏ bớt cảnh hoặc rút ngắn.
+        </p>
+      )}
+      {emptyPromptCount > 0 && (
+        <p className="text-xs text-amber-500">
+          ⚠ Có {emptyPromptCount} cảnh chưa có mô tả — model sẽ bỏ qua
+          các cảnh này (chỉ áp dụng cảnh có prompt).
         </p>
       )}
     </div>

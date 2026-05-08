@@ -70,16 +70,44 @@ export function toApiParams(v: GeneratorFormValues): KlingV3GenerateParams {
     params.end_image_url = v.end_image_url.trim();
   }
 
-  // Multi-shot
+  // Multi-shot. Two correctness requirements per Magnific docs:
+  //
+  //   1. shot_type=customize: every shot MUST have a non-empty prompt.
+  //      Filter out empty-prompt shots so we don't send blank items
+  //      that confuse the segmenter and produce a flat un-prompted
+  //      scene. shot_type=intelligent allows missing prompts (auto-
+  //      segmented), so we keep all items in that branch.
+  //
+  //   2. The top-level `prompt` is "Required for text-to-video mode OR
+  //      when not using multi_prompt." When multi_prompt IS set,
+  //      sending the top-level prompt makes Magnific blend it with the
+  //      per-shot prompts and the result loses scene fidelity (this
+  //      was the customer-reported "không bám prompt" symptom). Drop
+  //      the single prompt when valid multi_prompt items exist.
   if (v.multi_shot && v.multi_prompt && v.multi_prompt.length > 0) {
-    params.multi_shot = true;
-    params.shot_type = v.shot_type;
-    params.multi_prompt = v.multi_prompt
-      .filter((s) => s.prompt?.trim() || s.duration)
+    const items = v.multi_prompt
       .map((s) => ({
-        prompt: s.prompt?.trim() || undefined,
+        prompt: s.prompt?.trim() ?? "",
+        duration: s.duration,
+      }))
+      .filter((s) =>
+        v.shot_type === "intelligent"
+          ? // intelligent mode: shots without prompts are valid hints.
+            s.prompt.length > 0 || !!s.duration
+          : // customize mode: every shot needs its own prompt.
+            s.prompt.length > 0,
+      );
+
+    if (items.length > 0) {
+      params.multi_shot = true;
+      params.shot_type = v.shot_type;
+      params.multi_prompt = items.map((s) => ({
+        prompt: s.prompt || undefined,
         duration: coerceKlingDuration(s.duration),
       }));
+      // Avoid the global-vs-per-shot prompt collision described above.
+      delete params.prompt;
+    }
   }
 
   // Elements
