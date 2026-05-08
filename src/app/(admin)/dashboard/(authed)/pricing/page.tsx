@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { formatVnd } from "@/lib/format-currency";
 
 interface PricingRow {
   id: string;
@@ -103,7 +104,8 @@ export default function AdminPricingPage() {
                   <th className="px-3 py-2 text-left font-medium">Tier</th>
                   <th className="px-3 py-2 text-left font-medium">Duration</th>
                   <th className="px-3 py-2 text-left font-medium">Audio</th>
-                  <th className="px-3 py-2 text-right font-medium">Cost (EUR)</th>
+                  <th className="px-3 py-2 text-right font-medium">EUR</th>
+                  <th className="px-3 py-2 text-right font-medium">VND</th>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
@@ -151,6 +153,9 @@ export default function AdminPricingPage() {
                           }}
                           className="ml-auto h-7 w-24 text-right font-mono text-xs"
                         />
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-[11px] text-muted-foreground">
+                        {formatVnd(Number(draft[r.id] ?? r.costEur) || 0)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <Button

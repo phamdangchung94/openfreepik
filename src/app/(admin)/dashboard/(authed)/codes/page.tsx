@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, RefreshCw, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { formatVnd, formatVndWithEur } from "@/lib/format-currency";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -146,23 +147,26 @@ function CodeRowItem({ row, onChanged }: { row: CodeRow; onChanged: () => void }
   }
 
   async function topUp() {
-    const input = prompt("Add EUR to this code's quota:", "10");
+    // Admin enters VND directly — convert to EUR for the backend.
+    // 1,000 đ ↔ 1 EUR (see lib/format-currency.ts).
+    const input = prompt("Nạp thêm số dư cho code (VND):", "10000");
     if (!input) return;
-    const amount = Number(input);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Invalid amount");
+    const vnd = Number(input.replace(/[^\d]/g, ""));
+    if (!Number.isFinite(vnd) || vnd <= 0) {
+      toast.error("Số tiền không hợp lệ");
       return;
     }
+    const eur = vnd / 1000;
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/codes/${row.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ addEur: amount }),
+        body: JSON.stringify({ addEur: eur }),
       });
       if (!res.ok) toast.error("Top-up failed");
       else {
-        toast.success(`Added ${amount.toFixed(2)} EUR`);
+        toast.success(`Đã nạp ${formatVnd(eur)}`);
         onChanged();
       }
     } finally {
@@ -188,9 +192,12 @@ function CodeRowItem({ row, onChanged }: { row: CodeRow; onChanged: () => void }
           {row.mode}
         </Badge>
       </td>
-      <td className="px-3 py-2 text-right font-mono">
-        {Number(row.usedEur).toFixed(2)} /{" "}
-        {row.quotaEur ? Number(row.quotaEur).toFixed(2) : "∞"}
+      <td
+        className="px-3 py-2 text-right font-mono"
+        title={`${Number(row.usedEur).toFixed(2)} / ${row.quotaEur ? Number(row.quotaEur).toFixed(2) : "∞"} EUR (internal)`}
+      >
+        {formatVnd(Number(row.usedEur))} /{" "}
+        {row.quotaEur ? formatVnd(Number(row.quotaEur)) : "∞"}
       </td>
       <td className="px-3 py-2 text-right tabular-nums">{row.videosGenerated}</td>
       <td className="px-3 py-2">
@@ -341,7 +348,7 @@ function CreateCodeDialog({ onCreated }: { onCreated: () => void }) {
                     Quota — fixed cap, no top-ups
                   </SelectItem>
                   <SelectItem value="topup">
-                    Top-up — admin adds EUR over time
+                    Top-up — admin nạp thêm theo thời gian
                   </SelectItem>
                   <SelectItem value="unlimited">
                     Unlimited — no cap (use sparingly)
@@ -352,7 +359,7 @@ function CreateCodeDialog({ onCreated }: { onCreated: () => void }) {
 
             {mode !== "unlimited" && (
               <div className="space-y-1.5">
-                <Label className="text-xs">Initial quota (EUR)</Label>
+                <Label className="text-xs">Initial quota</Label>
                 <Input
                   type="number"
                   min="0"
@@ -360,6 +367,12 @@ function CreateCodeDialog({ onCreated }: { onCreated: () => void }) {
                   value={quotaEur}
                   onChange={(e) => setQuotaEur(e.target.value)}
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  Nhập theo EUR (1 EUR = 1.000 đ).{" "}
+                  {quotaEur && Number(quotaEur) > 0
+                    ? `≈ ${formatVndWithEur(Number(quotaEur))}`
+                    : ""}
+                </p>
               </div>
             )}
 

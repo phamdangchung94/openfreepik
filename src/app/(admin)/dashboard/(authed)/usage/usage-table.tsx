@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatVnd } from "@/lib/format-currency";
 
 export type UsageStatus = "succeeded" | "failed" | "refunded" | "pending";
 
@@ -59,7 +60,7 @@ const COLUMN_LABEL: Record<ColId, string> = {
   duration: "Thời lượng",
   audio: "Audio",
   tier: "Tier",
-  eur: "EUR",
+  eur: "Giá",
   status: "Trạng thái",
   magnific: "URL gốc",
   r2: "URL CDN",
@@ -185,8 +186,11 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
                   </td>
                 )}
                 {visible.has("eur") && (
-                  <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-                    {Number(r.costEur).toFixed(2)}
+                  <td
+                    className="px-3 py-2 text-right font-mono whitespace-nowrap"
+                    title={`${Number(r.costEur).toFixed(2)} EUR (internal)`}
+                  >
+                    {formatVnd(Number(r.costEur))}
                   </td>
                 )}
                 {visible.has("status") && (
@@ -365,7 +369,9 @@ function csvCell(r: UsageLogRow, col: ColId): string | number {
     case "tier":
       return r.tier ?? "";
     case "eur":
-      return Number(r.costEur).toFixed(2);
+      // CSV export gets the raw VND integer (no formatting) so Excel
+      // can sum + filter the column. Admin can recompute EUR by /1000.
+      return Math.round(Number(r.costEur) * 1000);
     case "status":
       return r.status;
     case "magnific":

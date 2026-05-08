@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuthStore, type ActivationMetadata } from "@/store/auth-store";
+import { formatVnd } from "@/lib/format-currency";
 
 export function ActivationCodeInput() {
   const activationCode = useAuthStore((s) => s.activationCode);
@@ -146,15 +147,16 @@ function BalanceDisplay({ metadata }: { metadata: ActivationMetadata }) {
       </span>
     );
   }
-  const used = metadata.usedEur.toFixed(2);
-  const quota = metadata.quotaEur?.toFixed(2) ?? "?";
+  // Low-balance threshold: 1 EUR ≈ a single std-5s-no-audio video.
+  // Customer sees the warning color before they're truly out.
   const lowBalance =
     metadata.remainingEur !== null && metadata.remainingEur < 1;
   return (
     <span
       className={`font-mono ${lowBalance ? "text-amber-500" : "text-muted-foreground"}`}
     >
-      {used} / {quota} EUR
+      {formatVnd(metadata.usedEur)} /{" "}
+      {metadata.quotaEur !== null ? formatVnd(metadata.quotaEur) : "?"}
     </span>
   );
 }

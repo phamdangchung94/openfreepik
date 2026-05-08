@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { formatVndWithEur } from "@/lib/format-currency";
 
 interface Overview {
   codes: { total: number; active: number; totalUsedEur: number };
@@ -67,13 +68,13 @@ export default async function DashboardOverviewPage() {
         <StatCard
           label="Today"
           value={data.usageToday.videos}
-          sub={`${data.usageToday.eur.toFixed(2)} EUR`}
+          sub={formatVndWithEur(data.usageToday.eur)}
           unit="videos"
         />
         <StatCard
           label="Last 7 days"
           value={data.usage7d.videos}
-          sub={`${data.usage7d.eur.toFixed(2)} EUR`}
+          sub={formatVndWithEur(data.usage7d.eur)}
           unit="videos"
         />
       </div>
@@ -86,15 +87,15 @@ export default async function DashboardOverviewPage() {
           <div className="flex items-baseline justify-between text-xs">
             <span>Used across all keys</span>
             <span className="font-mono">
-              {data.keys.totalUsedEur.toFixed(2)} /{" "}
-              {data.keys.totalAssignedEur.toFixed(2)} EUR
+              {formatVndWithEur(data.keys.totalUsedEur)} /{" "}
+              {formatVndWithEur(data.keys.totalAssignedEur)}
             </span>
           </div>
           <Progress value={keyPct} className="h-1.5" />
           <p className="text-xs text-muted-foreground">
-            {data.keys.remainingEur.toFixed(2)} EUR remaining · customers have
-            spent {data.codes.totalUsedEur.toFixed(2)} EUR cumulatively
-            (revenue).
+            {formatVndWithEur(data.keys.remainingEur)} remaining · customers
+            have spent {formatVndWithEur(data.codes.totalUsedEur)}{" "}
+            cumulatively (revenue).
           </p>
         </CardContent>
       </Card>

@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { getApiHeaders } from "@/lib/api-headers";
 import type { ActivationMode } from "@/store/auth-store";
+import { formatVnd } from "@/lib/format-currency";
 
 interface UsageResponse {
   balance: {
@@ -134,11 +135,12 @@ function UsageContent({ data }: { data: UsageResponse }) {
           </span>
           {balance.mode === "unlimited" ? (
             <span className="font-mono text-muted-foreground">
-              Đã dùng {balance.usedEur.toFixed(2)} EUR · còn lại ∞
+              Đã dùng {formatVnd(balance.usedEur)} · còn lại ∞
             </span>
           ) : (
             <span className="font-mono">
-              {balance.usedEur.toFixed(2)} / {balance.quotaEur?.toFixed(2)} EUR
+              {formatVnd(balance.usedEur)} /{" "}
+              {balance.quotaEur !== null ? formatVnd(balance.quotaEur) : "—"}
             </span>
           )}
         </div>
@@ -178,7 +180,7 @@ function UsageContent({ data }: { data: UsageResponse }) {
                   <th className="px-2 py-1.5 text-left font-medium">Thời gian</th>
                   <th className="px-2 py-1.5 text-left font-medium">Loại</th>
                   <th className="px-2 py-1.5 text-left font-medium">Chất lượng</th>
-                  <th className="px-2 py-1.5 text-right font-medium">EUR</th>
+                  <th className="px-2 py-1.5 text-right font-medium">VND</th>
                   <th className="px-2 py-1.5 text-left font-medium">Trạng thái</th>
                 </tr>
               </thead>
@@ -199,7 +201,7 @@ function UsageContent({ data }: { data: UsageResponse }) {
                     </td>
                     <td className="px-2 py-1.5">{r.tier ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right font-mono">
-                      {r.costEur.toFixed(2)}
+                      {formatVnd(r.costEur)}
                     </td>
                     <td className="px-2 py-1.5">
                       <StatusBadge status={r.status} />
@@ -238,7 +240,7 @@ function StatCard({
           <span className="text-xs text-muted-foreground">video</span>
         </div>
         <div className="font-mono text-[11px] text-muted-foreground">
-          {eur.toFixed(2)} EUR
+          {formatVnd(eur)}
         </div>
       </CardContent>
     </Card>

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { formatVndWithEur } from "@/lib/format-currency";
 
 interface KeyRow {
   id: string;
@@ -296,8 +297,8 @@ function KeyCard({
         <div className="space-y-1">
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-muted-foreground">Spent</span>
-            <span className="font-mono">
-              {used.toFixed(2)} / {assigned.toFixed(2)} EUR
+            <span className="font-mono" title={`${used.toFixed(2)} / ${assigned.toFixed(2)} EUR`}>
+              {formatVndWithEur(used)} / {formatVndWithEur(assigned)}
             </span>
           </div>
           <Progress value={pct} className="h-1.5" />
@@ -523,7 +524,7 @@ function EditKeyDialog({
                 Số dư còn lại:
               </span>
               <span className="font-mono text-sm font-semibold">
-                {remaining.toFixed(2)} EUR
+                {formatVndWithEur(remaining)}
               </span>
             </div>
             <div className="flex justify-end pt-1">
@@ -659,7 +660,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
             </p>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Assigned budget (EUR)</Label>
+            <Label className="text-xs">Assigned budget (EUR — internal)</Label>
             <Input
               type="number"
               min="0"

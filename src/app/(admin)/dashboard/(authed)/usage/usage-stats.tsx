@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Calendar, CalendarDays, Hash, TrendingUp } from "lucide-react";
+import { formatVnd } from "@/lib/format-currency";
 
 interface SummaryResponse {
   ok: boolean;
@@ -117,24 +118,24 @@ export function UsageStats({ refreshKey }: { refreshKey: number }) {
                   <div
                     className="bg-primary"
                     style={{ width: `${proPct}%` }}
-                    title={`Pro: ${proEur.toFixed(2)} EUR`}
+                    title={`Pro: ${formatVnd(proEur)} (${proEur.toFixed(2)} EUR)`}
                   />
                   <div
                     className="bg-secondary"
                     style={{ width: `${100 - proPct}%` }}
-                    title={`Std: ${stdEur.toFixed(2)} EUR`}
+                    title={`Std: ${formatVnd(stdEur)} (${stdEur.toFixed(2)} EUR)`}
                   />
                 </div>
                 <div className="mt-1.5 flex justify-between text-[11px]">
                   <span>
-                    Pro <span className="font-mono">{proEur.toFixed(2)} EUR</span>
+                    Pro <span className="font-mono">{formatVnd(proEur)}</span>
                     <span className="ml-1 text-muted-foreground">
                       ({proPct.toFixed(0)}%)
                     </span>
                   </span>
                   <span className="text-muted-foreground">
                     Std{" "}
-                    <span className="font-mono">{stdEur.toFixed(2)} EUR</span>
+                    <span className="font-mono">{formatVnd(stdEur)}</span>
                     <span className="ml-1">({(100 - proPct).toFixed(0)}%)</span>
                   </span>
                 </div>
@@ -161,8 +162,11 @@ export function UsageStats({ refreshKey }: { refreshKey: number }) {
                     <span className="truncate" title={c.label ?? ""}>
                       {c.label ?? "(không nhãn)"}
                     </span>
-                    <span className="shrink-0 font-mono text-muted-foreground">
-                      {c.eur.toFixed(2)} EUR · {c.videos}v
+                    <span
+                      className="shrink-0 font-mono text-muted-foreground"
+                      title={`${c.eur.toFixed(2)} EUR (internal)`}
+                    >
+                      {formatVnd(c.eur)} · {c.videos}v
                     </span>
                   </li>
                 ))}
@@ -209,8 +213,11 @@ function KpiCard({
           <span className="text-2xl font-bold tabular-nums">{videos}</span>
           <span className="text-xs text-muted-foreground">video</span>
         </div>
-        <div className="font-mono text-[11px] text-muted-foreground">
-          {eur.toFixed(2)} EUR
+        <div
+          className="font-mono text-[11px] text-muted-foreground"
+          title={`${eur.toFixed(2)} EUR (internal)`}
+        >
+          {formatVnd(eur)}
         </div>
         {subtitle && (
           <div className="truncate text-[10px] text-muted-foreground/80">
@@ -239,7 +246,7 @@ function DailyBarChart({
           <div
             key={d.day}
             className="group flex flex-1 flex-col items-center gap-1"
-            title={`${d.day}: ${d.eur.toFixed(2)} EUR`}
+            title={`${d.day}: ${formatVnd(d.eur)} (${d.eur.toFixed(2)} EUR)`}
           >
             <div
               className="w-full rounded-sm bg-primary/60 transition-colors group-hover:bg-primary"

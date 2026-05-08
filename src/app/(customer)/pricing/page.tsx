@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatVnd } from "@/lib/format-currency";
 
 interface PricingRule {
   endpoint: string;
@@ -54,8 +55,8 @@ export default function CustomerPricingPage() {
         <div>
           <h1 className="text-2xl font-semibold">Bảng giá</h1>
           <p className="text-sm text-muted-foreground">
-            Giá tính theo EUR mỗi video. Số dư trong mã kích hoạt sẽ trừ đúng
-            con số bên dưới khi bạn tạo video.
+            Giá tính theo VND mỗi video. Số dư trong mã kích hoạt sẽ trừ
+            đúng con số bên dưới khi bạn tạo video.
           </p>
         </div>
         <Link
@@ -240,16 +241,16 @@ function TierCard({
                 <td className="py-1.5 pr-2 font-mono">{d}s</td>
                 {!hideAudioColumn && (
                   <td className="py-1.5 px-1 text-right font-mono">
-                    {noAudio !== null ? `${noAudio.toFixed(2)} €` : "—"}
+                    {noAudio !== null ? formatVnd(noAudio) : "—"}
                   </td>
                 )}
                 <td className="py-1.5 pl-1 text-right font-mono font-medium">
                   {hideAudioColumn
                     ? noAudio !== null
-                      ? `${noAudio.toFixed(2)} €`
+                      ? formatVnd(noAudio)
                       : "—"
                     : withAudio !== null
-                      ? `${withAudio.toFixed(2)} €`
+                      ? formatVnd(withAudio)
                       : "—"}
                 </td>
               </tr>

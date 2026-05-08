@@ -6,6 +6,7 @@ import { Coins, AlertCircle } from "lucide-react";
 import { lookupCost, usePricingRates } from "@/hooks/use-pricing-rates";
 import { useAuthStore } from "@/store/auth-store";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
+import { formatVnd } from "@/lib/format-currency";
 
 interface CostPreviewProps {
   /**
@@ -97,28 +98,28 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
         <Coins className="size-3.5" />
         {count > 1 ? (
           <>
-            {count} × {perItem.toFixed(2)} EUR ={" "}
+            {count} × {formatVnd(perItem)} ={" "}
             <span className="font-mono font-medium text-foreground">
-              {total.toFixed(2)} EUR
+              {formatVnd(total)}
             </span>
           </>
         ) : (
           <>
             Chi phí dự kiến{" "}
             <span className="font-mono font-medium text-foreground">
-              {total.toFixed(2)} EUR
+              {formatVnd(total)}
             </span>
           </>
         )}
       </span>
       {insufficient && remaining !== null && remaining !== undefined && (
         <span className="text-amber-500">
-          Cần thêm {(total - remaining).toFixed(2)} EUR
+          Cần thêm {formatVnd(total - remaining)}
         </span>
       )}
       {!insufficient && metadata?.mode !== "unlimited" && remaining !== null && remaining !== undefined && (
         <span className="text-muted-foreground">
-          Còn {remaining.toFixed(2)} EUR
+          Còn {formatVnd(remaining)}
         </span>
       )}
     </div>

@@ -22,7 +22,7 @@ export function CustomerOnboarding() {
     {
       icon: Key,
       title: "Nhập mã kích hoạt",
-      desc: "Click vào ô nhập ở góc phải header. Số dư EUR sẽ hiển thị ngay bên cạnh sau khi kích hoạt.",
+      desc: "Click vào ô nhập ở góc phải header. Số dư VND sẽ hiển thị ngay bên cạnh sau khi kích hoạt.",
       done: !!activationCode,
     },
     {
