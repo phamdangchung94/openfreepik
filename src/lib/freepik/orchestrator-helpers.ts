@@ -6,6 +6,7 @@
  * imports from here.
  */
 
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { usageLogs, type NewUsageLog } from "@/lib/db/schema";
 import { refundCode } from "@/lib/auth/activation";
@@ -121,6 +122,104 @@ export function reasonMessage(reason: "not_found" | "inactive" | "expired"): str
       return "Activation code has been revoked.";
     case "expired":
       return "Activation code has expired.";
+  }
+}
+
+/**
+ * Finalize a pending usage_logs row once polling reaches a terminal
+ * state. The customer contract is: charge sticks only when the
+ * customer can receive a working video URL. Anything else flips the
+ * row to status='refunded' AND restores the balance.
+ *
+ * Idempotent — guarded by `WHERE status = 'pending'` so concurrent
+ * polls / a reconcile-script overlap can't double-refund.
+ *
+ * Use `outcome='succeeded'` only when you actually have a URL to hand
+ * the customer. Magnific FAILED, empty generated[], or function-killed
+ * orphans all funnel through `outcome='failed'`.
+ */
+export interface FinalizeUsageOpts {
+  freepikTaskId: string;
+  outcome: "succeeded" | "failed";
+  /** Set when outcome='succeeded' — the URL persisted to the row. */
+  videoUrl?: string | null;
+  magnificVideoUrl?: string | null;
+  videoUrlExpiresAt?: Date | null;
+  /** Tag for the refund log (e.g. "MAGNIFIC_FAILED", "NO_VIDEO_URL"). */
+  failureReason?: string;
+}
+
+export async function finalizeUsageOnPoll(
+  opts: FinalizeUsageOpts,
+): Promise<void> {
+  if (opts.outcome === "succeeded") {
+    if (!opts.videoUrl) {
+      // Defensive — caller asked for "succeeded" without a URL. Bug, but
+      // treat as failure rather than silently swallowing.
+      log.warn("FINALIZE_SUCCEEDED_WITHOUT_URL", {
+        freepikTaskId: opts.freepikTaskId,
+      });
+      return finalizeUsageOnPoll({ ...opts, outcome: "failed", failureReason: "MISSING_URL" });
+    }
+    await db
+      .update(usageLogs)
+      .set({
+        status: "succeeded",
+        videoUrl: opts.videoUrl,
+        magnificVideoUrl: opts.magnificVideoUrl ?? opts.videoUrl,
+        videoUrlExpiresAt: opts.videoUrlExpiresAt ?? null,
+      })
+      .where(
+        and(
+          eq(usageLogs.freepikTaskId, opts.freepikTaskId),
+          eq(usageLogs.status, "pending"),
+        ),
+      );
+    return;
+  }
+
+  // outcome === "failed" — atomically flip to refunded + recover the
+  // row's codeId/costEur in the same statement so concurrent polls
+  // can't double-refund.
+  const updated = await db
+    .update(usageLogs)
+    .set({ status: "refunded" })
+    .where(
+      and(
+        eq(usageLogs.freepikTaskId, opts.freepikTaskId),
+        eq(usageLogs.status, "pending"),
+      ),
+    )
+    .returning({
+      codeId: usageLogs.codeId,
+      costEur: usageLogs.costEur,
+    });
+
+  const [row] = updated;
+  if (!row) return; // already finalized by a concurrent path
+
+  const cost = Number(row.costEur);
+  if (cost <= 0) return;
+
+  try {
+    await refundCode(row.codeId, cost);
+    log.info("POLL_REFUND_ISSUED", {
+      freepikTaskId: opts.freepikTaskId,
+      codeId: row.codeId,
+      amountEur: cost,
+      reason: opts.failureReason ?? "POLL_FAILED",
+    });
+  } catch (err) {
+    // CRITICAL — row already marked refunded but balance not restored.
+    // Admin needs to reconcile manually. Same alert path as
+    // REFUND_FAILED in refundIfCharged.
+    log.error("POLL_REFUND_FAILED", {
+      freepikTaskId: opts.freepikTaskId,
+      codeId: row.codeId,
+      amountEur: cost,
+      reason: opts.failureReason ?? "POLL_FAILED",
+      ...errFields(err),
+    });
   }
 }
 

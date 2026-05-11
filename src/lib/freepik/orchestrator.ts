@@ -198,7 +198,15 @@ async function runOrchestrate<T>(
       // reconcile the pool spend manually.
       try {
         await recordKeyCost(key.id, opts.costEur);
-        await logUsage(opts, codeId, key.id, taskId, "succeeded");
+        // Customer contract: charge sticks only when polling proves the
+        // user got a working URL. For paid endpoints log as 'pending' —
+        // the GET poll handler flips to 'succeeded' on COMPLETED+url or
+        // 'refunded' on FAILED / empty generated[] via
+        // finalizeUsageOnPoll. Free endpoints (improve-prompt) skip
+        // pending entirely — nothing to refund and no poll-side
+        // finalize wired up.
+        const initialStatus = opts.costEur > 0 ? "pending" : "succeeded";
+        await logUsage(opts, codeId, key.id, taskId, initialStatus);
       } catch (trackErr) {
         log.error("POST_CHARGE_TRACKING_FAILED", {
           requestId,

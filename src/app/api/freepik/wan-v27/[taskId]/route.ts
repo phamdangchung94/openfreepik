@@ -1,6 +1,7 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { freepik } from "@/lib/freepik";
 import { createTaskGetHandler } from "@/lib/freepik/route-helpers";
+import { finalizeUsageOnPoll } from "@/lib/freepik/orchestrator-helpers";
 import { db } from "@/lib/db/client";
 import { usageLogs } from "@/lib/db/schema";
 import { VIDEO_URL_TTL_MS } from "@/lib/video-url-ttl";
@@ -9,28 +10,37 @@ import { errFields, log } from "@/lib/logger";
 
 /**
  * GET /api/freepik/wan-v27/[taskId]
- * Header: Authorization: Bearer <activation-code>
- * Returns: { data: TaskData }
  *
- * Same R2-mirror lifecycle as kling-v3 poll: on first COMPLETED, save
- * the original URL to magnific_video_url, attempt the R2 mirror, and
- * rewrite data.generated[0] to the R2 URL so the live response carries
- * the mirrored link from the first poll.
+ * Drives the same usage_logs lifecycle as kling-v3 poll — pending →
+ * succeeded on COMPLETED+url, → refunded on FAILED / empty generated[].
  */
 export const maxDuration = 60;
 
 export const GET = createTaskGetHandler(freepik.wanV27.getTask, {
   rateLimit: { resource: "wan-v27-poll", limit: 60, windowSeconds: 60 },
   onSuccess: async (taskId, data) => {
+    if (data.status === "FAILED") {
+      await finalizeUsageOnPoll({
+        freepikTaskId: taskId,
+        outcome: "failed",
+        failureReason: "MAGNIFIC_FAILED",
+      });
+      return;
+    }
     if (data.status !== "COMPLETED") return;
+
     const sourceUrl = data.generated[0];
-    if (!sourceUrl) return;
+    if (!sourceUrl) {
+      await finalizeUsageOnPoll({
+        freepikTaskId: taskId,
+        outcome: "failed",
+        failureReason: "COMPLETED_WITHOUT_URL",
+      });
+      return;
+    }
 
     const [existing] = await db
-      .select({
-        videoUrl: usageLogs.videoUrl,
-        magnificVideoUrl: usageLogs.magnificVideoUrl,
-      })
+      .select({ videoUrl: usageLogs.videoUrl })
       .from(usageLogs)
       .where(eq(usageLogs.freepikTaskId, taskId))
       .limit(1);
@@ -54,20 +64,13 @@ export const GET = createTaskGetHandler(freepik.wanV27.getTask, {
       }
     }
 
-    const expiresAt = new Date(Date.now() + VIDEO_URL_TTL_MS);
-    await db
-      .update(usageLogs)
-      .set({
-        videoUrl,
-        magnificVideoUrl: sourceUrl,
-        videoUrlExpiresAt: expiresAt,
-      })
-      .where(
-        and(
-          eq(usageLogs.freepikTaskId, taskId),
-          isNull(usageLogs.videoUrl),
-        ),
-      );
+    await finalizeUsageOnPoll({
+      freepikTaskId: taskId,
+      outcome: "succeeded",
+      videoUrl,
+      magnificVideoUrl: sourceUrl,
+      videoUrlExpiresAt: new Date(Date.now() + VIDEO_URL_TTL_MS),
+    });
 
     data.generated[0] = videoUrl;
   },

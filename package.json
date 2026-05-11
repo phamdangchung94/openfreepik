@@ -23,7 +23,8 @@
     "db:seed-pricing": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/seed-pricing.ts",
     "db:status": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/db-status.ts",
     "admin:create-code": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/admin-create-code.ts",
-    "admin:add-key": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/admin-add-key.ts"
+    "admin:add-key": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/admin-add-key.ts",
+    "admin:reconcile": "NODE_OPTIONS='--dns-result-order=ipv4first' tsx --env-file=.env.local scripts/reconcile-pending-charges.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1042.0",
