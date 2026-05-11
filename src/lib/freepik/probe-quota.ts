@@ -13,7 +13,11 @@
  * no credit spent).
  */
 
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { freepikKeys } from "@/lib/db/schema";
 import { decrypt } from "@/lib/crypto/aes-gcm";
+import { log } from "@/lib/logger";
 
 const API_BASE_URL = process.env.FREEPIK_API_BASE_URL ?? "https://api.magnific.com";
 const API_KEY_HEADER = process.env.FREEPIK_API_KEY_HEADER ?? "x-magnific-api-key";
@@ -97,4 +101,72 @@ export async function probeKeyQuota(encryptedKey: string): Promise<QuotaProbeRes
     bodySnippet: bodyText.slice(0, 200).replace(/\s+/g, " "),
     elapsedMs: Date.now() - start,
   };
+}
+
+/**
+ * Cron-friendly health check: probe every active key, surface results
+ * in logs, and auto-deactivate keys whose probe returns 401 (Magnific
+ * has revoked them — admin had to know anyway and the pool was going
+ * to fail every request that picked them).
+ *
+ * Does NOT touch `used_eur` — Magnific doesn't publish a single
+ * canonical "remaining credit" header today, so we'd be guessing. The
+ * server-side accounting (`recordKeyCost`) remains source of truth.
+ * Once webhook + balance-endpoint integration lands we can update this
+ * to pull the authoritative number.
+ */
+export async function probeAndHealthcheckActiveKeys(): Promise<{
+  probed: number;
+  deactivated: number;
+  failed: number;
+}> {
+  const keys = await db
+    .select({
+      id: freepikKeys.id,
+      label: freepikKeys.label,
+      keyEncrypted: freepikKeys.keyEncrypted,
+    })
+    .from(freepikKeys)
+    .where(eq(freepikKeys.isActive, true));
+
+  let deactivated = 0;
+  let failed = 0;
+
+  await Promise.all(
+    keys.map(async (k) => {
+      const probe = await probeKeyQuota(k.keyEncrypted);
+      if (probe.ok) return;
+
+      if (probe.status === 401) {
+        // Magnific revoked the key — auto-deactivate to stop the
+        // orchestrator burning retries on it. Admin sees the warning
+        // log and can investigate.
+        await db
+          .update(freepikKeys)
+          .set({ isActive: false })
+          .where(eq(freepikKeys.id, k.id));
+        log.warn("KEY_AUTO_DEACTIVATED", {
+          keyId: k.id,
+          label: k.label,
+          status: probe.status,
+          reason: "PROBE_401",
+        });
+        deactivated++;
+        return;
+      }
+
+      // Network / timeout / other 4xx-5xx — flag for admin attention
+      // but don't auto-deactivate (could be transient Magnific issue).
+      log.warn("KEY_PROBE_FAILED", {
+        keyId: k.id,
+        label: k.label,
+        status: probe.status,
+        elapsedMs: probe.elapsedMs,
+        errorMessage: probe.errorMessage?.slice(0, 200),
+      });
+      failed++;
+    }),
+  );
+
+  return { probed: keys.length, deactivated, failed };
 }

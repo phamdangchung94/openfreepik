@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { purgeExpiredSessions } from "@/lib/auth/admin";
 import { purgeStaleFailedLogins } from "@/lib/auth/login-throttle";
 import { purgeExpiredRateLimitBuckets } from "@/lib/rate-limit";
+import { probeAndHealthcheckActiveKeys } from "@/lib/freepik/probe-quota";
 import { errFields, log } from "@/lib/logger";
+
+// Probing every active key may hit Magnific N times sequentially — give
+// the function enough headroom over Vercel's default 10s budget.
+export const maxDuration = 60;
 
 /**
  * GET /api/cron/purge
@@ -41,12 +46,20 @@ export async function GET(request: Request) {
     purgeExpiredSessions(),
     purgeExpiredRateLimitBuckets(),
     purgeStaleFailedLogins(),
+    probeAndHealthcheckActiveKeys(),
   ]);
+
+  const keyHealth =
+    results[3].status === "fulfilled" ? results[3].value : null;
 
   const summary = {
     sessions: results[0].status,
     rateLimitBuckets: results[1].status,
     failedLogins: results[2].status,
+    keyHealth: results[3].status,
+    keysProbed: keyHealth?.probed ?? 0,
+    keysDeactivated: keyHealth?.deactivated ?? 0,
+    keysFailed: keyHealth?.failed ?? 0,
     durationMs: Date.now() - start,
   };
 
