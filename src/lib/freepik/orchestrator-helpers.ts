@@ -14,7 +14,12 @@ import { FreepikApiError } from "@/lib/freepik/errors";
 import { errFields, log } from "@/lib/logger";
 
 export interface LogUsageOpts {
-  endpoint: "kling-v3" | "wan-v27" | "improve-prompt";
+  endpoint:
+    | "kling-v3"
+    | "kling-4k-t2v"
+    | "kling-4k-i2v"
+    | "wan-v27"
+    | "improve-prompt";
   tier?: "pro" | "std" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;

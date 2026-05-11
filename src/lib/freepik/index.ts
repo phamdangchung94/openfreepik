@@ -7,10 +7,11 @@
  */
 
 import * as klingV3 from "./kling-v3";
+import * as kling4k from "./kling-4k";
 import * as wanV27 from "./wan-v27";
 import * as improvePrompt from "./improve-prompt";
 
-export const freepik = { klingV3, wanV27, improvePrompt } as const;
+export const freepik = { klingV3, kling4k, wanV27, improvePrompt } as const;
 
 export { FreepikApiError } from "./errors";
 export type { FreepikErrorCode, InvalidParam } from "./errors";
@@ -25,6 +26,11 @@ export type {
   KlingV3Element,
   KlingV3MultiPromptItem,
   KlingV3GenerateParams,
+  Kling4kAspectRatio,
+  Kling4kDuration,
+  Kling4kT2vGenerateParams,
+  Kling4kI2vGenerateParams,
+  Kling4kDynamicMask,
   WanV27Resolution,
   WanV27Duration,
   WanV27AdditionalSettings,

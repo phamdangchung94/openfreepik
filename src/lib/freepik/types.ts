@@ -50,6 +50,49 @@ export interface KlingV3GenerateParams {
   webhook_url?: string;
 }
 
+// --------------- Kling 4K (T2V + I2V) ---------------
+//
+// Two separate Magnific endpoints with disjoint request shapes:
+//   POST /v1/ai/video/kling-4k-t2v — prompt-driven, aspect_ratio supported
+//   POST /v1/ai/video/kling-4k-i2v — image-driven, motion-brush masks
+// Both share the standard TaskData response shape. Duration enum and
+// cfg_scale rules match Kling V3. No tier (single 4K quality SKU). No
+// audio parameter — Kling 4K renders silent video.
+
+export type Kling4kAspectRatio = KlingV3AspectRatio;
+
+/** Same enum as Kling V3 — Magnific accepts both string and integer; we
+ * keep strings for parity with the V3 schema. */
+export type Kling4kDuration = KlingV3Duration;
+
+export interface Kling4kT2vGenerateParams {
+  prompt: string;
+  negative_prompt?: string;
+  aspect_ratio?: Kling4kAspectRatio;
+  duration?: Kling4kDuration;
+  cfg_scale?: number;
+  webhook_url?: string;
+}
+
+export interface Kling4kDynamicMask {
+  /** Base64 or URL — must match the `image` resolution + aspect ratio. */
+  mask: string;
+  trajectories: { x: number; y: number }[];
+}
+
+export interface Kling4kI2vGenerateParams {
+  /** Reference image URL (1:2.5–2.5:1 aspect, ≥300×300, ≤10MB). */
+  image: string;
+  image_tail?: string;
+  prompt?: string;
+  negative_prompt?: string;
+  cfg_scale?: number;
+  duration?: Kling4kDuration;
+  static_mask?: string;
+  dynamic_masks?: Kling4kDynamicMask[];
+  webhook_url?: string;
+}
+
 // --------------- WAN 2.7 image-to-video ---------------
 
 export type WanV27Resolution = "720P" | "1080P";

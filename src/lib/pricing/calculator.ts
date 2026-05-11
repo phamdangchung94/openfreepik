@@ -83,6 +83,33 @@ export function lookupForImprovePrompt(): PricingLookup {
 }
 
 /**
+ * Convenience wrapper for Kling 4K (T2V + I2V).
+ *
+ * Kling 4K has no Pro/Std tier and no audio parameter — single SKU,
+ * silent video. We keep separate `kling-4k-t2v` / `kling-4k-i2v`
+ * entries in pricing_rules so admin can split rates per variant if
+ * Magnific ever publishes different prices; today both seed at the
+ * same per-second rate.
+ */
+export function lookupForKling4k(
+  endpoint: "kling-4k-t2v" | "kling-4k-i2v",
+  params: { duration?: string | number },
+): PricingLookup {
+  const duration =
+    typeof params.duration === "number"
+      ? params.duration
+      : params.duration
+        ? Number(params.duration)
+        : 5;
+  return {
+    endpoint,
+    tier: null,
+    durationSeconds: duration,
+    withAudio: false,
+  };
+}
+
+/**
  * Convenience wrapper for WAN 2.7 image-to-video. WAN doesn't have
  * tiers (all calls are equal quality at the chosen resolution); we
  * encode the resolution into the `tier` slot of the lookup so admin

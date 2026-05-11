@@ -66,6 +66,8 @@ async function probeAndFinalize(row: {
   }>) | null = null;
 
   if (row.endpoint === "kling-v3") getter = freepik.klingV3.getTask;
+  else if (row.endpoint === "kling-4k-t2v") getter = freepik.kling4k.getTaskT2v;
+  else if (row.endpoint === "kling-4k-i2v") getter = freepik.kling4k.getTaskI2v;
   else if (row.endpoint === "wan-v27") getter = freepik.wanV27.getTask;
 
   if (!getter) {
