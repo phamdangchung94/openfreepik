@@ -1,0 +1,337 @@
+# OpenFreepik — Software Flows
+
+Cây thư mục các luồng (flows) chính của hệ thống, tổng hợp từ codebase hiện tại.
+Đây là góc nhìn theo **luồng người dùng/dữ liệu** (bổ trợ cho `system-architecture.md`
+vốn theo góc nhìn kỹ thuật).
+
+> Cập nhật khi codebase thay đổi đáng kể (thêm endpoint mới, đổi orchestrator,
+> đổi data model, v.v.).
+
+---
+
+## 1. Tổng quan các luồng
+
+| # | Luồng | Entry point | Lõi xử lý | Đụng DB |
+|---|---|---|---|---|
+| 1 | Customer activation | `/api/activate` | `auth/activation.ts` | `activation_codes` |
+| 2 | Single T2V/I2V | form → `/api/freepik/kling-v3` (hoặc `kling-4k-t2v`, `kling-4k-i2v`, `wan-v27`) | `freepik/orchestrator.ts` | `activation_codes`, `freepik_keys`, `usage_logs`, `pricing_rules` |
+| 3 | Batch | `use-batch-queue.ts` | gọi N lần luồng #2 song song | giống #2 |
+| 4 | Multi-shot | cùng endpoint #2 + body `multi_prompt[]` | giống #2 | giống #2 |
+| 5 | Improve prompt | `/api/freepik/improve-prompt` | `orchestrator.ts` (cost=0) | `usage_logs` |
+| 6 | Auto-download | `/api/download/[taskId]` | proxy stream từ R2/Magnific | — |
+| 7 | History / Orphan recovery | client localStorage + `use-orphan-recovery.ts` | resume polling | — |
+| 8 | Usage panel (khách) | `/api/usage`, `/api/pricing/rates` | đọc DB | `usage_logs`, `pricing_rules` |
+| 9 | Admin CRUD | `/api/admin/*` | `auth/admin-server.ts` + Drizzle | tất cả bảng |
+| 10 | Cron purge | Vercel cron → `/api/cron/purge` | dọn rate_limit/sessions | `rate_limit_buckets`, `admin_sessions`, `failed_logins` |
+
+**Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
+Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).
+
+---
+
+## 2. Cây thư mục các luồng
+
+```
+OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve Prompt qua Freepik/Magnific)
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  🧑 LUỒNG KHÁCH HÀNG (customer)                                              │
+│   │  Vào trang → nhập activation code → tạo video → xem/tải về                   │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── src/app/(customer)/
+│   ├── layout.tsx ............................. Wrapper (theme, header, toast)
+│   ├── page.tsx ............................... Trang chủ — 3 cột (form, preview, history)
+│   │   │
+│   │   ├── ▶ FLOW 1: ONBOARDING & ACTIVATION ────────────────────────────────────
+│   │   │   • components/customer-onboarding.tsx → hiển thị khi chưa kích hoạt
+│   │   │   • components/layout/activation-code-input.tsx → input code
+│   │   │   • POST /api/activate ────► api/activate/route.ts
+│   │   │       → lib/auth/activation.ts → validateCode()
+│   │   │       → DB: activation_codes (mode: unlimited|quota|topup)
+│   │   │       → trả về metadata, lưu vào store/auth-store.ts (localStorage)
+│   │   │
+│   │   ├── ▶ FLOW 2: SINGLE VIDEO (T2V / I2V) ───────────────────────────────────
+│   │   │   components/generator/
+│   │   │     ├── generator-form.tsx ........... form chính (react-hook-form + Zod)
+│   │   │     ├── mode-toggle.tsx .............. T2V / I2V
+│   │   │     ├── prompt-field.tsx ............. textarea + char counter
+│   │   │     ├── negative-prompt-field.tsx
+│   │   │     ├── image-url-field.tsx .......... I2V: paste URL
+│   │   │     ├── generator-i2v-source.tsx ..... I2V: upload file → R2
+│   │   │     ├── start-end-frame-uploader.tsx . frame đầu/cuối
+│   │   │     ├── model-picker.tsx ............. Kling V3 / Kling 4K / WAN V2.7
+│   │   │     ├── quality-tier-picker.tsx ...... pro/std
+│   │   │     ├── aspect-ratio-picker.tsx ...... 16:9 / 9:16 / 1:1
+│   │   │     ├── duration-slider.tsx .......... 3–15s
+│   │   │     ├── cfg-scale-slider.tsx ......... 0–1
+│   │   │     ├── generate-audio-switch.tsx
+│   │   │     ├── generator-advanced-settings.tsx
+│   │   │     ├── resolution-picker.tsx ........ (WAN) 720p/1080p
+│   │   │     └── cost-preview.tsx ............. ước tính EUR/VND
+│   │   │
+│   │   │   hooks/use-generate-video.ts → fire-and-forget worker
+│   │   │     → POST /api/freepik/{kling-v3 | kling-4k-t2v | kling-4k-i2v | wan-v27}
+│   │   │         ├── lib/freepik/route-helpers.ts → extractBearer (activation code)
+│   │   │         ├── lib/freepik/kling-v3-schema.ts → validate Zod
+│   │   │         ├── lib/pricing/calculator.ts → tính cost EUR
+│   │   │         └── lib/freepik/orchestrator.ts ──┐
+│   │   │             1. validateCode               │
+│   │   │             2. chargeCode (codes.used_eur)│
+│   │   │             3. pickActiveKey (key-pool)   │ Retry ≤3 keys
+│   │   │             4. lib/freepik/kling-v3.ts ───┤  nếu quota exhausted
+│   │   │                → base-client.ts (HTTP)    │  → markKeyExhausted
+│   │   │                → Magnific API             │  → thử key tiếp
+│   │   │             5. recordKeyCost ─────────────┘
+│   │   │             6. logUsage → usage_logs (status='pending' if cost>0; 'succeeded' if free)
+│   │   │     ← trả freepik_task_id về client
+│   │   │
+│   │   │   hooks/use-task-polling.ts → backoff (2→10s, timeout 1800s = 30 min)
+│   │   │     → GET /api/freepik/{endpoint}/[taskId] → finalizeUsageOnPoll
+│   │   │       khi COMPLETED + có URL:
+│   │   │         ├── tải video từ Magnific → upload R2 mirror (lib/storage/r2.ts)
+│   │   │         ├── cập nhật usage_logs.videoUrl + magnificVideoUrl
+│   │   │         ├── tính videoUrlExpiresAt (TTL 6h - video-url-ttl.ts)
+│   │   │         └── status = 'succeeded'
+│   │   │       khi FAILED hoặc COMPLETED không có URL:
+│   │   │         ├── refundCode → activation_codes.usedEur -= cost
+│   │   │         └── status = 'refunded'  (rule: không có URL ≠ tính tiền)
+│   │   │
+│   │   ├── ▶ FLOW 3: BATCH (nhiều ảnh cùng lúc) ─────────────────────────────────
+│   │   │   components/batch/
+│   │   │     ├── batch-upload-zone.tsx ........ drag-drop ảnh
+│   │   │     ├── batch-excel-import.tsx ....... import prompts từ xlsx/csv (parse-batch-file.ts)
+│   │   │     ├── batch-t2v-input.tsx .......... batch text-only
+│   │   │     ├── batch-settings.tsx ........... concurrency 1-10, autoEnhance toggle
+│   │   │     └── batch-progress-widget.tsx .... thanh tiến độ chung
+│   │   │   hooks/use-batch-queue.ts → fillSlots pattern
+│   │   │     (mỗi item gọi /api/freepik/* qua cùng orchestrator)
+│   │   │
+│   │   ├── ▶ FLOW 4: MULTI-SHOT (đa cảnh) ───────────────────────────────────────
+│   │   │   components/generator/
+│   │   │     ├── generator-multi-shot-section.tsx
+│   │   │     └── multi-shot-editor.tsx ........ tối đa 6 cảnh, total ≤15s
+│   │   │   → cùng endpoint kling-v3, body có multi_prompt[] + elements[]
+│   │   │
+│   │   ├── ▶ FLOW 5: AI PROMPT ENHANCEMENT ──────────────────────────────────────
+│   │   │   components/generator/improve-prompt-dialog.tsx
+│   │   │   hooks/use-improve-prompt.ts
+│   │   │   lib/improve-prompt-runner.ts
+│   │   │     → POST /api/freepik/improve-prompt → improve-prompt.ts
+│   │   │       (qua cùng orchestrator nhưng cost=0)
+│   │   │     → GET /api/freepik/improve-prompt/[taskId] → poll 1.5s/60s
+│   │   │
+│   │   ├── ▶ FLOW 6: AUTO-DOWNLOAD ──────────────────────────────────────────────
+│   │   │   components/layout/auto-download-toggle.tsx
+│   │   │   hooks/use-auto-download.ts → lib/auto-download.ts
+│   │   │     khi task COMPLETED → fetch GET /api/download/[taskId]
+│   │   │     → api/download/[taskId]/route.ts (proxy stream → browser save)
+│   │   │
+│   │   ├── ▶ FLOW 7: HISTORY & ORPHAN RECOVERY ─────────────────────────────────
+│   │   │   components/history/
+│   │   │     ├── history-sidebar.tsx .......... list task (mới nhất trên)
+│   │   │     └── history-item.tsx ............. card từng task
+│   │   │   components/preview/
+│   │   │     ├── preview-panel.tsx ............ video chính + Regenerate
+│   │   │     ├── video-player.tsx
+│   │   │     ├── status-badge.tsx
+│   │   │     ├── url-countdown.tsx ............ đếm ngược TTL
+│   │   │     └── parameters-block.tsx
+│   │   │   store/task-store.ts → Zustand, persist localStorage
+│   │   │   hooks/use-orphan-recovery.ts ....... reload page → resume polling
+│   │   │   hooks/use-history-hydration.ts ..... đồng bộ task từ server (cross-device)
+│   │   │   hooks/use-keyboard-shortcuts.ts .... Cmd+Enter, Cmd+I
+│   │   │
+│   │   ├── ▶ FLOW 8: USAGE PANEL (số dư + lịch sử dùng) ─────────────────────────
+│   │   │   components/layout/usage-stats-button.tsx
+│   │   │   components/usage/usage-panel.tsx
+│   │   │   hooks/use-pricing-rates.ts
+│   │   │     → GET /api/usage → api/usage/route.ts (mỗi customer)
+│   │   │     → GET /api/pricing/rates → api/pricing/rates/route.ts
+│   │   │   lib/format-currency.ts ............. EUR ↔ VND
+│   │   │
+│   │   └── ▶ FLOW 9: ERROR LOG ─────────────────────────────────────────────────
+│   │       components/error-log/
+│   │         ├── error-log-button.tsx
+│   │         └── error-log-dialog.tsx
+│   │       lib/error-messages.ts .............. mapping mã lỗi → text VN
+│   │
+│   └── pricing/page.tsx ...................... Bảng giá công khai
+│       → đọc qua /api/pricing/rates
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  👨‍💼 LUỒNG ADMIN (admin)                                                    │
+│   │  Login → quản lý codes, keys, pricing, xem usage                              │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── src/app/(admin)/dashboard/
+│   ├── login/page.tsx ......................... form login (password)
+│   │   → POST /api/admin/login ──► api/admin/login/route.ts
+│   │     ├── lib/auth/login-throttle.ts → DB: failed_logins (5 sai/15p → khóa)
+│   │     ├── lib/auth/admin.ts → so sánh ADMIN_PASSWORD env
+│   │     ├── lib/auth/admin-server.ts → tạo session token
+│   │     └── DB: admin_sessions (SHA-256 hash, TTL 24h)
+│   │
+│   └── (authed)/                              ← middleware kiểm tra cookie
+│       ├── layout.tsx                          (components/dashboard/dashboard-nav.tsx)
+│       │
+│       ├── ▶ FLOW A1: OVERVIEW ─────────────────────────────────────────────────
+│       │   page.tsx
+│       │   → GET /api/admin/overview ── tổng quan keys/codes/usage/spend
+│       │
+│       ├── ▶ FLOW A2: ACTIVATION CODES ──────────────────────────────────────────
+│       │   codes/page.tsx
+│       │   → GET    /api/admin/codes ──── list
+│       │   → POST   /api/admin/codes ──── tạo code mới (unlimited/quota/topup)
+│       │   → PATCH  /api/admin/codes/[id] revoke / topup / sửa quota
+│       │   → DELETE /api/admin/codes/[id]
+│       │     DB: activation_codes
+│       │
+│       ├── ▶ FLOW A3: FREEPIK KEYS POOL ─────────────────────────────────────────
+│       │   keys/page.tsx
+│       │   → GET   /api/admin/keys ────── list (đã mask)
+│       │   → POST  /api/admin/keys ────── thêm key (mã hóa AES-GCM lib/crypto/aes-gcm.ts)
+│       │   → PATCH /api/admin/keys/[id]── đổi nhãn, max_concurrent, active
+│       │   → POST  /api/admin/keys/[id]/refresh-quota
+│       │           (probe-quota.ts: gọi Magnific lấy balance thực)
+│       │   → POST  /api/admin/keys/refresh-all-quotas
+│       │   → POST  /api/admin/keys/reactivate-all
+│       │     DB: freepik_keys (key_encrypted, used_eur, max_concurrent)
+│       │
+│       ├── ▶ FLOW A4: PRICING MATRIX ─────────────────────────────────────────────
+│       │   pricing/page.tsx
+│       │   → GET    /api/admin/pricing
+│       │   → POST   /api/admin/pricing ────── thêm rule
+│       │   → PATCH  /api/admin/pricing/[id]── sửa giá
+│       │   → DELETE /api/admin/pricing/[id]
+│       │     DB: pricing_rules (lookup: endpoint+tier+duration+audio)
+│       │
+│       └── ▶ FLOW A5: USAGE LOGS & STATS ─────────────────────────────────────────
+│           usage/page.tsx + usage-filters.tsx + usage-stats.tsx + usage-table.tsx
+│           → GET /api/admin/usage ───────── log từng request (paginate, filter)
+│           → GET /api/admin/usage/summary ─ tổng hợp theo ngày/code/key
+│             DB: usage_logs
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  ⚙️ LUỒNG NỀN (background / infra)                                          │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── src/app/api/cron/purge/route.ts ............ Vercel Cron daily 02:00 UTC
+│   (vercel.json: "0 2 * * *", region "sin1")
+│   • dọn rate_limit_buckets hết hạn
+│   • dọn admin_sessions hết hạn
+│   • dọn failed_logins cũ
+│   • (tuỳ chọn) re-mirror video sắp expire
+│   Bảo vệ bằng CRON_SECRET header
+│
+├── src/lib/
+│   ├── rate-limit.ts ............... fixed-window per code/IP → DB rate_limit_buckets
+│   ├── logger.ts ................... structured JSON log (server-side)
+│   ├── url-allowlist.ts ............ chặn SSRF cho start_image_url
+│   ├── request-ip.ts ............... lấy IP thật từ headers (xforwarded)
+│   ├── api-headers.ts .............. helper gửi `x-activation-code` từ client
+│   ├── is-mobile.ts
+│   ├── format-currency.ts .......... EUR ↔ VND (rate cố định)
+│   ├── video-url-ttl.ts ............ tính expiresAt cho video URL
+│   ├── parse-batch-file.ts ......... đọc xlsx/csv → BatchItem[]
+│   ├── auto-download.ts ............ trigger browser save
+│   ├── error-messages.ts ........... bản dịch lỗi VN
+│   ├── auth/
+│   │   ├── activation.ts ........... validateCode, chargeCode, refundCode
+│   │   ├── admin.ts ................ password compare
+│   │   ├── admin-server.ts ......... session token CRUD
+│   │   └── login-throttle.ts ....... brute-force protection
+│   ├── crypto/aes-gcm.ts ........... mã hoá Freepik key trong DB
+│   ├── db/
+│   │   ├── client.ts ............... Drizzle + Neon Postgres pool
+│   │   └── schema.ts ............... bảng (xem mục Data Model)
+│   ├── form/
+│   │   ├── generator-schema.ts ..... Zod v4 schema
+│   │   ├── defaults.ts
+│   │   ├── to-api-params.ts ........ form → API params
+│   │   └── zod-resolver.ts ......... custom resolver cho RHF + Zod v4
+│   ├── freepik/
+│   │   ├── index.ts (barrel)
+│   │   ├── types.ts
+│   │   ├── base-client.ts .......... HTTP client (timeout, retry, headers)
+│   │   ├── errors.ts ............... FreepikApiError
+│   │   ├── route-helpers.ts ........ extractBearer, errorToResponse
+│   │   ├── orchestrator.ts ......... 🔑 luồng trung tâm: charge + key pool + retry
+│   │   ├── orchestrator-helpers.ts . finalizeUsageOnPoll (charge → succeeded/refunded)
+│   │   ├── key-pool.ts ............. pickActiveKey / markKeyExhausted / recordKeyCost
+│   │   ├── poll-task.ts ............ R2 mirror khi COMPLETED
+│   │   ├── probe-quota.ts .......... gọi Magnific lấy balance
+│   │   ├── kling-v3.ts + schema.ts
+│   │   ├── kling-4k.ts + schema.ts . T2V + I2V (1.12 EUR/s, no audio, no tier)
+│   │   ├── wan-v27.ts + schema.ts
+│   │   └── improve-prompt.ts + schema.ts
+│   ├── pricing/calculator.ts ....... lookup pricing_rules → cost EUR
+│   ├── storage/r2.ts ............... Cloudflare R2 (S3 SDK)
+│   ├── upload/image-host.ts ........ upload ảnh I2V → R2 public URL
+│   └── improve-prompt-runner.ts .... server-side runner cho batch autoEnhance
+│
+├── src/store/ (Zustand + localStorage)
+│   ├── task-store.ts ............... tasks, queue, concurrency, autoEnhance
+│   ├── preferences-store.ts ........ theme, language, autoDownload
+│   ├── auth-store.ts ............... activationCode, customer metadata
+│   └── regenerate-handler-store.ts . cầu nối Preview ↔ Form
+│
+├── src/proxy.ts .................... Next.js middleware (auth check cho /dashboard/(authed))
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  🗄️ DATA MODEL (Neon Postgres + Drizzle)                                    │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── drizzle/migrations/ .............. 0000 → 0006 (snapshot trong meta/)
+│   Bảng:
+│     • freepik_keys      — pool API keys (encrypted, used_eur, max_concurrent)
+│     • activation_codes  — bearer code khách (mode, quota_eur, used_eur)
+│     • usage_logs        — mỗi request 1 row (status, cost, video URLs, TTL)
+│     • pricing_rules     — ma trận giá (endpoint+tier+duration+audio)
+│     • admin_sessions    — SHA-256 token hash, TTL 24h
+│     • rate_limit_buckets — fixed-window counter
+│     • failed_logins     — brute-force lock per IP
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  🛠️ SCRIPTS VẬN HÀNH (chạy thủ công qua `pnpm tsx scripts/...`)             │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── scripts/
+│   ├── db-migrate.ts ................. apply migrations (pnpm db:migrate)
+│   ├── db-status.ts .................. check connection + counts
+│   ├── seed-pricing.ts ............... seed pricing_rules ban đầu
+│   ├── calibrate-pricing.ts .......... tính lại giá từ data thực
+│   ├── upsert-calibrated-pricing.ts
+│   ├── admin-add-key.ts .............. CLI thêm Freepik key
+│   ├── admin-create-code.ts .......... CLI tạo activation code
+│   ├── reconcile-pending-charges.ts .. quét usage_logs.status='pending' lâu → probe + finalize
+│   ├── check-api-key.ts .............. test 1 key có còn quota
+│   ├── test-key-endpoints.ts
+│   ├── test-key-pool.ts
+│   ├── test-charge.ts ................ unit test orchestrator
+│   ├── test-pricing.ts
+│   ├── rotate-encryption-secret.ts ... đổi KEY_ENCRYPTION_SECRET (re-encrypt tất cả keys)
+│   ├── audit-orchestrator-stress.ts .. stress test money path
+│   └── inspect-recent-videos.ts ...... debug video URLs
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  🌐 PHỤ THUỘC NGOÀI                                                          │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+│   • Magnific / Freepik API (default base: api.magnific.com)
+│       - POST /v1/ai/video/kling-v3-{pro|std}     + GET /v1/ai/video/kling-v3/{taskId}
+│       - POST /v1/ai/video/kling-4k-t2v           + GET /v1/ai/video/kling-4k-t2v/{taskId}
+│       - POST /v1/ai/video/kling-4k-i2v           + GET /v1/ai/video/kling-4k-i2v/{taskId}
+│       - POST /v1/ai/video/wan-v27-*              + GET status
+│       - POST /v1/ai/improve-prompt               + GET /v1/ai/improve-prompt/{taskId}
+│   • Cloudflare R2 (env: R2_ACCOUNT_ID, R2_BUCKET, R2_PUBLIC_URL_BASE…) → video mirror, image upload
+│   • Neon Postgres (DATABASE_URL)
+│   • Vercel Cron (vercel.json) — daily purge
+│
+└── ┌──────────────────────────────────────────────────────────────────────────────┐
+    │  🔐 ENV VARS (đã có trên Vercel Production & Preview)                        │
+    └──────────────────────────────────────────────────────────────────────────────┘
+        DATABASE_URL, ADMIN_PASSWORD, ADMIN_SESSION_SECRET, KEY_ENCRYPTION_SECRET,
+        CRON_SECRET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+        R2_BUCKET, R2_PUBLIC_URL_BASE
+```
