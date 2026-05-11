@@ -168,13 +168,20 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
       // Fire-and-forget: POST + poll runs in background.
       //
-      // Retry policy for NO_KEYS_AVAILABLE: pool is saturated by the
-      // per-key concurrency cap (8/key). Customer's request goes into
-      // a client-side queue and retries every 5s for up to 5 minutes
-      // before giving up. Other errors fail immediately.
+      // Retry policy:
+      //   NO_KEYS_AVAILABLE  → loop every 5s for up to 5 min (per-key
+      //                        concurrency cap; queue drains as soon
+      //                        as another task completes).
+      //   ALL_KEYS_EXHAUSTED → exactly one retry after 30s (orchestrator
+      //                        gave up across all keys; pool may have
+      //                        recovered by then via admin add-key /
+      //                        quota top-up).
+      //   anything else      → fail fast.
       const RETRY_DELAY_MS = 5_000;
       const MAX_RETRY_MS = 5 * 60_000; // 5 minutes
+      const ALL_KEYS_RETRY_DELAY_MS = 30_000;
       const startMs = Date.now();
+      let allKeysRetried = false;
 
       (async () => {
         let json: { data: { task_id: string }; balance?: BalanceUpdate } | null = null;
@@ -192,13 +199,26 @@ export function useGenerateVideo(): UseGenerateVideoResult {
             }
 
             const err = await extractErrorBody(res);
-            // Pool saturated → keep waiting. Any other error fails fast.
+            // Pool saturated → keep waiting. ALL_KEYS_EXHAUSTED is the
+            // panic exit from the server orchestrator's per-key retry;
+            // give it one more shot after a longer wait — admin often
+            // adds a key or tops up quota within ~30s once they get
+            // the alert.
             if (err.code === "NO_KEYS_AVAILABLE" && Date.now() - startMs < MAX_RETRY_MS) {
               useTaskStore.getState().updateTask(localId, {
                 status: "QUEUED",
                 error: null,
               });
               await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+              continue;
+            }
+            if (err.code === "ALL_KEYS_EXHAUSTED" && !allKeysRetried) {
+              allKeysRetried = true;
+              useTaskStore.getState().updateTask(localId, {
+                status: "QUEUED",
+                error: null,
+              });
+              await new Promise((r) => setTimeout(r, ALL_KEYS_RETRY_DELAY_MS));
               continue;
             }
 
