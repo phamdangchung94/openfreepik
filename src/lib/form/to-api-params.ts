@@ -211,3 +211,25 @@ export function toBatchT2VParams(
     end_image_url: "",
   });
 }
+
+/** Kling 4K T2V batch item — override prompt, reuse shared settings. */
+export function toBatchKling4kT2vParams(
+  v: GeneratorFormValues,
+  prompt: string,
+): Kling4kT2vGenerateParams {
+  return toKling4kT2vParams({ ...v, mode: "t2v", prompt });
+}
+
+/** Kling 4K I2V batch item — override per-item image + prompt. */
+export function toBatchKling4kI2vParams(
+  v: GeneratorFormValues,
+  imageUrl: string,
+  prompt: string,
+): Kling4kI2vGenerateParams {
+  return toKling4kI2vParams({
+    ...v,
+    mode: "i2v",
+    start_image_url: imageUrl,
+    prompt,
+  });
+}

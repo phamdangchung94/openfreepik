@@ -4,8 +4,13 @@ import { useCallback, useRef } from "react";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore, type BalanceUpdate } from "@/store/auth-store";
 import { getApiHeaders, extractErrorBody } from "@/lib/api-headers";
-import { toBatchApiParams, toBatchT2VParams } from "@/lib/form/to-api-params";
-import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
+import {
+  toBatchApiParams,
+  toBatchT2VParams,
+  toBatchKling4kT2vParams,
+  toBatchKling4kI2vParams,
+} from "@/lib/form/to-api-params";
+import { pollTaskUntilDone, type PollEndpoint } from "@/lib/freepik/poll-task";
 import { enhancePromptOnce } from "@/lib/improve-prompt-runner";
 import { expiresFromNow } from "@/lib/video-url-ttl";
 import type { BatchItem, GeneratorFormValues } from "@/lib/form/generator-schema";
@@ -34,11 +39,12 @@ interface UseBatchQueueResult {
 async function runPollTask(
   apiTaskId: string,
   localId: string,
+  endpoint: PollEndpoint,
   signal: AbortSignal,
 ) {
   const result = await pollTaskUntilDone({
     apiTaskId,
-    endpoint: "kling-v3",
+    endpoint,
     signal,
     onProgress: (status) => {
       if (status === "IN_PROGRESS") {
@@ -133,10 +139,36 @@ export function useBatchQueue(): UseBatchQueueResult {
 
       if (signal.aborted) return;
 
-      const params =
-        itemData.mode === "i2v" && itemData.imageUrl
-          ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
-          : toBatchT2VParams(formValues, prompt);
+      // Dispatch by model. Kling V3 carries tier in the body; Kling 4K
+      // splits T2V/I2V into separate request shapes; WAN isn't wired
+      // through the batch UI (image-driven from a different code path)
+      // so falls through to FAILED if it somehow reaches here.
+      let endpoint: PollEndpoint;
+      let body: object;
+      if (formValues.model === "kling-v3") {
+        const params =
+          itemData.mode === "i2v" && itemData.imageUrl
+            ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
+            : toBatchT2VParams(formValues, prompt);
+        endpoint = "kling-v3";
+        body = { params, tier: formValues.tier };
+      } else if (formValues.model === "kling-4k") {
+        if (itemData.mode === "i2v" && itemData.imageUrl) {
+          endpoint = "kling-4k-i2v";
+          body = {
+            params: toBatchKling4kI2vParams(formValues, itemData.imageUrl, prompt),
+          };
+        } else {
+          endpoint = "kling-4k-t2v";
+          body = { params: toBatchKling4kT2vParams(formValues, prompt) };
+        }
+      } else {
+        useTaskStore.getState().updateTask(localId, {
+          status: "FAILED",
+          error: `Batch chưa hỗ trợ model ${formValues.model}`,
+        });
+        return;
+      }
 
       // Retry policy mirrors use-generate-video: when the upstream
       // pool is saturated by the per-key concurrency cap, queue the
@@ -148,10 +180,10 @@ export function useBatchQueue(): UseBatchQueueResult {
       let json: { data: { task_id: string }; balance?: BalanceUpdate } | null = null;
       for (;;) {
         if (signal.aborted) return;
-        const res = await fetch("/api/freepik/kling-v3", {
+        const res = await fetch(`/api/freepik/${endpoint}`, {
           method: "POST",
           headers: getApiHeaders(),
-          body: JSON.stringify({ params, tier: formValues.tier }),
+          body: JSON.stringify(body),
           signal,
         });
         if (res.ok) {
@@ -188,7 +220,7 @@ export function useBatchQueue(): UseBatchQueueResult {
       if (json.balance) {
         useAuthStore.getState().mergeBalance(json.balance);
       }
-      await runPollTask(apiTaskId, localId, signal);
+      await runPollTask(apiTaskId, localId, endpoint, signal);
     } catch (err) {
       // AbortError = caller cancelled. Don't overwrite the CANCELLED
       // status that cancelBatch() already wrote.

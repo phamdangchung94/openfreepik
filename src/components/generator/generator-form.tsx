@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useImperativeHandle, forwardRef } from "
 import { useForm, FormProvider } from "react-hook-form";
 import { customZodResolver } from "@/lib/form/zod-resolver";
 import { Settings2 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,14 +119,6 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   }, []);
 
   const onFormSubmit = (values: GeneratorFormValues) => {
-    // Batch and multi-copy flows currently dispatch through the Kling V3
-    // endpoint in use-batch-queue. Block until that hook learns to
-    // route to the Kling 4K T2V/I2V endpoints so customers don't burn
-    // pool credits on the wrong upstream.
-    if (values.model === "kling-4k" && (isBatchMode || singleQty > 1)) {
-      toast.error("Kling 4K chưa hỗ trợ batch — hãy tạo từng video một");
-      return;
-    }
     if (isBatchMode && onSubmitBatch) {
       onSubmitBatch(batchItems, values);
     } else if (singleQty > 1 && onSubmitBatch) {
