@@ -81,7 +81,10 @@ export async function pollTaskUntilDone(
     apiTaskId,
     endpoint,
     intervalMs = 2_000,
-    maxTimeMs = 600_000,
+    // 30 min (was 10 min). Peak-hour Magnific renders sometimes exceed
+    // 10 min before returning a URL; the bumped budget keeps tasks from
+    // surfacing as TIMEOUT while they're still legitimately rendering.
+    maxTimeMs = 1_800_000,
     signal,
     onProgress,
   } = opts;

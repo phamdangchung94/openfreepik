@@ -26,7 +26,10 @@ export function useTaskPolling(opts: UseTaskPollingOptions): UseTaskPollingResul
     taskId,
     fetcher,
     intervalMs = 2000,
-    maxTimeMs = 600000,
+    // 30 min (was 10 min). Peak-hour Magnific renders sometimes exceed
+    // 10 min before returning a URL; the bumped budget keeps tasks from
+    // surfacing as TIMEOUT while they're still legitimately rendering.
+    maxTimeMs = 1_800_000,
     enabled = true,
   } = opts;
 
