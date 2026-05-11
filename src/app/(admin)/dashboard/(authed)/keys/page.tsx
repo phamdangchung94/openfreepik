@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   Activity,
+  Check,
+  Copy,
   Pencil,
   Plus,
   RefreshCw,
@@ -30,6 +32,12 @@ import { formatVndWithEur } from "@/lib/format-currency";
 interface KeyRow {
   id: string;
   label: string;
+  /**
+   * Decrypted Freepik API key. Null if KEY_ENCRYPTION_SECRET rotated
+   * and the stored ciphertext can no longer be decrypted — admin must
+   * re-enter that key.
+   */
+  plaintextKey: string | null;
   assignedEur: string;
   usedEur: string;
   isActive: boolean;
@@ -294,6 +302,8 @@ function KeyCard({
           </Badge>
         </div>
 
+        <ApiKeyDisplay plaintextKey={row.plaintextKey} />
+
         <div className="space-y-1">
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-muted-foreground">Spent</span>
@@ -398,6 +408,43 @@ function ProbeResultPanel({ probe }: { probe: ProbeResult }) {
           {probe.bodySnippet}
         </div>
       )}
+    </div>
+  );
+}
+
+function ApiKeyDisplay({ plaintextKey }: { plaintextKey: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    if (!plaintextKey) return;
+    navigator.clipboard.writeText(plaintextKey);
+    setCopied(true);
+    toast.success("API key copied");
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  if (!plaintextKey) {
+    return (
+      <div className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-[11px] text-destructive">
+        Decrypt failed — KEY_ENCRYPTION_SECRET may have rotated. Re-enter this key.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1.5">
+      <code className="min-w-0 flex-1 truncate font-mono text-[11px]" title={plaintextKey}>
+        {plaintextKey}
+      </code>
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={copy}
+        title="Copy API key"
+        className="shrink-0"
+      >
+        {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+      </Button>
     </div>
   );
 }

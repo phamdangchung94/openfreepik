@@ -6,8 +6,17 @@ import { freepikKeys } from "@/lib/db/schema";
 import { addKey } from "@/lib/freepik/key-pool";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
+import { decrypt } from "@/lib/crypto/aes-gcm";
+import { errFields, log } from "@/lib/logger";
 
-/** GET /api/admin/keys — list keys (no plaintext exposed). */
+/**
+ * GET /api/admin/keys — list keys WITH decrypted plaintext.
+ *
+ * Admin needs the raw key string for manual debugging / probing the
+ * upstream account / migrating to another tool. Gated by admin session
+ * (cookie). Decrypt failures don't bubble up — the row still renders
+ * with plaintextKey=null so the rest of the dashboard keeps working.
+ */
 export async function GET() {
   const denied = await requireAdminApi();
   if (denied) return denied;
@@ -16,6 +25,7 @@ export async function GET() {
     .select({
       id: freepikKeys.id,
       label: freepikKeys.label,
+      keyEncrypted: freepikKeys.keyEncrypted,
       assignedEur: freepikKeys.assignedEur,
       usedEur: freepikKeys.usedEur,
       isActive: freepikKeys.isActive,
@@ -31,7 +41,19 @@ export async function GET() {
     // duplicates doesn't pull a million rows.
     .limit(100);
 
-  return NextResponse.json({ ok: true, keys: rows });
+  const keys = await Promise.all(
+    rows.map(async ({ keyEncrypted, ...rest }) => {
+      let plaintextKey: string | null = null;
+      try {
+        plaintextKey = await decrypt(keyEncrypted);
+      } catch (err) {
+        log.error("KEY_DECRYPT_FAILED", { keyId: rest.id, ...errFields(err) });
+      }
+      return { ...rest, plaintextKey };
+    }),
+  );
+
+  return NextResponse.json({ ok: true, keys });
 }
 
 const createSchema = z.object({
