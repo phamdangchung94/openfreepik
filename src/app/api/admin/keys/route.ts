@@ -26,6 +26,7 @@ export async function GET() {
       id: freepikKeys.id,
       label: freepikKeys.label,
       keyEncrypted: freepikKeys.keyEncrypted,
+      webhookSecretEncrypted: freepikKeys.webhookSecretEncrypted,
       assignedEur: freepikKeys.assignedEur,
       usedEur: freepikKeys.usedEur,
       isActive: freepikKeys.isActive,
@@ -42,14 +43,18 @@ export async function GET() {
     .limit(100);
 
   const keys = await Promise.all(
-    rows.map(async ({ keyEncrypted, ...rest }) => {
+    rows.map(async ({ keyEncrypted, webhookSecretEncrypted, ...rest }) => {
       let plaintextKey: string | null = null;
       try {
         plaintextKey = await decrypt(keyEncrypted);
       } catch (err) {
         log.error("KEY_DECRYPT_FAILED", { keyId: rest.id, ...errFields(err) });
       }
-      return { ...rest, plaintextKey };
+      // Surface presence only — admin doesn't need to re-view the
+      // webhook secret itself, just confirm it's stored. Skips a
+      // decrypt call per row.
+      const hasWebhookSecret = webhookSecretEncrypted !== null;
+      return { ...rest, plaintextKey, hasWebhookSecret };
     }),
   );
 
@@ -59,6 +64,11 @@ export async function GET() {
 const createSchema = z.object({
   label: z.string().min(1).max(120),
   plaintextKey: z.string().min(8).max(256),
+  /**
+   * Optional Svix-style webhook signing secret from Magnific. When
+   * provided, the orchestrator opts this key into webhook delivery.
+   */
+  webhookSecret: z.string().min(8).max(256).optional(),
   assignedEur: z.number().positive().optional(),
   notes: z.string().max(500).optional(),
 });

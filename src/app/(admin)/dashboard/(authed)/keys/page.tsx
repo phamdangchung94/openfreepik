@@ -38,6 +38,13 @@ interface KeyRow {
    * re-enter that key.
    */
   plaintextKey: string | null;
+  /**
+   * Whether this key has a Magnific webhook secret configured. The
+   * secret itself isn't returned to the browser — only the presence
+   * flag — since admin only needs to know "is this key opted in to
+   * push delivery?" Migration 0007.
+   */
+  hasWebhookSecret?: boolean;
   assignedEur: string;
   usedEur: string;
   isActive: boolean;
@@ -294,12 +301,23 @@ function KeyCard({
               <p className="text-[11px] text-muted-foreground">{row.notes}</p>
             )}
           </div>
-          <Badge
-            variant={row.isActive ? "default" : "secondary"}
-            className="text-[10px]"
-          >
-            {row.isActive ? "active" : "inactive"}
-          </Badge>
+          <div className="flex shrink-0 items-center gap-1">
+            {row.hasWebhookSecret && (
+              <Badge
+                variant="outline"
+                className="text-[10px]"
+                title="Magnific posts task completions to /api/freepik/webhook for this key"
+              >
+                webhook
+              </Badge>
+            )}
+            <Badge
+              variant={row.isActive ? "default" : "secondary"}
+              className="text-[10px]"
+            >
+              {row.isActive ? "active" : "inactive"}
+            </Badge>
+          </div>
         </div>
 
         <ApiKeyDisplay plaintextKey={row.plaintextKey} />
@@ -633,6 +651,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [plaintextKey, setPlaintextKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
   const [assignedEur, setAssignedEur] = useState("500");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
@@ -647,6 +666,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
         body: JSON.stringify({
           label,
           plaintextKey,
+          webhookSecret: webhookSecret.trim() || undefined,
           assignedEur: Number(assignedEur),
           notes: notes || undefined,
         }),
@@ -659,6 +679,7 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
       toast.success("Key added");
       setLabel("");
       setPlaintextKey("");
+      setWebhookSecret("");
       setAssignedEur("500");
       setNotes("");
       setOpen(false);
@@ -704,6 +725,21 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
             />
             <p className="text-[10px] text-muted-foreground">
               Stored AES-GCM encrypted. Plaintext is never persisted in logs.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Webhook secret (optional)</Label>
+            <Input
+              type="password"
+              placeholder="whsec_... or hex / base64"
+              value={webhookSecret}
+              onChange={(e) => setWebhookSecret(e.target.value)}
+              autoComplete="off"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Magnific webhook signing secret. When set, this key opts
+              into push delivery — Magnific posts task completions to
+              /api/freepik/webhook. Leave empty to use client polling.
             </p>
           </div>
           <div className="space-y-1.5">

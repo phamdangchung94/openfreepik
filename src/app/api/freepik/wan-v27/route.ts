@@ -13,6 +13,7 @@ import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
+import { getWebhookUrl } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 const WAN_V27_RATE_LIMIT = 3;
@@ -94,6 +95,11 @@ export async function POST(request: Request) {
     throw err;
   }
 
+  const webhookUrl = getWebhookUrl();
+  const paramsWithWebhook = webhookUrl
+    ? { ...params, webhook_url: webhookUrl }
+    : params;
+
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
     preValidated: validation,
@@ -103,7 +109,8 @@ export async function POST(request: Request) {
     tier: params.resolution === "720P" ? "std" : "pro",
     durationSeconds: params.duration ?? 5,
     withAudio: false,
-    callFreepik: (apiKey) => freepik.wanV27.generate(params, { apiKey }),
+    callFreepik: (apiKey) =>
+      freepik.wanV27.generate(paramsWithWebhook, { apiKey }),
     extractTaskId: (data) => data.task_id,
   });
 

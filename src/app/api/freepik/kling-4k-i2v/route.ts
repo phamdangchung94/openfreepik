@@ -13,6 +13,7 @@ import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
+import { getWebhookUrl } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 const RATE_LIMIT = 3;
@@ -87,6 +88,11 @@ export async function POST(request: Request) {
     throw err;
   }
 
+  const webhookUrl = getWebhookUrl();
+  const paramsWithWebhook = webhookUrl
+    ? { ...params, webhook_url: webhookUrl }
+    : params;
+
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
     preValidated: validation,
@@ -94,7 +100,8 @@ export async function POST(request: Request) {
     costEur: cost,
     durationSeconds: lookup.durationSeconds,
     withAudio: false,
-    callFreepik: (apiKey) => freepik.kling4k.generateI2v(params, { apiKey }),
+    callFreepik: (apiKey) =>
+      freepik.kling4k.generateI2v(paramsWithWebhook, { apiKey }),
     extractTaskId: (data) => data.task_id,
   });
 

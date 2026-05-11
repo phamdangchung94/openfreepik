@@ -22,6 +22,13 @@ export const freepikKeys = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     label: text("label").notNull(),
     keyEncrypted: text("key_encrypted").notNull(),
+    /**
+     * Magnific webhook signing secret (AES-GCM). When set, the
+     * orchestrator includes a webhook_url in upstream requests so
+     * Magnific posts task completions back to /api/freepik/webhook.
+     * Null = legacy key, fall back to client polling. Migration 0007.
+     */
+    webhookSecretEncrypted: text("webhook_secret_encrypted"),
     assignedEur: numeric("assigned_eur", { precision: 10, scale: 2 })
       .notNull()
       .default("500.00"),

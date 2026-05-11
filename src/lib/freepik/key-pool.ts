@@ -195,23 +195,68 @@ export async function recordKeyCost(
 export interface AddKeyOptions {
   label: string;
   plaintextKey: string;
+  /**
+   * Optional Magnific webhook signing secret. When supplied, the
+   * orchestrator opts this key into webhook delivery — Magnific
+   * posts task completions back instead of (or in addition to) the
+   * client poll.
+   */
+  webhookSecret?: string;
   assignedEur?: number;
   notes?: string;
 }
 
 /**
  * Encrypt and insert a new Freepik key. Used by the admin CLI today
- * (scripts/admin-add-key.ts) and by the admin dashboard in Phase 10.
+ * (scripts/admin-add-key.ts) and by the admin dashboard.
  */
 export async function addKey(opts: AddKeyOptions): Promise<{ id: string }> {
   const keyEncrypted = await encrypt(opts.plaintextKey);
+  const webhookSecretEncrypted = opts.webhookSecret
+    ? await encrypt(opts.webhookSecret)
+    : null;
   const row: NewFreepikKey = {
     label: opts.label,
     keyEncrypted,
+    webhookSecretEncrypted,
     assignedEur: (opts.assignedEur ?? 500).toFixed(2),
     notes: opts.notes,
   };
   const [inserted] = await db.insert(freepikKeys).values(row).returning();
   if (!inserted) throw new Error("Insert returned no rows");
   return { id: inserted.id };
+}
+
+/**
+ * Pick an active key that has a webhook secret configured. Used by
+ * the webhook receiver to verify incoming Magnific callbacks — we try
+ * each candidate's secret against the signature header. Returns the
+ * decrypted webhook_secret strings keyed by key id.
+ *
+ * Cheap (≤20 keys typically, no joins). Called once per webhook hit.
+ */
+export async function getKeyWebhookSecrets(): Promise<
+  { id: string; label: string; webhookSecret: string }[]
+> {
+  const rows = await db
+    .select({
+      id: freepikKeys.id,
+      label: freepikKeys.label,
+      webhookSecretEncrypted: freepikKeys.webhookSecretEncrypted,
+    })
+    .from(freepikKeys)
+    .where(eq(freepikKeys.isActive, true));
+
+  const out: { id: string; label: string; webhookSecret: string }[] = [];
+  for (const r of rows) {
+    if (!r.webhookSecretEncrypted) continue;
+    try {
+      const webhookSecret = await decrypt(r.webhookSecretEncrypted);
+      out.push({ id: r.id, label: r.label, webhookSecret });
+    } catch {
+      // decrypt failed — KEY_ENCRYPTION_SECRET rotated for this row;
+      // skip silently so the webhook receiver still works for the rest.
+    }
+  }
+  return out;
 }

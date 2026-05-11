@@ -17,6 +17,7 @@ import { addKey } from "../src/lib/freepik/key-pool";
 interface Args {
   label: string;
   key: string;
+  webhookSecret: string | undefined;
   assigned: number;
   notes: string | undefined;
 }
@@ -40,6 +41,7 @@ function parseArgs(): Args {
   return {
     label: args.label,
     key: args.key,
+    webhookSecret: args["webhook-secret"],
     assigned: args.assigned ? Number(args.assigned) : 500,
     notes: args.notes,
   };
@@ -50,6 +52,7 @@ async function main() {
   const { id } = await addKey({
     label: args.label,
     plaintextKey: args.key,
+    webhookSecret: args.webhookSecret,
     assignedEur: args.assigned,
     notes: args.notes,
   });
@@ -60,6 +63,7 @@ async function main() {
     label: args.label,
     assignedEur: args.assigned,
     keyPreview: args.key.slice(0, 6) + "***" + args.key.slice(-4),
+    webhookConfigured: args.webhookSecret ? "yes" : "no",
   });
 }
 

@@ -32,6 +32,7 @@ All of these are set in Vercel production AND mirrored in `.env.local` for devel
 | `ADMIN_PASSWORD` | Login to `/dashboard` | Active admin sessions still valid until cookie expires (24h) |
 | `ADMIN_SESSION_SECRET` | Cookie session validation | All admin sessions invalidated immediately on rotation |
 | `CRON_SECRET` | Bearer for `/api/cron/purge` | Vercel Cron auto-uses the new value on next scheduled run |
+| `WEBHOOK_BASE_URL` | Optional override for Magnific webhook callback (e.g. custom domain). Falls back to `https://${VERCEL_PROJECT_PRODUCTION_URL}` when `VERCEL_ENV=production`. | None — read fresh on every POST to `/api/freepik/*` |
 
 ---
 
@@ -67,12 +68,37 @@ pnpm dlx vercel deploy --prod --token $VERCEL_TOKEN --yes
 
 1. Go to https://openfreepik.vercel.app/dashboard → **Freepik keys** → **Add key**
 2. Paste plaintext API key (starts with `FPSX...`)
-3. Set `assignedEur` to whatever Freepik gave you (default 500 EUR free tier)
-4. Submit — key is AES-GCM encrypted before insert
-5. New requests pick the LRU active key, so the new one starts taking traffic immediately
-6. Optional: deactivate the exhausted key to remove from rotation: dashboard → key card → **Deactivate**
+3. **Webhook secret (optional)** — if you've registered the OpenFreepik webhook URL on this Magnific account, paste its signing secret here. Without it, Magnific won't deliver push callbacks for tasks served by this key and the client polls drive finalization. Either path is fine — webhook just trims polling latency.
+4. Set `assignedEur` to whatever Freepik gave you (default 500 EUR free tier)
+5. Submit — both secrets are AES-GCM encrypted before insert
+6. New requests pick the LRU active key, so the new one starts taking traffic immediately
+7. Optional: deactivate the exhausted key to remove from rotation: dashboard → key card → **Deactivate**
 
 > ⚠️ **Single-key risk** (audit `$4`): production currently runs with exactly 1 key. A 5-second outage of that key = full service outage. Add a 2nd Freepik account and provision a backup key.
+
+### Configure webhook delivery for a Magnific account
+
+Magnific's push delivery cuts customer wait time from "poll every 2-10s" to "instant fan-out". One-time setup per Freepik key:
+
+1. Log into the Magnific dashboard for that account → API → Webhooks.
+2. Register endpoint `https://openfreepik.vercel.app/api/freepik/webhook` (or your custom domain → same path).
+3. Magnific shows a signing secret (often hex-encoded). Copy it.
+4. Open the OpenFreepik admin dashboard → **Freepik keys** → edit the matching key → paste the secret.
+5. Verify: trigger a small generation, watch logs for `WEBHOOK_RECEIVED`. The companion poll route still runs as a safety net.
+
+Signature verification uses HMAC-SHA256 over `${webhook-id}.${webhook-timestamp}.${raw-body}`. We try the secret as UTF-8 raw bytes, hex-decoded, and base64-decoded so different Magnific surface formats all work. Replay window is 5 min.
+
+### Separate the dev database from production (audit #2)
+
+The default Neon project ships with one branch; `pnpm dev` and production currently share it. To isolate:
+
+1. Neon Console → project `openfreepik` → **Branches** → **New branch** → name `dev`, copy data from `main`. Snapshot is instant — branches share storage, so the dev branch is free until it diverges.
+2. Click the new branch → **Connection string** → copy.
+3. Update local `.env.local`: replace `DATABASE_URL` with the dev branch's connection string. Production Vercel env stays pointed at `main`.
+4. (Optional) Add a `DATABASE_URL` override in Vercel's **Development** environment with the dev branch — so any future Vercel CLI dev runs also stay isolated.
+5. Reset dev branch back to current prod state any time: Neon Console → branch `dev` → **Reset from parent**. Useful before testing migrations.
+
+After the split: `pnpm db:migrate` and `pnpm db:seed-pricing` only touch the dev branch. Apply the same migration to prod via the Neon SQL editor or by promoting the dev branch when ready.
 
 ### Mint an activation code for a new customer
 
