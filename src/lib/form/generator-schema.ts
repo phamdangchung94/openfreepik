@@ -20,10 +20,11 @@ export const generatorFormSchema = z
   .object({
     /**
      * Which upstream video model to use. Drives both the form UI
-     * (Kling shows tier/aspect-ratio/audio/multi-shot; WAN shows
-     * resolution picker) AND the dispatch endpoint in use-generate-video.
+     * (Kling V3 shows tier/aspect-ratio/audio/multi-shot; Kling 4K
+     * shows just duration + cfg + aspect/T2V; WAN shows resolution
+     * picker) AND the dispatch endpoint in use-generate-video.
      */
-    model: z.enum(["kling-v3", "wan-v27"]).default("kling-v3"),
+    model: z.enum(["kling-v3", "kling-4k", "wan-v27"]).default("kling-v3"),
     mode: z.enum(["t2v", "i2v"]),
     prompt: z.string().default(""),
     negative_prompt: z.string().max(2500).default("blur, distort, and low quality"),
@@ -65,6 +66,27 @@ export const generatorFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "WAN 2.7 yêu cầu ảnh đầu (start image).",
+          path: ["start_image_url"],
+        });
+      }
+      return;
+    }
+
+    // Kling 4K: T2V needs prompt, I2V needs image. Same shape as V3
+    // but the upstream rejects multi-shot / elements (we strip those
+    // in toApiParams when model=kling-4k).
+    if (data.model === "kling-4k") {
+      if (data.mode === "t2v" && !data.prompt.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Prompt là bắt buộc với Kling 4K T2V",
+          path: ["prompt"],
+        });
+      }
+      if (data.mode === "i2v" && !data.start_image_url.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cần ảnh đầu với Kling 4K I2V",
           path: ["start_image_url"],
         });
       }

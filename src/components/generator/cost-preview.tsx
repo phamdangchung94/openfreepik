@@ -27,6 +27,7 @@ interface CostPreviewProps {
 export function CostPreview({ count = 1 }: CostPreviewProps) {
   const { watch } = useFormContext<GeneratorFormValues>();
   const model = watch("model");
+  const mode = watch("mode");
   const tier = watch("tier");
   const resolution = watch("resolution");
   const duration = watch("duration");
@@ -52,13 +53,21 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
         withAudio: false,
       });
     }
+    if (model === "kling-4k") {
+      return lookupCost(rates, {
+        endpoint: mode === "t2v" ? "kling-4k-t2v" : "kling-4k-i2v",
+        tier: null,
+        durationSeconds: Number(duration),
+        withAudio: false,
+      });
+    }
     return lookupCost(rates, {
       endpoint: "kling-v3",
       tier,
       durationSeconds: Number(duration),
       withAudio: !!audio,
     });
-  }, [rates, model, tier, resolution, duration, audio]);
+  }, [rates, model, mode, tier, resolution, duration, audio]);
 
   if (!rates) {
     // Skeleton matches the loaded card's footprint (rounded-2xl + same

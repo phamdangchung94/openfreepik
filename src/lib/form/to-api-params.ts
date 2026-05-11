@@ -5,6 +5,8 @@
  */
 
 import type {
+  Kling4kI2vGenerateParams,
+  Kling4kT2vGenerateParams,
   KlingV3Duration,
   KlingV3GenerateParams,
   WanV27GenerateParams,
@@ -43,6 +45,43 @@ export function toWanParams(v: GeneratorFormValues): WanV27GenerateParams {
   if (v.start_image_url?.trim()) {
     params.start_image_url = v.start_image_url.trim();
   }
+  return params;
+}
+
+/**
+ * Build Kling 4K T2V params from form values. Mirrors the kling-v3
+ * T2V shape but omits tier/audio/multi-shot/elements (none supported
+ * upstream) and forces duration into the 3–15 enum (no "2").
+ */
+export function toKling4kT2vParams(v: GeneratorFormValues): Kling4kT2vGenerateParams {
+  const params: Kling4kT2vGenerateParams = {
+    prompt: v.prompt?.trim() ?? "",
+    aspect_ratio: v.aspect_ratio,
+    duration: coerceKlingDuration(v.duration),
+    cfg_scale: v.cfg_scale,
+  };
+  const neg = v.negative_prompt?.trim();
+  if (neg) params.negative_prompt = neg;
+  return params;
+}
+
+/**
+ * Build Kling 4K I2V params from form values. `image` is required —
+ * the form schema's superRefine guarantees start_image_url is set
+ * when model=kling-4k AND mode=i2v.
+ */
+export function toKling4kI2vParams(v: GeneratorFormValues): Kling4kI2vGenerateParams {
+  const params: Kling4kI2vGenerateParams = {
+    image: v.start_image_url.trim(),
+    duration: coerceKlingDuration(v.duration),
+    cfg_scale: v.cfg_scale,
+  };
+  const prompt = v.prompt?.trim();
+  if (prompt) params.prompt = prompt;
+  const neg = v.negative_prompt?.trim();
+  if (neg) params.negative_prompt = neg;
+  const tail = v.end_image_url?.trim();
+  if (tail) params.image_tail = tail;
   return params;
 }
 

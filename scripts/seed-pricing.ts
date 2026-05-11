@@ -37,8 +37,23 @@ const WAN_RATES = {
   pro: { perSecond: 0.30 }, // 1080P — higher resolution = more compute
 } as const;
 
+/**
+ * Kling 4K rate (T2V + I2V, both variants priced identically).
+ *
+ * Derivation: business rule is "Kling 4K = 2.857142857× Kling V3 Pro
+ * 1080p with audio per the customer-facing tier mapping". Pro with
+ * audio per-second = 0.392 EUR (RATES.pro.perSecondAudio). So:
+ *
+ *   KLING_4K_PER_SECOND = 0.392 × 20/7 = 1.12 EUR/s exactly
+ *
+ * Kling 4K's API doesn't expose an audio parameter — the video is
+ * silent — so we seed only the withAudio=false row.
+ */
+const KLING_4K_PER_SECOND = 1.12;
+
 const DURATIONS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
 const WAN_DURATIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+const KLING_4K_DURATIONS = DURATIONS;
 
 function buildRules(): NewPricingRule[] {
   const rules: NewPricingRule[] = [];
@@ -77,6 +92,21 @@ function buildRules(): NewPricingRule[] {
         durationSeconds: duration,
         withAudio: false,
         costEur: (rate.perSecond * duration).toFixed(2),
+      });
+    }
+  }
+
+  // Kling 4K — T2V + I2V at the same per-second rate (1.12 EUR/s).
+  // No tier, no audio. Separate endpoint keys so admin can split rates
+  // per-variant later if Magnific publishes differing prices.
+  for (const endpoint of ["kling-4k-t2v", "kling-4k-i2v"] as const) {
+    for (const duration of KLING_4K_DURATIONS) {
+      rules.push({
+        endpoint,
+        tier: null,
+        durationSeconds: duration,
+        withAudio: false,
+        costEur: (KLING_4K_PER_SECOND * duration).toFixed(2),
       });
     }
   }

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useImperativeHandle, forwardRef } from "
 import { useForm, FormProvider } from "react-hook-form";
 import { customZodResolver } from "@/lib/form/zod-resolver";
 import { Settings2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import {
   type BatchItem,
 } from "@/lib/form/generator-schema";
 import { FORM_DEFAULTS } from "@/lib/form/defaults";
-import { toApiParams } from "@/lib/form/to-api-params";
+import { toApiParams, toKling4kT2vParams, toKling4kI2vParams } from "@/lib/form/to-api-params";
 import { ModeToggle } from "./mode-toggle";
 import { PromptField } from "./prompt-field";
 import { AspectRatioPicker } from "./aspect-ratio-picker";
@@ -85,6 +86,8 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const mode = watch("mode");
   const model = watch("model");
   const isWan = model === "wan-v27";
+  const isKling4k = model === "kling-4k";
+  const isKling3 = model === "kling-v3";
 
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [t2vBatchText, setT2vBatchText] = useState("");
@@ -117,6 +120,14 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   }, []);
 
   const onFormSubmit = (values: GeneratorFormValues) => {
+    // Batch and multi-copy flows currently dispatch through the Kling V3
+    // endpoint in use-batch-queue. Block until that hook learns to
+    // route to the Kling 4K T2V/I2V endpoints so customers don't burn
+    // pool credits on the wrong upstream.
+    if (values.model === "kling-4k" && (isBatchMode || singleQty > 1)) {
+      toast.error("Kling 4K chưa hỗ trợ batch — hãy tạo từng video một");
+      return;
+    }
     if (isBatchMode && onSubmitBatch) {
       onSubmitBatch(batchItems, values);
     } else if (singleQty > 1 && onSubmitBatch) {
@@ -133,13 +144,28 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       }));
       onSubmitBatch(items, values);
     } else if (onSubmitSingle) {
-      // Branch payload shape on model — Kling carries tier, WAN carries
-      // the resolution-encoded shape derived in toWanParams.
+      // Branch payload shape on model. Kling 3 carries tier, Kling 4K
+      // splits T2V/I2V into separate request shapes, WAN carries the
+      // resolution-encoded shape from toWanParams.
       if (values.model === "wan-v27") {
         onSubmitSingle({
           model: "wan-v27",
           params: toWanParams(values),
         });
+      } else if (values.model === "kling-4k") {
+        if (values.mode === "t2v") {
+          onSubmitSingle({
+            model: "kling-4k",
+            variant: "t2v",
+            params: toKling4kT2vParams(values),
+          });
+        } else {
+          onSubmitSingle({
+            model: "kling-4k",
+            variant: "i2v",
+            params: toKling4kI2vParams(values),
+          });
+        }
       } else {
         onSubmitSingle({
           model: "kling-v3",
@@ -238,6 +264,14 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 <ResolutionPicker />
                 <DurationSlider />
               </>
+            ) : isKling4k ? (
+              // Kling 4K: single SKU (no tier), no audio (silent),
+              // no multi-shot. T2V keeps the aspect-ratio picker;
+              // I2V infers aspect from the source image.
+              <>
+                {mode === "t2v" && <AspectRatioPicker />}
+                <DurationSlider />
+              </>
             ) : (
               <>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -251,8 +285,8 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           </CardContent>
         </Card>
 
-        {!isWan && <GeneratorAdvancedSettings />}
-        {!isWan && <GeneratorMultiShotSection />}
+        {isKling3 && <GeneratorAdvancedSettings />}
+        {isKling3 && <GeneratorMultiShotSection />}
 
         {/* Real-time cost preview — updates as tier/duration/audio change.
             When the customer sets singleQty > 1, multiply by qty so the

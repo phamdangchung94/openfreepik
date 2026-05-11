@@ -46,12 +46,27 @@ export default function HomePage() {
         toast.error("Bạn cần kích hoạt mã trước");
         return;
       }
+      // Derive {mode, imageUrl} per model — each has a different image
+      // field shape (Kling V3/WAN use start_image_url, Kling 4K I2V
+      // uses `image`, Kling 4K T2V has neither).
+      let mode: "t2v" | "i2v";
+      let imageUrl: string | undefined;
+      if (payload.model === "kling-4k") {
+        mode = payload.variant;
+        imageUrl = payload.variant === "i2v" ? payload.params.image : undefined;
+      } else if (payload.model === "wan-v27") {
+        mode = "i2v"; // WAN is image-only
+        imageUrl = payload.params.start_image_url;
+      } else {
+        // kling-v3
+        imageUrl = payload.params.start_image_url;
+        mode = imageUrl ? "i2v" : "t2v";
+      }
       try {
         const localId = await generate(payload, {
           prompt: payload.params.prompt ?? "",
-          // WAN is image-only; Kling t2v has no start_image_url.
-          mode: payload.params.start_image_url ? "i2v" : "t2v",
-          imageUrl: payload.params.start_image_url,
+          mode,
+          imageUrl,
         });
         setActiveTaskId(localId);
         toast.success("Đã bắt đầu tạo video");

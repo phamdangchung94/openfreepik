@@ -1,26 +1,30 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { Sparkles, ImageIcon } from "lucide-react";
+import { Sparkles, ImageIcon, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
 /**
- * Top-of-form toggle — flips between the Kling 3 (text/image-to-video,
- * multi-tier, multi-shot) and WAN 2.7 (image-to-video only, resolution
- * picker, simpler) request shapes.
+ * Top-of-form toggle — flips between the supported video models. Each
+ * model has different surface area in the rest of the form (different
+ * settings cards, different validation rules, different dispatch
+ * endpoint), keyed off `watch("model")`.
  *
- * Side effects on switch to WAN:
- *   - mode is locked to "i2v" (WAN has no t2v).
- *   - Kling-only fields stay in form state but are not rendered (the
- *     submit handler in to-api-params reads only the fields relevant
- *     to the chosen model).
+ *   Kling 3   — text/image-to-video, Pro/Std, multi-shot, audio
+ *   Kling 4K  — text/image-to-video, single 4K SKU, silent (no audio)
+ *   WAN 2.7   — image-to-video only, 720P/1080P resolution
+ *
+ * Side effects on switch:
+ *   - WAN: mode is locked to "i2v" (no t2v path upstream).
+ *   - Kling 4K: model-incompatible fields (multi_shot, elements) stay
+ *     in form state but are stripped in toApiParams.
  */
 export function ModelPicker() {
   const { watch, setValue } = useFormContext<GeneratorFormValues>();
   const model = watch("model");
 
-  function pick(next: "kling-v3" | "wan-v27") {
+  function pick(next: "kling-v3" | "kling-4k" | "wan-v27") {
     setValue("model", next, { shouldDirty: true });
     if (next === "wan-v27") {
       // WAN is i2v-only.
@@ -36,6 +40,12 @@ export function ModelPicker() {
       icon: <Sparkles className="size-4" />,
     },
     {
+      id: "kling-4k" as const,
+      label: "Kling 4K",
+      sub: "Text/Image → 4K (silent)",
+      icon: <Crown className="size-4" />,
+    },
+    {
       id: "wan-v27" as const,
       label: "WAN 2.7",
       sub: "Image → Video",
@@ -44,7 +54,7 @@ export function ModelPicker() {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-3 gap-2">
       {options.map((opt) => (
         <button
           key={opt.id}

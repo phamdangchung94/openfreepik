@@ -11,20 +11,33 @@ import { useAuthStore, type BalanceUpdate } from "@/store/auth-store";
 import { pollTaskUntilDone } from "@/lib/freepik/poll-task";
 import { expiresFromNow } from "@/lib/video-url-ttl";
 import type {
+  Kling4kI2vGenerateParams,
+  Kling4kT2vGenerateParams,
   KlingV3GenerateParams,
   WanV27GenerateParams,
 } from "@/lib/freepik/types";
 
 /**
- * Discriminated payload — `model` decides both the endpoint to hit and
- * the body shape Magnific expects. Adding a new model = adding a new
- * entry to this union + a new fetch branch below.
+ * Discriminated payload — `model` (+ `variant` for Kling 4K) decides
+ * both the endpoint to hit and the body shape Magnific expects.
+ * Adding a new model = adding a new entry to this union + a new fetch
+ * branch below.
  */
 export type GeneratePayload =
   | {
       model: "kling-v3";
       params: KlingV3GenerateParams;
       tier: "pro" | "std";
+    }
+  | {
+      model: "kling-4k";
+      variant: "t2v";
+      params: Kling4kT2vGenerateParams;
+    }
+  | {
+      model: "kling-4k";
+      variant: "i2v";
+      params: Kling4kI2vGenerateParams;
     }
   | {
       model: "wan-v27";
@@ -70,25 +83,44 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
       // Build the param snapshot for preview/replay. Each model has a
       // different shape — branch once and pull the relevant fields.
-      const paramsSnapshot =
-        payload.model === "kling-v3"
-          ? {
-              duration: payload.params.duration,
-              aspectRatio: payload.params.aspect_ratio,
-              audio: payload.params.generate_audio,
-              cfgScale: payload.params.cfg_scale,
-              negativePrompt: payload.params.negative_prompt,
-              multiShot: payload.params.multi_shot,
-              shotCount: payload.params.multi_prompt?.length,
-            }
-          : {
-              // WAN duration is integer; coerce to string to share the
-              // ParametersBlock display logic (already string-aware).
-              duration: payload.params.duration?.toString(),
-              aspectRatio: payload.params.resolution,
-              audio: false, // Phase 1 doesn't expose audio_url
-              negativePrompt: payload.params.negative_prompt,
-            };
+      let paramsSnapshot: {
+        duration?: string;
+        aspectRatio?: string;
+        audio?: boolean;
+        cfgScale?: number;
+        negativePrompt?: string;
+        multiShot?: boolean;
+        shotCount?: number;
+      };
+      if (payload.model === "kling-v3") {
+        paramsSnapshot = {
+          duration: payload.params.duration,
+          aspectRatio: payload.params.aspect_ratio,
+          audio: payload.params.generate_audio,
+          cfgScale: payload.params.cfg_scale,
+          negativePrompt: payload.params.negative_prompt,
+          multiShot: payload.params.multi_shot,
+          shotCount: payload.params.multi_prompt?.length,
+        };
+      } else if (payload.model === "kling-4k") {
+        paramsSnapshot = {
+          duration: payload.params.duration,
+          aspectRatio:
+            payload.variant === "t2v" ? payload.params.aspect_ratio : undefined,
+          audio: false, // Kling 4K is silent — no audio parameter upstream.
+          cfgScale: payload.params.cfg_scale,
+          negativePrompt: payload.params.negative_prompt,
+        };
+      } else {
+        paramsSnapshot = {
+          // WAN duration is integer; coerce to string to share the
+          // ParametersBlock display logic (already string-aware).
+          duration: payload.params.duration?.toString(),
+          aspectRatio: payload.params.resolution,
+          audio: false, // Phase 1 doesn't expose audio_url
+          negativePrompt: payload.params.negative_prompt,
+        };
+      }
 
       store.addTask({
         id: localId,
@@ -98,13 +130,16 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         mode: opts.mode,
         // Tier slot doubles as a pricing/display tag — for WAN the
         // pricing lookup encodes resolution into tier (1080P=pro,
-        // 720P=std). Keeps the task summary single-row.
+        // 720P=std). Kling 4K has no tier upstream; we display it as
+        // "pro" so the preview card doesn't render a blank slot.
         tier:
           payload.model === "kling-v3"
             ? payload.tier
-            : payload.params.resolution === "720P"
-              ? "std"
-              : "pro",
+            : payload.model === "kling-4k"
+              ? "pro"
+              : payload.params.resolution === "720P"
+                ? "std"
+                : "pro",
         createdAt: Date.now(),
         updatedAt: Date.now(),
         videoUrl: null,
@@ -118,12 +153,18 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
       activeCountRef.current++;
 
-      const endpointPath =
-        payload.model === "kling-v3" ? "kling-v3" : "wan-v27";
-      const requestBody =
-        payload.model === "kling-v3"
-          ? { params: payload.params, tier: payload.tier }
-          : { params: payload.params };
+      let endpointPath: "kling-v3" | "wan-v27" | "kling-4k-t2v" | "kling-4k-i2v";
+      let requestBody: object;
+      if (payload.model === "kling-v3") {
+        endpointPath = "kling-v3";
+        requestBody = { params: payload.params, tier: payload.tier };
+      } else if (payload.model === "kling-4k") {
+        endpointPath = payload.variant === "t2v" ? "kling-4k-t2v" : "kling-4k-i2v";
+        requestBody = { params: payload.params };
+      } else {
+        endpointPath = "wan-v27";
+        requestBody = { params: payload.params };
+      }
 
       // Fire-and-forget: POST + poll runs in background.
       //
