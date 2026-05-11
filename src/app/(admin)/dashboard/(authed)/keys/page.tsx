@@ -484,16 +484,23 @@ function EditKeyDialog({
   );
   const [busy, setBusy] = useState(false);
 
-  // Reset form when reopened so cancelling discards edits.
-  useEffect(() => {
-    if (open) {
+  // Reset form ONLY at the open->close->open transition. The earlier
+  // useEffect([open, row]) implementation re-ran on every parent
+  // re-render (the rows array is rebuilt from a fetch, so `row` is a
+  // new object reference each time) — typing in any field would get
+  // clobbered the next time the page refetched keys. Pull the reset
+  // into the open-state setter so it fires exactly when the customer
+  // opens the dialog, not whenever the parent renders.
+  function handleOpenChange(next: boolean) {
+    if (next && !open) {
       setLabel(row.label);
       setNotes(row.notes ?? "");
       setAssignedEur(row.assignedEur);
       setUsedEur(row.usedEur);
       setMaxConcurrent(String(row.maxConcurrent ?? 8));
     }
-  }, [open, row]);
+    setOpen(next);
+  }
 
   const remaining = Math.max(Number(assignedEur) - Number(usedEur), 0);
 
@@ -531,7 +538,7 @@ function EditKeyDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button variant="ghost" size="xs" title="Edit key">
