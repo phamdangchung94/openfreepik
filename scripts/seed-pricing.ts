@@ -97,17 +97,21 @@ function buildRules(): NewPricingRule[] {
   }
 
   // Kling 4K — T2V + I2V at the same per-second rate (1.12 EUR/s).
-  // No tier, no audio. Separate endpoint keys so admin can split rates
-  // per-variant later if Magnific publishes differing prices.
+  // Seeded as tier='4k' so the admin pricing page shows it alongside
+  // Pro/Std rows (it's exposed to customers as a third Kling 3 tier).
+  // Audio toggle: both withAudio=true and withAudio=false get the same
+  // rate (business rule — unlike Kling V3 where audio costs ~1.75×).
   for (const endpoint of ["kling-4k-t2v", "kling-4k-i2v"] as const) {
     for (const duration of KLING_4K_DURATIONS) {
-      rules.push({
-        endpoint,
-        tier: null,
-        durationSeconds: duration,
-        withAudio: false,
-        costEur: (KLING_4K_PER_SECOND * duration).toFixed(2),
-      });
+      for (const withAudio of [false, true] as const) {
+        rules.push({
+          endpoint,
+          tier: "4k",
+          durationSeconds: duration,
+          withAudio,
+          costEur: (KLING_4K_PER_SECOND * duration).toFixed(2),
+        });
+      }
     }
   }
 

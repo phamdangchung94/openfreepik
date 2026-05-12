@@ -20,7 +20,7 @@ export interface LogUsageOpts {
     | "kling-4k-i2v"
     | "wan-v27"
     | "improve-prompt";
-  tier?: "pro" | "std" | null;
+  tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;
   costEur: number;

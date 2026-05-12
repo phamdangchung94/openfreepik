@@ -27,6 +27,7 @@ export const kling4kT2vParamsSchema = z.object({
   aspect_ratio: aspectRatioSchema.optional(),
   duration: durationSchema.optional(),
   cfg_scale: z.number().min(0).max(1).optional(),
+  generate_audio: z.boolean().optional(),
   webhook_url: z.string().url().optional(),
 });
 
@@ -39,6 +40,7 @@ export const kling4kI2vParamsSchema = z.object({
   negative_prompt: z.string().max(2500).optional(),
   cfg_scale: z.number().min(0).max(1).optional(),
   duration: durationSchema.optional(),
+  generate_audio: z.boolean().optional(),
   static_mask: z.string().optional(),
   dynamic_masks: z.array(dynamicMaskSchema).optional(),
   webhook_url: z.string().url().optional(),

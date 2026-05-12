@@ -100,8 +100,9 @@ export async function POST(request: Request) {
     preValidated: validation,
     endpoint: "kling-4k-t2v",
     costEur: cost,
+    tier: "4k",
     durationSeconds: lookup.durationSeconds,
-    withAudio: false,
+    withAudio: lookup.withAudio,
     callFreepik: (apiKey) =>
       freepik.kling4k.generateT2v(paramsWithWebhook, { apiKey }),
     extractTaskId: (data) => data.task_id,

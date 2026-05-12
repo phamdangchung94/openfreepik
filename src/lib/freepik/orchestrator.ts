@@ -59,7 +59,7 @@ export interface OrchestrateOptions<T> {
     | "improve-prompt";
   costEur: number;
   /** Persisted to usage_logs for filtering — e.g. "pro"/"std" */
-  tier?: "pro" | "std" | null;
+  tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;
   /** Closure that performs the Freepik HTTP call with the chosen key. */

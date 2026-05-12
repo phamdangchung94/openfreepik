@@ -12,7 +12,7 @@ import { pricingRules } from "@/lib/db/schema";
 export interface PricingLookup {
   endpoint: string;
   /** null for endpoints that don't differentiate by tier (e.g. improve-prompt) */
-  tier: "pro" | "std" | null;
+  tier: "pro" | "std" | "4k" | null;
   /** null for endpoints that don't differentiate by duration */
   durationSeconds: number | null;
   withAudio: boolean;
@@ -85,15 +85,20 @@ export function lookupForImprovePrompt(): PricingLookup {
 /**
  * Convenience wrapper for Kling 4K (T2V + I2V).
  *
- * Kling 4K has no Pro/Std tier and no audio parameter — single SKU,
- * silent video. We keep separate `kling-4k-t2v` / `kling-4k-i2v`
- * entries in pricing_rules so admin can split rates per variant if
- * Magnific ever publishes different prices; today both seed at the
- * same per-second rate.
+ * Kling 4K is exposed to customers as a tier of Kling 3 ("4K" alongside
+ * "1080p Pro" and "720p Std"), but Magnific bills it through separate
+ * endpoint URLs — `kling-4k-t2v` and `kling-4k-i2v`. The pricing_rules
+ * row stores tier='4k' so admin can see all three tiers side-by-side
+ * in the admin pricing page.
+ *
+ * Audio rate parity: per business rule, Kling 4K costs the same whether
+ * generate_audio is true or false (different from Kling 3 where audio
+ * costs ~1.75× the silent rate). Both rows are seeded at 1.12 EUR/s ×
+ * duration; the withAudio dimension just disambiguates the lookup.
  */
 export function lookupForKling4k(
   endpoint: "kling-4k-t2v" | "kling-4k-i2v",
-  params: { duration?: string | number },
+  params: { duration?: string | number; generate_audio?: boolean },
 ): PricingLookup {
   const duration =
     typeof params.duration === "number"
@@ -103,9 +108,9 @@ export function lookupForKling4k(
         : 5;
   return {
     endpoint,
-    tier: null,
+    tier: "4k",
     durationSeconds: duration,
-    withAudio: false,
+    withAudio: !!params.generate_audio,
   };
 }
 

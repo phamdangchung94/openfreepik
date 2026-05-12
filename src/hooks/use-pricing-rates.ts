@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export interface PricingRule {
   endpoint: string;
-  tier: "pro" | "std" | null;
+  tier: "pro" | "std" | "4k" | null;
   durationSeconds: number | null;
   withAudio: boolean;
   costEur: number;
@@ -58,7 +58,7 @@ export interface CostLookup {
     | "kling-4k-i2v"
     | "wan-v27"
     | "improve-prompt";
-  tier?: "pro" | "std" | null;
+  tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;
 }

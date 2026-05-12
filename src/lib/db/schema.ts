@@ -104,7 +104,7 @@ export const usageLogs = pgTable(
       onDelete: "set null",
     }),
     endpoint: text("endpoint").notNull(),
-    tier: text("tier", { enum: ["pro", "std"] }),
+    tier: text("tier", { enum: ["pro", "std", "4k"] }),
     durationSeconds: smallint("duration_seconds"),
     withAudio: boolean("with_audio").notNull().default(false),
     costEur: numeric("cost_eur", { precision: 10, scale: 2 })
@@ -161,7 +161,7 @@ export const pricingRules = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     endpoint: text("endpoint").notNull(),
-    tier: text("tier", { enum: ["pro", "std"] }),
+    tier: text("tier", { enum: ["pro", "std", "4k"] }),
     durationSeconds: smallint("duration_seconds"),
     withAudio: boolean("with_audio").notNull().default(false),
     costEur: numeric("cost_eur", { precision: 10, scale: 2 }).notNull(),

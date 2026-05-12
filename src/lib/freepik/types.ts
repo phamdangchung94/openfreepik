@@ -71,6 +71,14 @@ export interface Kling4kT2vGenerateParams {
   aspect_ratio?: Kling4kAspectRatio;
   duration?: Kling4kDuration;
   cfg_scale?: number;
+  /**
+   * Magnific's published Kling-4K OpenAPI doesn't list this field, but
+   * customers report wanting parity with Kling V3's audio toggle. We
+   * forward the flag opportunistically — if Magnific honors it the
+   * video has audio, if Magnific ignores it the video is silent (same
+   * as without the field). Pricing is the same either way.
+   */
+  generate_audio?: boolean;
   webhook_url?: string;
 }
 
@@ -88,6 +96,8 @@ export interface Kling4kI2vGenerateParams {
   negative_prompt?: string;
   cfg_scale?: number;
   duration?: Kling4kDuration;
+  /** See Kling4kT2vGenerateParams.generate_audio. */
+  generate_audio?: boolean;
   static_mask?: string;
   dynamic_masks?: Kling4kDynamicMask[];
   webhook_url?: string;
