@@ -7,8 +7,8 @@ import {
   ImageIcon,
   Volume2,
   VolumeX,
-  Coins,
   ArrowLeft,
+  Gem,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,22 +18,26 @@ import { formatVnd } from "@/lib/format-currency";
 
 interface PricingRule {
   endpoint: string;
-  tier: "pro" | "std" | null;
+  tier: "pro" | "std" | "4k" | null;
   durationSeconds: number | null;
   withAudio: boolean;
   costEur: number;
 }
 
 /**
- * Customer-facing pricing page. Mirrors the data the cost preview already
- * uses (GET /api/pricing/rates) but laid out by model + tier so customers
- * can browse before activating a code instead of poking at the form.
+ * Customer-facing pricing page. Reads the same /api/pricing/rates feed
+ * the cost preview uses and lays it out as one table per upstream model:
  *
- * Two model sections:
- *   - Kling 3 — split into Pro / Standard, each with audio/no-audio columns
- *   - WAN 2.7 — split into 1080P / 720P, single audio-off column
+ *   Kling 3 — rows = duration, columns = 720p / 1080p / 4K, audio
+ *             dimension flipped via a pill toggle at the top of the
+ *             card. 4K's column shows the same number for both audio
+ *             states because Magnific's Kling-4K endpoints don't
+ *             accept generate_audio today (see audio caveat in the
+ *             footer notes).
+ *   WAN 2.7 — rows = duration, columns = 720P / 1080P. No audio
+ *             dimension (WAN doesn't price it separately).
  *
- * No auth required — rates are public; admin pricing dashboard owns edits.
+ * No auth — rates are public; admin pricing dashboard owns edits.
  */
 export default function CustomerPricingPage() {
   const [rules, setRules] = useState<PricingRule[]>([]);
@@ -45,9 +49,6 @@ export default function CustomerPricingPage() {
       .then((j) => setRules(j.rules ?? []))
       .finally(() => setLoading(false));
   }, []);
-
-  const klingRules = rules.filter((r) => r.endpoint === "kling-v3");
-  const wanRules = rules.filter((r) => r.endpoint === "wan-v27");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8">
@@ -75,8 +76,8 @@ export default function CustomerPricingPage() {
         <p className="text-sm text-muted-foreground">Đang tải bảng giá...</p>
       ) : (
         <div className="space-y-6">
-          <KlingSection rules={klingRules} />
-          <WanSection rules={wanRules} />
+          <KlingSection rules={rules} />
+          <WanSection rules={rules} />
 
           <Card className="bg-muted/30">
             <CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
@@ -98,43 +99,122 @@ export default function CustomerPricingPage() {
 }
 
 function KlingSection({ rules }: { rules: PricingRule[] }) {
-  const durations = uniqueDurations(rules);
+  // Audio toggle drives the table values. 4K stays the same in both
+  // states because Magnific doesn't support audio for 4K yet (and we
+  // priced both audio variants identically anyway).
+  const [withAudio, setWithAudio] = useState(true);
+
+  // Pro/Std rows live in pricing_rules under endpoint='kling-v3'. The
+  // 4K rows live under endpoint='kling-4k-t2v' (and i2v at identical
+  // rates — we read t2v for the table, they match).
+  const k3 = rules.filter((r) => r.endpoint === "kling-v3");
+  const k4 = rules.filter((r) => r.endpoint === "kling-4k-t2v");
+  // Use Kling 3 durations as the canonical row set (3–15s). Kling 4K
+  // durations match; if admin ever introduces an asymmetric set the
+  // missing-cell renderer below handles it gracefully.
+  const durations = uniqueDurations(k3);
+
+  function costFor(
+    tier: "std" | "pro" | "4k",
+    duration: number,
+    audio: boolean,
+  ): number | null {
+    if (tier === "4k") {
+      const row = k4.find(
+        (r) => r.durationSeconds === duration && r.withAudio === audio,
+      );
+      return row ? row.costEur : null;
+    }
+    const row = k3.find(
+      (r) =>
+        r.tier === tier && r.durationSeconds === duration && r.withAudio === audio,
+    );
+    return row ? row.costEur : null;
+  }
 
   return (
     <Card>
-      <CardHeader className="space-y-1">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="size-4 text-primary" />
-          Kling 3 — Text/Image → Video
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Hỗ trợ tạo video từ text hoặc ảnh. Có 2 chế độ chất lượng + tuỳ
-          chọn âm thanh. Thời lượng 3–15 giây.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <TierCard
-            label="1080p"
-            sublabel="Chất lượng cao nhất"
-            highlight
-            durations={durations}
-            getCost={(d, audio) => findCost(rules, "pro", d, audio)}
-          />
-          <TierCard
-            label="720p"
-            sublabel="Tốc độ nhanh, giá tiết kiệm"
-            durations={durations}
-            getCost={(d, audio) => findCost(rules, "std", d, audio)}
-          />
+      <CardHeader className="space-y-3">
+        <div className="space-y-1">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Sparkles className="size-4 text-primary" />
+            Kling 3 — Text/Image → Video
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Hỗ trợ tạo video từ text hoặc ảnh. Ba mức chất lượng + tuỳ
+            chọn âm thanh. Thời lượng 3–15 giây.
+          </p>
         </div>
+        <AudioToggle value={withAudio} onChange={setWithAudio} />
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium">
+                  Thời lượng
+                </th>
+                <ColHeader label="720p" sub="Tiết kiệm" />
+                <ColHeader label="1080p" sub="Khuyên dùng" highlight />
+                <ColHeader
+                  label="4K"
+                  sub="Native 4K"
+                  icon={<Gem className="size-3 text-foreground/70" />}
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {durations.map((d) => (
+                <tr
+                  key={d}
+                  className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                >
+                  <td className="py-2 pr-3 font-mono text-sm font-medium">
+                    {d}s
+                  </td>
+                  <Cell value={costFor("std", d, withAudio)} />
+                  <Cell value={costFor("pro", d, withAudio)} highlight />
+                  <Cell value={costFor("4k", d, withAudio)} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <ul className="mt-4 space-y-1 text-[11px] text-muted-foreground">
+          <li>
+            💡 4K: API hiện <span className="font-medium text-foreground/80">chưa hỗ trợ kèm audio</span> — video 4K
+            sẽ luôn im lặng dù bật hay tắt nút âm thanh. Giá không đổi.
+          </li>
+          {withAudio && (
+            <li>
+              🔇 Tắt audio để tiết kiệm: 720p giảm ~45%, 1080p giảm ~43%,
+              4K giữ nguyên giá.
+            </li>
+          )}
+          {!withAudio && (
+            <li>
+              🔊 Bật audio: 720p +83%, 1080p +75%, 4K không đổi giá.
+            </li>
+          )}
+        </ul>
       </CardContent>
     </Card>
   );
 }
 
 function WanSection({ rules }: { rules: PricingRule[] }) {
-  const durations = uniqueDurations(rules);
+  const wan = rules.filter((r) => r.endpoint === "wan-v27");
+  const durations = uniqueDurations(wan);
+
+  function costFor(tier: "std" | "pro", duration: number): number | null {
+    const row = wan.find(
+      (r) =>
+        r.tier === tier && r.durationSeconds === duration && r.withAudio === false,
+    );
+    return row ? row.costEur : null;
+  }
 
   return (
     <Card>
@@ -148,131 +228,134 @@ function WanSection({ rules }: { rules: PricingRule[] }) {
           2–15 giây. Chưa hỗ trợ audio ở phiên bản hiện tại.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <TierCard
-            label="1080P"
-            sublabel="Full HD 1920×1080"
-            highlight
-            durations={durations}
-            getCost={(d) => findCost(rules, "pro", d, false)}
-            hideAudioColumn
-          />
-          <TierCard
-            label="720P"
-            sublabel="HD 1280×720, rẻ hơn ~33%"
-            durations={durations}
-            getCost={(d) => findCost(rules, "std", d, false)}
-            hideAudioColumn
-          />
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium">
+                  Thời lượng
+                </th>
+                <ColHeader label="720P" sub="HD 1280×720" />
+                <ColHeader
+                  label="1080P"
+                  sub="Full HD 1920×1080"
+                  highlight
+                />
+              </tr>
+            </thead>
+            <tbody>
+              {durations.map((d) => (
+                <tr
+                  key={d}
+                  className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                >
+                  <td className="py-2 pr-3 font-mono text-sm font-medium">
+                    {d}s
+                  </td>
+                  <Cell value={costFor("std", d)} />
+                  <Cell value={costFor("pro", d)} highlight />
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function TierCard({
-  label,
-  sublabel,
-  highlight,
-  durations,
-  getCost,
-  hideAudioColumn,
+function AudioToggle({
+  value,
+  onChange,
 }: {
-  label: string;
-  sublabel: string;
-  highlight?: boolean;
-  durations: number[];
-  getCost: (duration: number, audio: boolean) => number | null;
-  hideAudioColumn?: boolean;
+  value: boolean;
+  onChange: (next: boolean) => void;
 }) {
   return (
-    <div
-      className={
-        "rounded-md border p-3 " +
-        (highlight ? "border-primary/40 bg-primary/5" : "")
-      }
-    >
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <span className="text-sm font-semibold">{label}</span>
-        {highlight && (
-          <Badge variant="default" className="text-[10px]">
-            Khuyên dùng
-          </Badge>
+    <div className="inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-1">
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+          !value
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground",
         )}
-      </div>
-      <p className="mb-3 text-[11px] text-muted-foreground">{sublabel}</p>
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b text-[10px] uppercase tracking-wide text-muted-foreground">
-            <th className="py-1.5 pr-2 text-left font-medium">Thời lượng</th>
-            {!hideAudioColumn && (
-              <th className="py-1.5 px-1 text-right font-medium">
-                <span className="inline-flex items-center gap-1">
-                  <VolumeX className="size-3" />
-                  Không audio
-                </span>
-              </th>
-            )}
-            <th className="py-1.5 pl-1 text-right font-medium">
-              {hideAudioColumn ? (
-                <span className="inline-flex items-center gap-1">
-                  <Coins className="size-3" />
-                  Giá
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  <Volume2 className="size-3" />
-                  Có audio
-                </span>
-              )}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {durations.map((d) => {
-            const noAudio = getCost(d, false);
-            const withAudio = getCost(d, true);
-            return (
-              <tr
-                key={d}
-                className="border-b border-border/40 last:border-0"
-              >
-                <td className="py-1.5 pr-2 font-mono">{d}s</td>
-                {!hideAudioColumn && (
-                  <td className="py-1.5 px-1 text-right font-mono">
-                    {noAudio !== null ? formatVnd(noAudio) : "—"}
-                  </td>
-                )}
-                <td className="py-1.5 pl-1 text-right font-mono font-medium">
-                  {hideAudioColumn
-                    ? noAudio !== null
-                      ? formatVnd(noAudio)
-                      : "—"
-                    : withAudio !== null
-                      ? formatVnd(withAudio)
-                      : "—"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+        aria-pressed={!value}
+      >
+        <VolumeX className="size-3.5" />
+        Không audio
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange(true)}
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+          value
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        aria-pressed={value}
+      >
+        <Volume2 className="size-3.5" />
+        Có audio
+      </button>
     </div>
   );
 }
 
-function findCost(
-  rules: PricingRule[],
-  tier: "pro" | "std",
-  duration: number,
-  audio: boolean,
-): number | null {
-  const r = rules.find(
-    (x) =>
-      x.tier === tier && x.durationSeconds === duration && x.withAudio === audio,
+function ColHeader({
+  label,
+  sub,
+  highlight,
+  icon,
+}: {
+  label: string;
+  sub: string;
+  highlight?: boolean;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <th
+      className={cn(
+        "py-2 px-3 text-right font-medium",
+        highlight && "bg-primary/5",
+      )}
+    >
+      <div className="flex flex-col items-end gap-0.5">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-sm font-semibold normal-case tracking-normal text-foreground",
+            highlight && "text-primary",
+          )}
+        >
+          {icon}
+          {label}
+          {highlight && (
+            <Badge variant="default" className="ml-1 text-[9px]">
+              Hot
+            </Badge>
+          )}
+        </span>
+        <span className="text-[10px] text-muted-foreground">{sub}</span>
+      </div>
+    </th>
   );
-  return r ? r.costEur : null;
+}
+
+function Cell({ value, highlight }: { value: number | null; highlight?: boolean }) {
+  return (
+    <td
+      className={cn(
+        "py-2 px-3 text-right font-mono tabular-nums",
+        highlight && "bg-primary/5 font-semibold",
+      )}
+    >
+      {value !== null ? formatVnd(value) : "—"}
+    </td>
+  );
 }
 
 function uniqueDurations(rules: PricingRule[]): number[] {
