@@ -118,7 +118,16 @@ export interface VerifyOpts {
 }
 
 export type VerifyResult =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * Which (encoding, payloadFormat) combo matched. Logged so we
+       * can simplify the verifier once we've seen what Magnific
+       * actually uses in production.
+       */
+      matchedEncoding: string;
+      matchedPayloadFormat: string;
+    }
   | {
       ok: false;
       reason: "bad_timestamp" | "stale" | "no_signature" | "mismatch";
@@ -177,7 +186,13 @@ export async function verifyMagnificWebhook(opts: VerifyOpts): Promise<VerifyRes
         });
       }
       for (const sig of v1Sigs) {
-        if (timingSafeEqual(expected, sig)) return { ok: true };
+        if (timingSafeEqual(expected, sig)) {
+          return {
+            ok: true,
+            matchedEncoding: candidate.encoding,
+            matchedPayloadFormat: payload.name,
+          };
+        }
       }
     }
   }

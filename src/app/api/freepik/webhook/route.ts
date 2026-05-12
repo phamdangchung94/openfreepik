@@ -66,6 +66,8 @@ export async function POST(request: Request) {
   }
 
   let matchedKeyId: string | null = null;
+  let matchedEncoding: string | null = null;
+  let matchedPayloadFormat: string | null = null;
   // Collect per-candidate diagnostics so a mismatch can be debugged
   // without re-deploying instrumentation. Only the first 12 chars of
   // each signature are kept — enough to spot which encoding is close,
@@ -87,6 +89,8 @@ export async function POST(request: Request) {
     });
     if (result.ok) {
       matchedKeyId = c.id;
+      matchedEncoding = result.matchedEncoding;
+      matchedPayloadFormat = result.matchedPayloadFormat;
       break;
     }
     if (result.reason === "mismatch") {
@@ -129,6 +133,8 @@ export async function POST(request: Request) {
   log.info("WEBHOOK_RECEIVED", {
     webhookId,
     matchedKeyId,
+    matchedEncoding,
+    matchedPayloadFormat,
     freepikTaskId: payload.task_id,
     status: payload.status,
     hasUrl: payload.generated.length > 0,
