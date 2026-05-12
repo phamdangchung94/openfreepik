@@ -53,12 +53,14 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
         withAudio: false,
       });
     }
-    if (model === "kling-4k") {
+    // Kling 3 — tier='4k' routes to the kling-4k-* pricing rows
+    // (matching the request endpoint); Pro/Std stay on kling-v3.
+    if (tier === "4k") {
       return lookupCost(rates, {
         endpoint: mode === "t2v" ? "kling-4k-t2v" : "kling-4k-i2v",
-        tier: null,
+        tier: "4k",
         durationSeconds: Number(duration),
-        withAudio: false,
+        withAudio: !!audio,
       });
     }
     return lookupCost(rates, {

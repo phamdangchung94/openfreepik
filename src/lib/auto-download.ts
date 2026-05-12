@@ -91,7 +91,7 @@ export async function downloadVideo(
 }
 
 export interface FilenameInputs {
-  tier: "pro" | "std";
+  tier: "pro" | "std" | "4k";
   prompt: string;
   createdAt: number;
 }

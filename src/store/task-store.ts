@@ -48,7 +48,7 @@ export interface GenerationTask {
   status: GenerationTaskStatus;
   prompt: string;
   mode: "t2v" | "i2v";
-  tier: "pro" | "std";
+  tier: "pro" | "std" | "4k";
   createdAt: number;
   updatedAt: number;
   videoUrl: string | null;

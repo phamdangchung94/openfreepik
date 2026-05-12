@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useImperativeHandle, forwardRef } from "
 import { useForm, FormProvider } from "react-hook-form";
 import { customZodResolver } from "@/lib/form/zod-resolver";
 import { Settings2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,12 @@ import {
   type BatchItem,
 } from "@/lib/form/generator-schema";
 import { FORM_DEFAULTS } from "@/lib/form/defaults";
-import { toApiParams, toKling4kT2vParams, toKling4kI2vParams } from "@/lib/form/to-api-params";
+import {
+  toApiParams,
+  toKling4kT2vParams,
+  toKling4kI2vParams,
+  toWanParams,
+} from "@/lib/form/to-api-params";
 import { ModeToggle } from "./mode-toggle";
 import { PromptField } from "./prompt-field";
 import { AspectRatioPicker } from "./aspect-ratio-picker";
@@ -28,7 +34,6 @@ import { BatchSettings } from "@/components/batch/batch-settings";
 import { CostPreview } from "./cost-preview";
 import { ModelPicker } from "./model-picker";
 import { ResolutionPicker } from "./resolution-picker";
-import { toWanParams } from "@/lib/form/to-api-params";
 import type { GeneratePayload } from "@/hooks/use-generate-video";
 
 interface GeneratorFormProps {
@@ -84,9 +89,16 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const { handleSubmit, watch } = methods;
   const mode = watch("mode");
   const model = watch("model");
+  const tier = watch("tier");
   const isWan = model === "wan-v27";
-  const isKling4k = model === "kling-4k";
   const isKling3 = model === "kling-v3";
+  /**
+   * Kling 4K runs on different Magnific endpoints (kling-4k-t2v /
+   * kling-4k-i2v) that don't accept multi_shot or elements arrays.
+   * Treat the '4k' tier as a Kling-3 model but hide the fields the
+   * upstream rejects.
+   */
+  const is4kTier = isKling3 && tier === "4k";
 
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [t2vBatchText, setT2vBatchText] = useState("");
@@ -135,15 +147,16 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       }));
       onSubmitBatch(items, values);
     } else if (onSubmitSingle) {
-      // Branch payload shape on model. Kling 3 carries tier, Kling 4K
-      // splits T2V/I2V into separate request shapes, WAN carries the
-      // resolution-encoded shape from toWanParams.
+      // Branch payload shape:
+      //   WAN 2.7      → resolution-encoded WAN params
+      //   Kling 3 + 4K → kling-4k-{t2v,i2v} endpoints (no multi-shot)
+      //   Kling 3 + Pro/Std → kling-v3-{pro,std} endpoint
       if (values.model === "wan-v27") {
         onSubmitSingle({
           model: "wan-v27",
           params: toWanParams(values),
         });
-      } else if (values.model === "kling-4k") {
+      } else if (values.tier === "4k") {
         if (values.mode === "t2v") {
           onSubmitSingle({
             model: "kling-4k",
@@ -255,18 +268,21 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 <ResolutionPicker />
                 <DurationSlider />
               </>
-            ) : isKling4k ? (
-              // Kling 4K: single SKU (no tier), no audio (silent),
-              // no multi-shot. T2V keeps the aspect-ratio picker;
-              // I2V infers aspect from the source image.
-              <>
-                {mode === "t2v" && <AspectRatioPicker />}
-                <DurationSlider />
-              </>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <AspectRatioPicker />
+                <div
+                  className={cn(
+                    "grid gap-4",
+                    // I2V on the 4K tier has no aspect_ratio param
+                    // upstream — output aspect comes from the image.
+                    // Hide the picker so customers don't think it
+                    // changes anything. Tier picker stays full-width.
+                    is4kTier && mode === "i2v"
+                      ? "grid-cols-1"
+                      : "sm:grid-cols-2",
+                  )}
+                >
+                  {!(is4kTier && mode === "i2v") && <AspectRatioPicker />}
                   <QualityTierPicker />
                 </div>
                 <DurationSlider />
@@ -276,8 +292,12 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           </CardContent>
         </Card>
 
+        {/* Advanced (cfg_scale, negative prompt) is supported on all
+            Kling V3 tiers including 4K. Multi-shot + elements arrays
+            are Pro/Std-only — Magnific's kling-4k endpoints reject
+            those request shapes. */}
         {isKling3 && <GeneratorAdvancedSettings />}
-        {isKling3 && <GeneratorMultiShotSection />}
+        {isKling3 && !is4kTier && <GeneratorMultiShotSection />}
 
         {/* Real-time cost preview — updates as tier/duration/audio change.
             When the customer sets singleQty > 1, multiply by qty so the

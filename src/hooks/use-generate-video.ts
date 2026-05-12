@@ -107,7 +107,9 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           duration: payload.params.duration,
           aspectRatio:
             payload.variant === "t2v" ? payload.params.aspect_ratio : undefined,
-          audio: false, // Kling 4K is silent — no audio parameter upstream.
+          // Forwarded to Magnific opportunistically — see
+          // Kling4kT2vGenerateParams.generate_audio.
+          audio: !!payload.params.generate_audio,
           cfgScale: payload.params.cfg_scale,
           negativePrompt: payload.params.negative_prompt,
         };
@@ -130,13 +132,13 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         mode: opts.mode,
         // Tier slot doubles as a pricing/display tag — for WAN the
         // pricing lookup encodes resolution into tier (1080P=pro,
-        // 720P=std). Kling 4K has no tier upstream; we display it as
-        // "pro" so the preview card doesn't render a blank slot.
+        // 720P=std). Kling 4K stores tier='4k' so the preview card
+        // matches the 4K badge in admin usage logs.
         tier:
           payload.model === "kling-v3"
             ? payload.tier
             : payload.model === "kling-4k"
-              ? "pro"
+              ? "4k"
               : payload.params.resolution === "720P"
                 ? "std"
                 : "pro",

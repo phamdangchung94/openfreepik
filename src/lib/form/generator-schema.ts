@@ -19,18 +19,22 @@ const DURATION_ENUM = z.enum([
 export const generatorFormSchema = z
   .object({
     /**
-     * Which upstream video model to use. Drives both the form UI
-     * (Kling V3 shows tier/aspect-ratio/audio/multi-shot; Kling 4K
-     * shows just duration + cfg + aspect/T2V; WAN shows resolution
-     * picker) AND the dispatch endpoint in use-generate-video.
+     * Which upstream video model to use. Kling 3 covers all three
+     * quality tiers (4K / 1080p Pro / 720p Std); WAN 2.7 is a
+     * separate image-only model with its own resolution picker.
      */
-    model: z.enum(["kling-v3", "kling-4k", "wan-v27"]).default("kling-v3"),
+    model: z.enum(["kling-v3", "wan-v27"]).default("kling-v3"),
     mode: z.enum(["t2v", "i2v"]),
     prompt: z.string().default(""),
     negative_prompt: z.string().max(2500).default("blur, distort, and low quality"),
     start_image_url: z.string().default(""),
     end_image_url: z.string().default(""),
-    tier: z.enum(["pro", "std"]).default("pro"),
+    /**
+     * Kling 3 quality tier. '4k' routes to the kling-4k-* Magnific
+     * endpoints (no multi-shot, no elements); 'pro' and 'std' route
+     * to kling-v3-{pro,std}.
+     */
+    tier: z.enum(["pro", "std", "4k"]).default("pro"),
     aspect_ratio: z.enum(["16:9", "9:16", "1:1"]).default("16:9"),
     /** WAN-only: 720P / 1080P. Ignored when model="kling-v3". */
     resolution: z.enum(["720P", "1080P"]).default("1080P"),
@@ -66,27 +70,6 @@ export const generatorFormSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "WAN 2.7 yêu cầu ảnh đầu (start image).",
-          path: ["start_image_url"],
-        });
-      }
-      return;
-    }
-
-    // Kling 4K: T2V needs prompt, I2V needs image. Same shape as V3
-    // but the upstream rejects multi-shot / elements (we strip those
-    // in toApiParams when model=kling-4k).
-    if (data.model === "kling-4k") {
-      if (data.mode === "t2v" && !data.prompt.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Prompt là bắt buộc với Kling 4K T2V",
-          path: ["prompt"],
-        });
-      }
-      if (data.mode === "i2v" && !data.start_image_url.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Cần ảnh đầu với Kling 4K I2V",
           path: ["start_image_url"],
         });
       }

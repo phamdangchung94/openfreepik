@@ -22,7 +22,7 @@ interface UsageRecentRow {
   id: string;
   createdAt: string;
   endpoint: string;
-  tier: "pro" | "std" | null;
+  tier: "pro" | "std" | "4k" | null;
   durationSeconds: number | null;
   withAudio: boolean;
   costEur: number;

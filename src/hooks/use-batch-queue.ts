@@ -139,20 +139,15 @@ export function useBatchQueue(): UseBatchQueueResult {
 
       if (signal.aborted) return;
 
-      // Dispatch by model. Kling V3 carries tier in the body; Kling 4K
-      // splits T2V/I2V into separate request shapes; WAN isn't wired
-      // through the batch UI (image-driven from a different code path)
-      // so falls through to FAILED if it somehow reaches here.
+      // Dispatch:
+      //   tier='4k' on Kling 3 → kling-4k-{t2v,i2v} endpoints (no
+      //                          tier in body, no multi-shot)
+      //   Pro/Std on Kling 3 → kling-v3 endpoint (tier in body)
+      //   WAN 2.7            → not wired through the batch UI today;
+      //                        falls through to FAILED if it reaches here
       let endpoint: PollEndpoint;
       let body: object;
-      if (formValues.model === "kling-v3") {
-        const params =
-          itemData.mode === "i2v" && itemData.imageUrl
-            ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
-            : toBatchT2VParams(formValues, prompt);
-        endpoint = "kling-v3";
-        body = { params, tier: formValues.tier };
-      } else if (formValues.model === "kling-4k") {
+      if (formValues.model === "kling-v3" && formValues.tier === "4k") {
         if (itemData.mode === "i2v" && itemData.imageUrl) {
           endpoint = "kling-4k-i2v";
           body = {
@@ -162,6 +157,13 @@ export function useBatchQueue(): UseBatchQueueResult {
           endpoint = "kling-4k-t2v";
           body = { params: toBatchKling4kT2vParams(formValues, prompt) };
         }
+      } else if (formValues.model === "kling-v3") {
+        const params =
+          itemData.mode === "i2v" && itemData.imageUrl
+            ? toBatchApiParams(formValues, itemData.imageUrl, prompt)
+            : toBatchT2VParams(formValues, prompt);
+        endpoint = "kling-v3";
+        body = { params, tier: formValues.tier };
       } else {
         useTaskStore.getState().updateTask(localId, {
           status: "FAILED",
