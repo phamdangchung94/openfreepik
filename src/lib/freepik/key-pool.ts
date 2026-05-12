@@ -176,6 +176,42 @@ export async function keyPoolStats(costEur: number): Promise<{
 }
 
 /**
+ * Look up a specific key by id and return its decrypted plaintext.
+ * Used by poll routes to preserve the "task lives on the account that
+ * created it" invariant — Magnific only returns task status to the
+ * account that owns the task. Picking an LRU key from the pool on
+ * every poll causes ~75% of polls to hit unrelated accounts and
+ * surface as 404 'Task not found' (see audit 2026-05-12).
+ *
+ * Returns null on:
+ *   - row not found (key deleted)
+ *   - decrypt failure (KEY_ENCRYPTION_SECRET rotated for this row)
+ * Does NOT filter by is_active — a temporarily-deactivated key can
+ * still own in-flight tasks that need draining. Caller decides what
+ * to do with a null return (typically: fall back to pickActiveKey).
+ */
+export async function pickKeyById(keyId: string): Promise<PickedKey | null> {
+  const rows = await db
+    .select({
+      id: freepikKeys.id,
+      label: freepikKeys.label,
+      keyEncrypted: freepikKeys.keyEncrypted,
+    })
+    .from(freepikKeys)
+    .where(eq(freepikKeys.id, keyId))
+    .limit(1);
+
+  const [row] = rows;
+  if (!row) return null;
+  try {
+    const decryptedKey = await decrypt(row.keyEncrypted);
+    return { id: row.id, label: row.label, decryptedKey };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Increment a key's tracked spend. Called on every successful Freepik
  * request (and never refunded — server-side accounting is the source of
  * truth for "how much have we burned on this Freepik account").

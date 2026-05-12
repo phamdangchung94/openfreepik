@@ -24,6 +24,7 @@ import {
   keyPoolStats,
   markKeyExhausted,
   pickActiveKey,
+  pickKeyById,
   recordKeyCost,
 } from "@/lib/freepik/key-pool";
 import { errFields, log } from "@/lib/logger";
@@ -346,6 +347,15 @@ export async function authedFreepikCall<T>(opts: {
   callFreepik: (apiKey: string) => Promise<T>;
   /** Reuse a validation result from a route-level rate-limit check. */
   preValidated?: ValidationResult;
+  /**
+   * Force the call to use a specific pool key — required for poll
+   * routes because Magnific only returns task status to the account
+   * that created the task. If the preferred key is gone (deleted or
+   * decrypt-fail), we fall back to pickActiveKey but the poll will
+   * almost certainly 404 — the fallback exists only so the request
+   * doesn't crash.
+   */
+  preferredKeyId?: string | null;
 }): Promise<OrchestrateResult<T>> {
   if (!opts.bearerCode) {
     return fail(401, "AUTH", "Activation code is required.");
@@ -360,7 +370,15 @@ export async function authedFreepikCall<T>(opts: {
     );
   }
 
-  const key = await pickActiveKey(0);
+  let key = null;
+  if (opts.preferredKeyId) {
+    key = await pickKeyById(opts.preferredKeyId);
+  }
+  if (!key) {
+    // Either no preferredKeyId given (improve-prompt poll has no
+    // creator-key constraint) or the preferred key vanished.
+    key = await pickActiveKey(0);
+  }
   if (!key) {
     return fail(503, "NO_KEYS_AVAILABLE", "No active video credits available.");
   }

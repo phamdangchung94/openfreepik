@@ -1,7 +1,10 @@
 /** Shared helpers for Next.js API route handlers. */
 
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { authedFreepikCall } from "./orchestrator";
+import { db } from "@/lib/db/client";
+import { usageLogs } from "@/lib/db/schema";
 import { errFields, log } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -177,9 +180,30 @@ export function createTaskGetHandler<T>(
       }
     }
 
+    // Find the pool key that originally created this task so polling
+    // hits the same upstream account. Magnific scopes task visibility
+    // to the account that POST'd the create call — picking an LRU
+    // key here causes ~75% of polls to land on accounts that can't
+    // see this task and return 404 (audit 2026-05-12 saw the
+    // 200/404 alternation on every customer task). Migration 0008
+    // added a partial index on (freepik_task_id) so this lookup is
+    // a constant-time hit even with 10k+ usage_log rows.
+    let preferredKeyId: string | null = null;
+    try {
+      const [row] = await db
+        .select({ keyId: usageLogs.keyId })
+        .from(usageLogs)
+        .where(eq(usageLogs.freepikTaskId, taskId))
+        .limit(1);
+      if (row?.keyId) preferredKeyId = row.keyId;
+    } catch (err) {
+      log.warn("POLL_KEY_LOOKUP_FAILED", { taskId, ...errFields(err) });
+    }
+
     const result = await authedFreepikCall({
       bearerCode: bearer,
       preValidated: validation,
+      preferredKeyId,
       callFreepik: (apiKey) => getter(taskId, { apiKey }),
     });
 
