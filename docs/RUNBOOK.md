@@ -23,7 +23,7 @@ Customer-facing: same URL, no `/dashboard`.
 
 ## Required env vars
 
-All of these are set in Vercel production AND mirrored in `.env.local` for development. **Local and production should NOT share values** (audit #2 — currently violated, fix when convenient).
+All of these are set in Vercel production AND mirrored in `.env.local` for development. `DATABASE_URL` in `.env.local` points to the Neon `dev` branch (split landed 2026-05-12 — audit #2 closed). Other secrets currently mirror production values; rotate the dev branch's `KEY_ENCRYPTION_SECRET` later if you need full isolation of the encrypted key blobs too.
 
 | Var | Purpose | Rotation impact |
 |-----|---------|-----------------|
@@ -88,17 +88,22 @@ Magnific's push delivery cuts customer wait time from "poll every 2-10s" to "ins
 
 Signature verification uses HMAC-SHA256 over `${webhook-id}.${webhook-timestamp}.${raw-body}`. We try the secret as UTF-8 raw bytes, hex-decoded, and base64-decoded so different Magnific surface formats all work. Replay window is 5 min.
 
-### Separate the dev database from production (audit #2)
+### Dev / production database split (audit #2 — DONE 2026-05-12)
 
-The default Neon project ships with one branch; `pnpm dev` and production currently share it. To isolate:
+Neon project has two branches now:
+- **`production`** — primary, default. Used by Vercel prod + preview deploys via `DATABASE_URL`.
+- **`dev`** — copy-on-write snapshot. Used by local `pnpm dev` / `db:*` scripts via the `DATABASE_URL` in `.env.local`.
 
-1. Neon Console → project `openfreepik` → **Branches** → **New branch** → name `dev`, copy data from `main`. Snapshot is instant — branches share storage, so the dev branch is free until it diverges.
-2. Click the new branch → **Connection string** → copy.
-3. Update local `.env.local`: replace `DATABASE_URL` with the dev branch's connection string. Production Vercel env stays pointed at `main`.
-4. (Optional) Add a `DATABASE_URL` override in Vercel's **Development** environment with the dev branch — so any future Vercel CLI dev runs also stay isolated.
-5. Reset dev branch back to current prod state any time: Neon Console → branch `dev` → **Reset from parent**. Useful before testing migrations.
+Operations:
 
-After the split: `pnpm db:migrate` and `pnpm db:seed-pricing` only touch the dev branch. Apply the same migration to prod via the Neon SQL editor or by promoting the dev branch when ready.
+- **Apply a schema migration to dev first**: `pnpm db:migrate` (runs against dev). Once it works, paste the SQL into the Neon Console SQL editor under the `production` branch — or wait for the next prod deploy to run migrations as part of build.
+- **Reset dev from prod** (e.g. before testing a destructive change against fresh data): Neon Console → `dev` branch → **Reset from parent**. Instant.
+- **Pull a fresh dev snapshot after a major prod write** (e.g. customer support manually fixed something on prod): same Reset from parent.
+- **Promote a dev change to prod** (e.g. you tested a migration on dev and want it live): Neon doesn't auto-promote — apply the migration to `production` separately, either via the SQL editor or `pnpm db:migrate` against a temporary `.env.local` pointed at prod.
+
+Caveats:
+- `KEY_ENCRYPTION_SECRET` still mirrors prod (so dev can decrypt the snapshot's `freepik_keys`). If you want full isolation of the encrypted-key blob — useful for testing key-rotation — generate a separate dev secret and re-encrypt the dev branch's `freepik_keys` rows.
+- Webhook delivery currently points at prod URL; webhooks from your dev tasks will hit prod's `/api/freepik/webhook` (signature mismatch → ignored). Acceptable today; add a separate `WEBHOOK_BASE_URL` once you start regular dev-side video testing.
 
 ### Mint an activation code for a new customer
 

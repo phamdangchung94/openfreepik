@@ -27,10 +27,13 @@ pnpm db:seed-pricing             # seed the pricing matrix
 pnpm dev                         # http://localhost:3000
 ```
 
-> ⚠️ **Local + production currently share the same DB and secrets.** See
-> open issue [#2](https://github.com/phamdangchung94/openfreepik/issues/2)
-> and [`docs/RUNBOOK.md`](docs/RUNBOOK.md#required-env-vars) for the
-> isolation playbook. Until that lands, every local query hits production.
+> 🌿 **Local dev talks to the Neon `dev` branch, not production** (since
+> 2026-05-12). Pasting `pnpm db:migrate` / `pnpm db:seed-pricing` /
+> arbitrary SQL won't touch real customer data. The dev branch is a
+> copy-on-write snapshot of prod taken at branch creation; reset it
+> from the Neon Console any time it drifts: project → Branches → `dev`
+> → "Reset from parent". See [`docs/RUNBOOK.md#separate-the-dev-database-from-production-audit-2`](docs/RUNBOOK.md)
+> for the workflow.
 
 ## Operations
 
