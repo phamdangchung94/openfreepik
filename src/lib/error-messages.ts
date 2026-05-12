@@ -60,6 +60,23 @@ const PHRASE_MAP: Array<[RegExp, string]> = [
   ],
   [/activation code is required/i, "Bạn cần kích hoạt mã trước khi tạo video."],
   [/activation code/i, "Mã kích hoạt không hợp lệ."],
+  // Rate-limit string format from rate-limit.ts / route-helpers.ts.
+  // Captures the retry-after seconds so the customer sees a concrete
+  // wait time instead of a vague "try later".
+  [
+    /limit \d+ requests per \d+s\. wait (\d+)s and retry/i,
+    "Quá nhiều yêu cầu — vui lòng chờ $1 giây rồi thử lại.",
+  ],
+  // Activate route uses a slightly shorter shape.
+  [
+    /too many attempts\. wait (\d+)s and retry/i,
+    "Quá nhiều lần thử — vui lòng chờ $1 giây rồi thử lại.",
+  ],
+  // Polling too fast — extra wording from createTaskGetHandler.
+  [
+    /polling too fast — wait (\d+)s/i,
+    "Đang kiểm tra trạng thái quá nhanh — vui lòng chờ $1 giây.",
+  ],
   [/network|fetch failed|enotfound|timeout/i, "Lỗi mạng — vui lòng kiểm tra kết nối và thử lại."],
   [/generation failed/i, "Tạo video thất bại — vui lòng thử lại."],
   [/interrupted before submission/i, "Bị gián đoạn trước khi gửi — vui lòng tạo lại."],
@@ -90,9 +107,16 @@ export function friendlyError(input: string | null | undefined): string {
   const upper = trimmed.toUpperCase();
   if (CODE_MAP[upper]) return CODE_MAP[upper];
 
-  // Phrase-pattern match against the raw message.
+  // Phrase-pattern match against the raw message. If the translation
+  // string contains `$1`/`$2` etc., substitute the captured groups
+  // (used for rate-limit messages that need to surface the retry-after
+  // seconds inline).
   for (const [pattern, vi] of PHRASE_MAP) {
-    if (pattern.test(trimmed)) return vi;
+    if (!pattern.test(trimmed)) continue;
+    if (vi.includes("$")) {
+      return trimmed.replace(pattern, vi);
+    }
+    return vi;
   }
 
   // Unknown — return the original so devs can still debug, BUT scrub

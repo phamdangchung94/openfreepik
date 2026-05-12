@@ -39,6 +39,26 @@ describe("friendlyError", () => {
     ).toContain("không đủ số dư");
   });
 
+  it("translates the rate-limit creator-route message and preserves the wait seconds", () => {
+    const out = friendlyError("Limit 3 requests per 60s. Wait 32s and retry.");
+    expect(out).toContain("Quá nhiều yêu cầu");
+    expect(out).toContain("32 giây");
+    // Brand sanitizer should not fire on this path — make sure the
+    // literal upstream brand isn't snuck in by a future regression.
+    expect(out).not.toMatch(/Magnific|Freepik/i);
+  });
+
+  it("translates the activate-route too-many-attempts message", () => {
+    const out = friendlyError("Too many attempts. Wait 15s and retry.");
+    expect(out).toContain("Quá nhiều lần thử");
+    expect(out).toContain("15 giây");
+  });
+
+  it("translates the polling-too-fast message", () => {
+    const out = friendlyError("Polling too fast — wait 3s.");
+    expect(out).toContain("3 giây");
+  });
+
   it("phrase-matches network errors", () => {
     expect(friendlyError("fetch failed: ENOTFOUND")).toContain("Lỗi mạng");
     expect(friendlyError("Request timeout")).toContain("Lỗi mạng");
