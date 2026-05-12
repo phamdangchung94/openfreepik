@@ -41,6 +41,7 @@ export const GET = createTaskGetHandler(freepik.klingV3.getTask, {
         freepikTaskId: taskId,
         outcome: "failed",
         failureReason: "MAGNIFIC_FAILED",
+        upstreamErrorMessage: data.error_message ?? null,
       });
       return;
     }

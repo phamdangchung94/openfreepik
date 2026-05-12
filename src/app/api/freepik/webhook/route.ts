@@ -30,13 +30,37 @@ import { errFields, log } from "@/lib/logger";
 // Mirror download can take 5-15s for large 4K renders.
 export const maxDuration = 60;
 
+/**
+ * Upstream webhook body shape. The `generated` field is string[] across
+ * every endpoint we support today; FAILED deliveries also frequently
+ * (but not always) carry a free-text reason whose field name varies —
+ * we accept any of the common ones and normalise to `errorMessage` at
+ * the route level so the downstream pipeline sees one shape.
+ */
 const payloadSchema = z.object({
   task_id: z.string().min(1),
   status: z.enum(["CREATED", "IN_PROGRESS", "COMPLETED", "FAILED"]),
-  // Magnific shapes its `generated` field as string[] across endpoints
-  // (kling-v3, kling-4k, wan-v27). Could be empty even when COMPLETED.
   generated: z.array(z.string()).optional().default([]),
+  error: z.string().optional(),
+  reason: z.string().optional(),
+  error_message: z.string().optional(),
+  message: z.string().optional(),
+  failure_reason: z.string().optional(),
 });
+
+/** Pluck whichever reason field the upstream populated, or null. */
+function extractUpstreamError(
+  p: z.infer<typeof payloadSchema>,
+): string | null {
+  return (
+    p.error_message ??
+    p.failure_reason ??
+    p.reason ??
+    p.error ??
+    p.message ??
+    null
+  );
+}
 
 export async function POST(request: Request) {
   const webhookId = request.headers.get("webhook-id");
@@ -145,6 +169,7 @@ export async function POST(request: Request) {
       freepikTaskId: payload.task_id,
       outcome: "failed",
       failureReason: "MAGNIFIC_FAILED_VIA_WEBHOOK",
+      upstreamErrorMessage: extractUpstreamError(payload),
     });
     return NextResponse.json({ ok: true });
   }

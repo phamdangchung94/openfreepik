@@ -136,6 +136,13 @@ export const usageLogs = pgTable(
     })
       .notNull()
       .default("pending"),
+    /**
+     * Upstream-reported failure reason captured at finalize time. Null
+     * for succeeded / pending rows. Surfaced verbatim to admin in the
+     * usage logs page; sanitized via `error-messages.friendlyError`
+     * before display to customers. Migration 0009.
+     */
+    errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

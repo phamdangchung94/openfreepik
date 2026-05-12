@@ -152,6 +152,15 @@ export interface FinalizeUsageOpts {
   videoUrlExpiresAt?: Date | null;
   /** Tag for the refund log (e.g. "MAGNIFIC_FAILED", "NO_VIDEO_URL"). */
   failureReason?: string;
+  /**
+   * Upstream-supplied failure reason text — persisted verbatim into
+   * `usage_logs.error_message` so admin can spot patterns and the
+   * customer error-log dialog can surface a translated/sanitized
+   * version via `error-messages.friendlyError`. Pass null when no
+   * upstream reason is available; the row's error_message stays null
+   * and the UI falls back to a generic "task failed" message.
+   */
+  upstreamErrorMessage?: string | null;
 }
 
 export async function finalizeUsageOnPoll(
@@ -185,10 +194,14 @@ export async function finalizeUsageOnPoll(
 
   // outcome === "failed" — atomically flip to refunded + recover the
   // row's codeId/costEur in the same statement so concurrent polls
-  // can't double-refund.
+  // can't double-refund. error_message keeps the upstream-supplied
+  // reason verbatim for later admin/customer surfacing.
   const updated = await db
     .update(usageLogs)
-    .set({ status: "refunded" })
+    .set({
+      status: "refunded",
+      errorMessage: opts.upstreamErrorMessage ?? null,
+    })
     .where(
       and(
         eq(usageLogs.freepikTaskId, opts.freepikTaskId),

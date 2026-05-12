@@ -31,6 +31,12 @@ export interface UsageLogRow {
   videoUrl: string | null;
   magnificVideoUrl: string | null;
   status: UsageStatus;
+  /**
+   * Upstream-supplied failure reason for refunded rows. Admin sees the
+   * raw verbatim string here; customer-side surfaces (error-log dialog)
+   * run it through `friendlyError` for brand-scrub + i18n.
+   */
+  errorMessage: string | null;
 }
 
 /**
@@ -48,6 +54,7 @@ type ColId =
   | "tier"
   | "eur"
   | "status"
+  | "error"
   | "magnific"
   | "r2"
   | "taskId";
@@ -62,6 +69,7 @@ const COLUMN_LABEL: Record<ColId, string> = {
   tier: "Tier",
   eur: "Giá",
   status: "Trạng thái",
+  error: "Lý do fail (raw)",
   magnific: "URL gốc",
   r2: "URL CDN",
   taskId: "Task ID",
@@ -77,6 +85,7 @@ const ALL_COLS: ColId[] = [
   "tier",
   "eur",
   "status",
+  "error",
   "magnific",
   "r2",
   "taskId",
@@ -187,6 +196,20 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
                 {visible.has("status") && (
                   <td className="px-3 py-2">
                     <StatusBadge status={r.status} />
+                  </td>
+                )}
+                {visible.has("error") && (
+                  <td
+                    className="px-3 py-2 max-w-[280px] text-[11px] text-muted-foreground"
+                    title={r.errorMessage ?? ""}
+                  >
+                    {r.errorMessage ? (
+                      <span className="line-clamp-2 break-all">
+                        {r.errorMessage}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </td>
                 )}
                 {visible.has("magnific") && (
@@ -387,6 +410,8 @@ function csvCell(r: UsageLogRow, col: ColId): string | number {
       return Math.round(Number(r.costEur) * 1000);
     case "status":
       return r.status;
+    case "error":
+      return r.errorMessage ?? "";
     case "magnific":
       return r.magnificVideoUrl ?? "";
     case "r2":

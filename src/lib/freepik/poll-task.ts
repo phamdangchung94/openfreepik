@@ -133,9 +133,11 @@ export async function pollTaskUntilDone(
       if (!res.ok) throw new Error(await extractErrorMessage(res));
 
       const json = await res.json();
-      const { status, generated } = json.data as {
+      const { status, generated, error_message } = json.data as {
         status: TaskStatus;
         generated: string[];
+        /** Optional upstream-supplied reason (FAILED only). */
+        error_message?: string;
       };
 
       onProgress?.(status);
@@ -144,7 +146,14 @@ export async function pollTaskUntilDone(
         return { status: "COMPLETED", generated: generated ?? [] };
       }
       if (status === "FAILED") {
-        return { status: "FAILED", generated: [], error: "Generation failed" };
+        // Prefer the upstream-supplied reason so the customer's error log
+        // can translate it via `friendlyError` (brand-scrubbed). Fallback
+        // to the generic string if the upstream didn't include one.
+        return {
+          status: "FAILED",
+          generated: [],
+          error: error_message?.trim() || "Generation failed",
+        };
       }
     } catch (err) {
       if (signal?.aborted) {

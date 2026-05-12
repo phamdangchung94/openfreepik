@@ -6,6 +6,13 @@ export interface TaskData {
   task_id: string;
   status: TaskStatus;
   generated: string[];
+  /**
+   * Upstream-supplied failure reason. Populated on FAILED status only.
+   * Field name varies across upstream endpoints — the schema accepts
+   * `error`, `reason`, `error_message`, `message`, or `failure_reason`
+   * and normalises to this one.
+   */
+  error_message?: string;
 }
 
 export interface FreepikResponse<T = TaskData> {

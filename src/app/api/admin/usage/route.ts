@@ -61,6 +61,7 @@ export async function GET(request: Request) {
       videoUrl: usageLogs.videoUrl,
       magnificVideoUrl: usageLogs.magnificVideoUrl,
       status: usageLogs.status,
+      errorMessage: usageLogs.errorMessage,
     })
     .from(usageLogs)
     .leftJoin(activationCodes, eq(usageLogs.codeId, activationCodes.id))

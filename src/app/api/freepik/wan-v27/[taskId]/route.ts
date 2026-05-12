@@ -24,6 +24,7 @@ export const GET = createTaskGetHandler(freepik.wanV27.getTask, {
         freepikTaskId: taskId,
         outcome: "failed",
         failureReason: "MAGNIFIC_FAILED",
+        upstreamErrorMessage: data.error_message ?? null,
       });
       return;
     }

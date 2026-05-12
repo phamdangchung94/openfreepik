@@ -20,6 +20,7 @@ import { useRegenerateHandler } from "@/store/regenerate-handler-store";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { BatchProgressWidget } from "@/components/batch/batch-progress-widget";
 import { toApiParams } from "@/lib/form/to-api-params";
+import { checkRecentRepeatFailures } from "@/lib/repeat-failure-check";
 import type { GenerationTask } from "@/store/task-store";
 
 import type { GeneratorFormValues, BatchItem } from "@/lib/form/generator-schema";
@@ -61,6 +62,25 @@ export default function HomePage() {
         // kling-v3
         imageUrl = payload.params.start_image_url;
         mode = imageUrl ? "i2v" : "t2v";
+      }
+      // Repeat-failure check: if this exact prompt/image just failed
+      // 3+ times in the last 10 min, the upstream renderer is almost
+      // certainly rejecting the input deterministically (content
+      // policy, bad image, etc.). Surface a non-blocking toast so the
+      // customer knows to tweak the input instead of burning more
+      // refunded tasks. We DON'T block — false positives are possible
+      // and the user keeps agency.
+      const { shouldWarn, failedCount } = checkRecentRepeatFailures({
+        prompt: payload.params.prompt ?? "",
+        mode,
+        imageUrl,
+        tasks: useTaskStore.getState().tasks,
+      });
+      if (shouldWarn) {
+        toast.warning(
+          `Prompt/ảnh này đã thất bại ${failedCount} lần gần đây — hãy thử đổi mô tả hoặc ảnh khác. Tiền của các lần thất bại đã được hoàn vào mã.`,
+          { duration: 8000 },
+        );
       }
       try {
         const localId = await generate(payload, {
