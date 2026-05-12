@@ -14,15 +14,16 @@ vốn theo góc nhìn kỹ thuật).
 | # | Luồng | Entry point | Lõi xử lý | Đụng DB |
 |---|---|---|---|---|
 | 1 | Customer activation | `/api/activate` | `auth/activation.ts` | `activation_codes` |
-| 2 | Single T2V/I2V | form → `/api/freepik/kling-v3` (hoặc `kling-4k-t2v`, `kling-4k-i2v`, `wan-v27`) | `freepik/orchestrator.ts` | `activation_codes`, `freepik_keys`, `usage_logs`, `pricing_rules` |
-| 3 | Batch | `use-batch-queue.ts` | gọi N lần luồng #2 song song | giống #2 |
-| 4 | Multi-shot | cùng endpoint #2 + body `multi_prompt[]` | giống #2 | giống #2 |
+| 2 | Single T2V/I2V | form → `/api/freepik/{kling-v3 \| kling-4k-t2v \| kling-4k-i2v \| wan-v27}` | `freepik/orchestrator.ts` | `activation_codes`, `freepik_keys`, `usage_logs`, `pricing_rules` |
+| 3 | Batch | `use-batch-queue.ts` | gọi N lần luồng #2 song song (Kling 3 std/pro/4k đều support) | giống #2 |
+| 4 | Multi-shot (chỉ Kling 3 std/pro) | cùng endpoint #2 + body `multi_prompt[]` | giống #2 | giống #2 |
 | 5 | Improve prompt | `/api/freepik/improve-prompt` | `orchestrator.ts` (cost=0) | `usage_logs` |
 | 6 | Auto-download | `/api/download/[taskId]` | proxy stream từ R2/Magnific | — |
 | 7 | History / Orphan recovery | client localStorage + `use-orphan-recovery.ts` | resume polling | — |
 | 8 | Usage panel (khách) | `/api/usage`, `/api/pricing/rates` | đọc DB | `usage_logs`, `pricing_rules` |
 | 9 | Admin CRUD | `/api/admin/*` | `auth/admin-server.ts` + Drizzle | tất cả bảng |
-| 10 | Cron purge | Vercel cron → `/api/cron/purge` | dọn rate_limit/sessions | `rate_limit_buckets`, `admin_sessions`, `failed_logins` |
+| 10 | Cron purge + key healthcheck | Vercel cron → `/api/cron/purge` | dọn rate_limit/sessions, probe + auto-deactivate dead keys | `rate_limit_buckets`, `admin_sessions`, `failed_logins`, `freepik_keys` |
+| 11 | Magnific webhook receiver | `/api/freepik/webhook` | HMAC verify (Svix-style) → `finalizeUsageOnPoll` | `usage_logs`, `activation_codes` (refund), `freepik_keys` (secret lookup) |
 
 **Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
 Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).
@@ -60,8 +61,8 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   │     ├── image-url-field.tsx .......... I2V: paste URL
 │   │   │     ├── generator-i2v-source.tsx ..... I2V: upload file → R2
 │   │   │     ├── start-end-frame-uploader.tsx . frame đầu/cuối
-│   │   │     ├── model-picker.tsx ............. Kling V3 / Kling 4K / WAN V2.7
-│   │   │     ├── quality-tier-picker.tsx ...... pro/std
+│   │   │     ├── model-picker.tsx ............. Kling 3 / WAN V2.7 (Kling 4K là 1 tier)
+│   │   │     ├── quality-tier-picker.tsx ...... 4K / 1080p (pro) / 720p (std) — dispatch endpoint theo tier
 │   │   │     ├── aspect-ratio-picker.tsx ...... 16:9 / 9:16 / 1:1
 │   │   │     ├── duration-slider.tsx .......... 3–15s
 │   │   │     ├── cfg-scale-slider.tsx ......... 0–1
@@ -87,7 +88,13 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   │     ← trả freepik_task_id về client
 │   │   │
 │   │   │   hooks/use-task-polling.ts → backoff (2→10s, timeout 1800s = 30 min)
-│   │   │     → GET /api/freepik/{endpoint}/[taskId] → finalizeUsageOnPoll
+│   │   │     → GET /api/freepik/{endpoint}/[taskId]
+│   │   │       • rate limit per (code, task) — 60/min, KHÔNG phải per-code
+│   │   │       • SELECT key_id FROM usage_logs WHERE freepik_task_id=X
+│   │   │         (migration 0008 partial index, O(1)) → preferredKeyId
+│   │   │       • authedFreepikCall dùng key gốc (tránh 404 alternation
+│   │   │         vì Magnific scope task theo account)
+│   │   │       → finalizeUsageOnPoll
 │   │   │       khi COMPLETED + có URL:
 │   │   │         ├── tải video từ Magnific → upload R2 mirror (lib/storage/r2.ts)
 │   │   │         ├── cập nhật usage_logs.videoUrl + magnificVideoUrl
@@ -221,9 +228,21 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   • dọn rate_limit_buckets hết hạn
 │   • dọn admin_sessions hết hạn
 │   • dọn failed_logins cũ
+│   • probeAndHealthcheckActiveKeys → auto-deactivate key 401
 │   • (tuỳ chọn) re-mirror video sắp expire
 │   Bảo vệ bằng CRON_SECRET header
 │
+├── ▶ FLOW 11: MAGNIFIC WEBHOOK RECEIVER ─────────────────────────────────────────
+│   src/app/api/freepik/webhook/route.ts ........ Magnific push delivery (Svix-style)
+│   src/lib/freepik/webhook-verify.ts ........... HMAC-SHA256 verification
+│   src/lib/freepik/webhook-url.ts .............. resolve callback URL (env-based)
+│   • Headers: webhook-id, webhook-timestamp, webhook-signature (v1,<base64>)
+│   • Signed payload: ${id}.${ts}.${body}
+│   • Probes every key có webhook_secret_encrypted (migration 0007) đến khi match
+│   • Sau verify: gọi finalizeUsageOnPoll (cùng path với poll route → idempotent)
+│   • Outbound: orchestrator inject params.webhook_url tự động khi VERCEL_ENV=production
+│
+
 ├── src/lib/
 │   ├── rate-limit.ts ............... fixed-window per code/IP → DB rate_limit_buckets
 │   ├── logger.ts ................... structured JSON log (server-side)
@@ -258,11 +277,16 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   ├── route-helpers.ts ........ extractBearer, errorToResponse
 │   │   ├── orchestrator.ts ......... 🔑 luồng trung tâm: charge + key pool + retry
 │   │   ├── orchestrator-helpers.ts . finalizeUsageOnPoll (charge → succeeded/refunded)
-│   │   ├── key-pool.ts ............. pickActiveKey / markKeyExhausted / recordKeyCost
+│   │   ├── key-pool.ts ............. pickActiveKey / pickKeyById (poll preferred key)
+│   │   │                              / markKeyExhausted / recordKeyCost
+│   │   │                              / getKeyWebhookSecrets (webhook verify)
 │   │   ├── poll-task.ts ............ R2 mirror khi COMPLETED
-│   │   ├── probe-quota.ts .......... gọi Magnific lấy balance
+│   │   ├── probe-quota.ts .......... gọi Magnific + probeAndHealthcheckActiveKeys
+│   │   ├── webhook-verify.ts ....... HMAC-SHA256 Svix-style + multi-encoding fallback
+│   │   ├── webhook-url.ts .......... resolve outbound webhook_url
 │   │   ├── kling-v3.ts + schema.ts
-│   │   ├── kling-4k.ts + schema.ts . T2V + I2V (1.12 EUR/s, no audio, no tier)
+│   │   ├── kling-4k.ts + schema.ts . T2V + I2V (tier='4k', 1.12 EUR/s, audio param
+│   │   │                              forwarded nhưng Magnific ignore → silent)
 │   │   ├── wan-v27.ts + schema.ts
 │   │   └── improve-prompt.ts + schema.ts
 │   ├── pricing/calculator.ts ....... lookup pricing_rules → cost EUR
@@ -282,15 +306,25 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │  🗄️ DATA MODEL (Neon Postgres + Drizzle)                                    │
 │   └──────────────────────────────────────────────────────────────────────────────┘
 │
-├── drizzle/migrations/ .............. 0000 → 0006 (snapshot trong meta/)
+├── drizzle/migrations/ .............. 0000 → 0008
+│   Tracking: __drizzle_migrations table (filename PK); scripts/db-migrate.ts
+│   scan thư mục alphabetically, không dùng meta/_journal.json runtime.
 │   Bảng:
-│     • freepik_keys      — pool API keys (encrypted, used_eur, max_concurrent)
+│     • freepik_keys      — pool API keys (encrypted, used_eur, max_concurrent,
+│                           webhook_secret_encrypted nullable từ 0007)
 │     • activation_codes  — bearer code khách (mode, quota_eur, used_eur)
-│     • usage_logs        — mỗi request 1 row (status, cost, video URLs, TTL)
+│     • usage_logs        — mỗi request 1 row (status, cost, video URLs, TTL,
+│                           key_id, freepik_task_id — partial index từ 0008)
 │     • pricing_rules     — ma trận giá (endpoint+tier+duration+audio)
+│                           tier enum: 'pro' | 'std' | '4k'
 │     • admin_sessions    — SHA-256 token hash, TTL 24h
-│     • rate_limit_buckets — fixed-window counter
+│     • rate_limit_buckets — fixed-window counter (scope: per-(code,task) cho poll)
 │     • failed_logins     — brute-force lock per IP
+│
+│   Latest migrations:
+│     0007 — add freepik_keys.webhook_secret_encrypted (Magnific HMAC verify)
+│     0008 — partial index usage_logs.freepik_task_id WHERE NOT NULL
+│            (poll route lookup creator key in O(1))
 │
 ├── ┌──────────────────────────────────────────────────────────────────────────────┐
 │   │  🛠️ SCRIPTS VẬN HÀNH (chạy thủ công qua `pnpm tsx scripts/...`)             │
@@ -319,19 +353,25 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   └──────────────────────────────────────────────────────────────────────────────┘
 │
 │   • Magnific / Freepik API (default base: api.magnific.com)
-│       - POST /v1/ai/video/kling-v3-{pro|std}     + GET /v1/ai/video/kling-v3/{taskId}
-│       - POST /v1/ai/video/kling-4k-t2v           + GET /v1/ai/video/kling-4k-t2v/{taskId}
-│       - POST /v1/ai/video/kling-4k-i2v           + GET /v1/ai/video/kling-4k-i2v/{taskId}
-│       - POST /v1/ai/video/wan-v27-*              + GET status
-│       - POST /v1/ai/improve-prompt               + GET /v1/ai/improve-prompt/{taskId}
+│     Outbound (POST creator + GET poll):
+│       - /v1/ai/video/kling-v3-{pro|std}     + GET /v1/ai/video/kling-v3/{taskId}
+│       - /v1/ai/video/kling-4k-t2v           + GET /v1/ai/video/kling-4k-t2v/{taskId}
+│       - /v1/ai/video/kling-4k-i2v           + GET /v1/ai/video/kling-4k-i2v/{taskId}
+│       - /v1/ai/video/wan-v27-*              + GET status
+│       - /v1/ai/improve-prompt               + GET /v1/ai/improve-prompt/{taskId}
+│     Inbound (Magnific push delivery → us):
+│       - POST {WEBHOOK_BASE_URL}/api/freepik/webhook (Svix-style HMAC, per-key secret)
 │   • Cloudflare R2 (env: R2_ACCOUNT_ID, R2_BUCKET, R2_PUBLIC_URL_BASE…) → video mirror, image upload
-│   • Neon Postgres (DATABASE_URL)
-│   • Vercel Cron (vercel.json) — daily purge
+│   • Neon Postgres — 2 branches:
+│       - production: Vercel prod + preview deploys
+│       - dev: local .env.local (split landed 2026-05-12)
+│   • Vercel Cron (vercel.json) — daily purge + key healthcheck
 │
 └── ┌──────────────────────────────────────────────────────────────────────────────┐
     │  🔐 ENV VARS (đã có trên Vercel Production & Preview)                        │
     └──────────────────────────────────────────────────────────────────────────────┘
         DATABASE_URL, ADMIN_PASSWORD, ADMIN_SESSION_SECRET, KEY_ENCRYPTION_SECRET,
-        CRON_SECRET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+        CRON_SECRET, WEBHOOK_BASE_URL (optional),
+        R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
         R2_BUCKET, R2_PUBLIC_URL_BASE
 ```

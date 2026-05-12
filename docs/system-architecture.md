@@ -12,13 +12,19 @@ server pools multiple Freepik API keys behind the scenes, meters
 per-customer EUR spend, and mirrors generated videos to Cloudflare R2
 for cheap egress.
 
-Three upstream video models are supported:
+Two upstream video models, three Kling quality tiers, plus WAN 2.7:
 
-| Model       | Upstream path                              | Tiers     | Audio | Multi-shot |
-|-------------|--------------------------------------------|-----------|-------|------------|
-| Kling V3    | `/v1/ai/video/kling-v3-{pro\|std}`         | Pro / Std | Yes   | Up to 6    |
-| Kling 4K    | `/v1/ai/video/kling-4k-{t2v\|i2v}`         | —         | No    | —          |
-| WAN 2.7     | `/v1/ai/video/wan-v27-*`                   | 720P / 1080P | —  | —          |
+| Model     | Upstream path                          | Tiers / Variants                                   | Audio                          | Multi-shot |
+|-----------|----------------------------------------|----------------------------------------------------|--------------------------------|------------|
+| Kling 3   | `/v1/ai/video/kling-v3-{pro\|std}` ·· · or ··· `/v1/ai/video/kling-4k-{t2v\|i2v}` | `std` (720p) · `pro` (1080p) · `4k` (4K, t2v/i2v) | std/pro: yes · 4k: forwarded but Magnific currently ignores → silent | std/pro only (up to 6) |
+| WAN 2.7   | `/v1/ai/video/wan-v27-*`               | `std` (720P) · `pro` (1080P)                       | —                              | —          |
+
+Kling 3's three tiers map to two different upstream endpoint families
+(`kling-v3-*` for Pro/Std, `kling-4k-*` for 4K). The customer-facing
+UI treats them as one model with three quality choices; the form
+dispatch in `use-generate-video.ts` reads `tier` and routes the
+request to the correct family. Pricing rows for the `kling-4k-*`
+endpoints carry `tier='4k'` so the calculator can look them up.
 
 Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 
@@ -61,9 +67,11 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
    R2 mirror on the first `COMPLETED` poll, then flips the usage log
    from `pending` → `succeeded`. `FAILED` flips to `refunded` +
    restores balance.
-4. **Auxiliary** — batch queue (Kling V3 only today), multi-shot,
-   prompt enhancement, history sidebar with orphan recovery,
-   auto-download.
+4. **Auxiliary** — batch queue (Kling 3 std/pro/4k all dispatch
+   through the same form; WAN 2.7 is single-task-only via a different
+   code path), multi-shot (Kling 3 std/pro only — 4K upstream rejects
+   `multi_prompt`), prompt enhancement, history sidebar with orphan
+   recovery, auto-download.
 
 ### Admin-side
 1. **Login** → cookie-gated `/dashboard/(authed)` routes.
@@ -73,7 +81,11 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 
 ### Background
 - **Cron** (`/api/cron/purge`, daily 02:00 UTC, sin1) — prunes
-  `rate_limit_buckets`, expired `admin_sessions`, old `failed_logins`.
+  `rate_limit_buckets`, expired `admin_sessions`, old `failed_logins`,
+  AND runs `probeAndHealthcheckActiveKeys` to auto-deactivate any
+  Magnific key that comes back 401 (revoked upstream).
+- **Webhook receiver** (`/api/freepik/webhook`) — Magnific push
+  delivery; see the dedicated section below.
 - **Reconcile** (`pnpm admin:reconcile`) — manual sweep for
   `usage_logs.status='pending'` orphans; probes Magnific and finalizes
   via the same `finalizeUsageOnPoll` helper.
@@ -139,25 +151,76 @@ Client side (`poll-task.ts`):
 - Semaphore caps to 5 simultaneous polls across the whole tab
 
 Server side (`createTaskGetHandler`):
-- Per-code rate limit (60/min per resource) gates polls
-- `authedFreepikCall` validates the bearer + picks a pool key
+- Per-`(code, task)` rate limit (60/min) gates polls — composite
+  scope so a customer polling 5 tasks concurrently doesn't burn
+  through a single 60/min code-wide budget (audit 2026-05-12).
+- Looks up the original creator key from
+  `usage_logs.key_id` and passes it to `authedFreepikCall` via
+  `preferredKeyId`. Magnific scopes task visibility to the account
+  that POSTed the create call, so polling against a different pool
+  key returns 404. Migration 0008 added a partial index on
+  `usage_logs.freepik_task_id` so the lookup is constant-time.
+- `authedFreepikCall` validates the bearer + picks the preferred
+  key (or falls back to LRU if the original is gone)
 - `onSuccess` runs the R2 mirror + `finalizeUsageOnPoll`
+
+## Webhook Receiver
+
+`POST /api/freepik/webhook` is the push-delivery alternative to
+client polling. Magnific posts task completions here with Svix-style
+HMAC headers:
+
+```
+webhook-id          — unique delivery id
+webhook-timestamp   — unix seconds (used for 5-min replay window)
+webhook-signature   — v1,<base64-hmac>  (may carry multiple versions space-separated)
+```
+
+The handler probes every pool key with a configured
+`webhook_secret_encrypted` (migration 0007) until one matches. The
+matched key tags the delivery so we know which upstream account
+fired it.
+
+Signed payload format: `${webhookId}.${webhookTimestamp}.${rawBody}`,
+HMAC-SHA256, base64 output. The verifier tries multiple secret
+encodings (UTF-8 raw, hex-decoded, base64-decoded,
+`whsec_`-with-prefix) and multiple payload formats (`id.ts.body`,
+`ts.body`, `body`) to handle the thin upstream docs — production
+matched on `utf8 + id.ts.body`. Mismatch logs the first 12 chars of
+every computed signature so a future schema drift is debuggable.
+
+On success the handler runs the same `finalizeUsageOnPoll` path the
+poll route uses (idempotent via `WHERE status='pending'`), so the
+customer outcome is identical whether the task finalized via push
+or pull. Keys without a configured secret stay on pure polling.
+
+Outbound: every POST creator route (`kling-v3`, `kling-4k-*`,
+`wan-v27`) injects `params.webhook_url = getWebhookUrl()` when
+`VERCEL_ENV=production` (or when the explicit `WEBHOOK_BASE_URL`
+env is set), so Magnific knows where to call back.
 
 ## Data Model
 
 ```
 freepik_keys         pool of upstream Freepik API keys (AES-GCM encrypted)
+                       + optional webhook_secret_encrypted (migration 0007)
 activation_codes     customer bearer codes (mode, quota_eur, used_eur)
-usage_logs           one row per request (status, cost, video URLs, TTL)
+usage_logs           one row per request (status, cost, video URLs, TTL,
+                       key_id, freepik_task_id — indexed via migration 0008
+                       so poll routes look up the creator key in O(1))
 pricing_rules        lookup matrix (endpoint, tier, duration, audio)
+                       — tier enum: 'pro' | 'std' | '4k' (Kling 3's 4K tier
+                       lives on the kling-4k-* endpoints, indexed by tier='4k')
 admin_sessions       SHA-256 cookie tokens (24h TTL)
 rate_limit_buckets   fixed-window counters (cleaned by cron)
 failed_logins        per-IP admin login throttle
 ```
 
-Migrations live in [`drizzle/migrations/`](../drizzle/migrations); the
-journal in `meta/_journal.json` is the source of truth for migration
-order.
+Migrations live in [`drizzle/migrations/`](../drizzle/migrations) —
+files 0000-0008 currently. `scripts/db-migrate.ts` walks them
+alphabetically against a `__drizzle_migrations` tracking table; the
+journal in `meta/_journal.json` was used by older `drizzle-kit`
+versions but isn't consulted at apply time today.
 
 ## Pricing
 
@@ -212,11 +275,14 @@ exactly.
   `CHARGE_SLOW` at 5s and `CHARGE_INITIATED`/`CHARGE_COMMITTED`
   bookends — kills mid-flight are observable in logs.
 
-## Local Dev Caveat
+## Local Dev
 
-⚠️ Local + production currently share the same database and secrets
-([open issue #2](https://github.com/phamdangchung94/openfreepik/issues/2)).
-Every `pnpm dev` query hits production data; every
-`pnpm db:seed-pricing` writes to production. The isolation playbook
-lives in [`RUNBOOK.md`](RUNBOOK.md#required-env-vars). Until that
-lands, treat dev as a production session.
+`.env.local` `DATABASE_URL` points to the Neon `dev` branch (split
+landed 2026-05-12 — audit #2 closed). Local `pnpm dev`, `db:migrate`,
+`db:seed-pricing`, etc. all touch dev only; production data is safe.
+`KEY_ENCRYPTION_SECRET` still mirrors prod (so dev can decrypt the
+snapshot's `freepik_keys`); generate a dev-specific secret if you
+need full crypto isolation. Webhook URL still points at prod, so
+any test video kicked off locally will trigger a webhook to the
+prod endpoint (signature mismatch → ignored). See
+[`RUNBOOK.md`](RUNBOOK.md) for the operational details.
