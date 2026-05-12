@@ -161,7 +161,13 @@ export function createTaskGetHandler<T>(
       if (validation.ok) {
         const rl = await checkRateLimit({
           resource: options.rateLimit.resource,
-          scope: validation.metadata.codeId,
+          // Scope per (code, task) instead of per-code. Customer polling
+          // 5 tasks concurrently at 2s interval was hitting ~120 req/min
+          // against the previous code-wide 60/min budget — 60% of polls
+          // came back 429 and the client retry storm made it worse. Each
+          // task's own 60/min bucket is far more than poll-task.ts can
+          // burn (max ~30/min at the fastest 2s interval).
+          scope: `${validation.metadata.codeId}:${taskId}`,
           limit: options.rateLimit.limit,
           windowSeconds: options.rateLimit.windowSeconds,
         });
