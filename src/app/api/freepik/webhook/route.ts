@@ -66,6 +66,17 @@ export async function POST(request: Request) {
   }
 
   let matchedKeyId: string | null = null;
+  // Collect per-candidate diagnostics so a mismatch can be debugged
+  // without re-deploying instrumentation. Only the first 12 chars of
+  // each signature are kept — enough to spot which encoding is close,
+  // not enough to reverse the secret.
+  const diagnostics: Array<{
+    keyLabel: string;
+    receivedSigPrefixes?: string[];
+    computedSigs?: { encoding: string; sigPrefix: string }[];
+    signedPayloadLen?: number;
+  }> = [];
+
   for (const c of candidates) {
     const result = await verifyMagnificWebhook({
       rawBody,
@@ -78,12 +89,25 @@ export async function POST(request: Request) {
       matchedKeyId = c.id;
       break;
     }
+    if (result.reason === "mismatch") {
+      diagnostics.push({
+        keyLabel: c.label,
+        receivedSigPrefixes: result.receivedSigPrefixes,
+        computedSigs: result.computedSigs,
+        signedPayloadLen: result.signedPayloadLen,
+      });
+    }
   }
 
   if (!matchedKeyId) {
     log.warn("WEBHOOK_SIGNATURE_MISMATCH", {
       webhookId,
+      webhookTimestamp,
+      sigHeaderLen: webhookSignature.length,
       candidateCount: candidates.length,
+      // Show diagnostics for first key only — log size matters and
+      // all keys typically hit the same root-cause anyway.
+      firstKey: diagnostics[0],
     });
     return NextResponse.json(
       { error: "BAD_SIGNATURE", message: "Signature did not verify" },

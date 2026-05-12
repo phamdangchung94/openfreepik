@@ -55,17 +55,30 @@ function base64Decode(s: string): Uint8Array | null {
 }
 
 /** Candidate byte sequences for the HMAC key, ranked most likely first. */
-function secretCandidates(secret: string): Uint8Array[] {
+function secretCandidates(
+  secret: string,
+): { encoding: string; bytes: Uint8Array }[] {
   const stripped = secret.startsWith("whsec_") ? secret.slice(6) : secret;
-  const candidates: Uint8Array[] = [];
+  const candidates: { encoding: string; bytes: Uint8Array }[] = [];
   // 1. Try as raw UTF-8 (Magnific Python docs show secret.encode()).
-  candidates.push(new TextEncoder().encode(stripped));
+  candidates.push({
+    encoding: "utf8",
+    bytes: new TextEncoder().encode(stripped),
+  });
   // 2. Try as Svix-style base64 (canonical whsec_ format).
   const b64 = base64Decode(stripped);
-  if (b64) candidates.push(b64);
+  if (b64) candidates.push({ encoding: "base64", bytes: b64 });
   // 3. Try as hex (the form Magnific actually surfaces to admins today).
   const hex = hexDecode(stripped);
-  if (hex) candidates.push(hex);
+  if (hex) candidates.push({ encoding: "hex", bytes: hex });
+  // 4. Try original secret WITHOUT whsec_ strip (in case Magnific signs
+  //    the whole "whsec_..." string as raw UTF-8 against itself).
+  if (stripped !== secret) {
+    candidates.push({
+      encoding: "utf8-with-prefix",
+      bytes: new TextEncoder().encode(secret),
+    });
+  }
   return candidates;
 }
 
@@ -106,7 +119,20 @@ export interface VerifyOpts {
 
 export type VerifyResult =
   | { ok: true }
-  | { ok: false; reason: "bad_timestamp" | "stale" | "no_signature" | "mismatch" };
+  | {
+      ok: false;
+      reason: "bad_timestamp" | "stale" | "no_signature" | "mismatch";
+      /**
+       * Diagnostic prefixes — only populated for "mismatch". Each entry
+       * shows the first 12 chars of the candidate's computed signature
+       * paired with the encoding that produced it. Safe to log; the
+       * full HMAC isn't exposed and 12 base64 chars (≈9 bytes) doesn't
+       * leak enough to reverse the secret.
+       */
+      computedSigs?: { encoding: string; sigPrefix: string }[];
+      receivedSigPrefixes?: string[];
+      signedPayloadLen?: number;
+    };
 
 export async function verifyMagnificWebhook(opts: VerifyOpts): Promise<VerifyResult> {
   // Reject obviously-stale or future-skewed deliveries to bound the
@@ -127,16 +153,40 @@ export async function verifyMagnificWebhook(opts: VerifyOpts): Promise<VerifyRes
     .map((p) => p.slice(3));
   if (v1Sigs.length === 0) return { ok: false, reason: "no_signature" };
 
-  const signedPayload = `${opts.webhookId}.${opts.webhookTimestamp}.${opts.rawBody}`;
+  // Try multiple payload formats — docs only mention {id}.{ts}.{body}
+  // but other webhook providers sign just {ts}.{body} or just {body}.
+  // We accept any combination of (encoding × payload-format × v1-sig)
+  // so a quirky upstream still verifies.
+  const payloadFormats = [
+    { name: "id.ts.body", value: `${opts.webhookId}.${opts.webhookTimestamp}.${opts.rawBody}` },
+    { name: "ts.body", value: `${opts.webhookTimestamp}.${opts.rawBody}` },
+    { name: "body", value: opts.rawBody },
+  ];
 
-  // Try each candidate secret encoding × each provided v1 signature.
-  // Linear in (candidates × sigs) — both small.
+  // Collect diagnostic prefixes for the {id}.{ts}.{body} default so the
+  // route can log them on mismatch; other formats just match-or-not.
+  const computedSigs: { encoding: string; sigPrefix: string }[] = [];
+
   for (const candidate of secretCandidates(opts.secret)) {
-    const expected = await hmacBase64(candidate, signedPayload);
-    for (const sig of v1Sigs) {
-      if (timingSafeEqual(expected, sig)) return { ok: true };
+    for (const payload of payloadFormats) {
+      const expected = await hmacBase64(candidate.bytes, payload.value);
+      if (payload.name === "id.ts.body") {
+        computedSigs.push({
+          encoding: candidate.encoding,
+          sigPrefix: expected.slice(0, 12),
+        });
+      }
+      for (const sig of v1Sigs) {
+        if (timingSafeEqual(expected, sig)) return { ok: true };
+      }
     }
   }
 
-  return { ok: false, reason: "mismatch" };
+  return {
+    ok: false,
+    reason: "mismatch",
+    computedSigs,
+    receivedSigPrefixes: v1Sigs.map((s) => s.slice(0, 12)),
+    signedPayloadLen: payloadFormats[0]!.value.length,
+  };
 }
