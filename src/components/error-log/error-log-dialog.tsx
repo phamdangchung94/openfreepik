@@ -166,7 +166,8 @@ function ErrorRow({
 }) {
   const unread = !task.errorAcknowledgedAt;
   const friendly = friendlyError(task.error);
-  const tierLabel = task.tier === "pro" ? "1080p" : "720p";
+  const tierLabel =
+    task.tier === "4k" ? "4K" : task.tier === "pro" ? "1080p" : "720p";
 
   return (
     <div

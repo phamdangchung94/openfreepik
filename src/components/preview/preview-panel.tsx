@@ -180,7 +180,7 @@ function CompletedState({
             {task.mode === "t2v" ? "T2V" : "I2V"}
           </span>
           <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
-            {task.tier === "pro" ? "1080p" : "720p"}
+            {task.tier === "4k" ? "4K" : task.tier === "pro" ? "1080p" : "720p"}
           </span>
           <span className="ml-auto">
             <UrlCountdown expiresAt={task.videoUrlExpiresAt} />

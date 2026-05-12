@@ -23,7 +23,7 @@ export interface UsageLogRow {
   keyId: string | null;
   keyLabel: string | null;
   endpoint: string;
-  tier: "pro" | "std" | null;
+  tier: "pro" | "std" | "4k" | null;
   durationSeconds: number | null;
   withAudio: boolean;
   costEur: string;
@@ -82,18 +82,9 @@ const ALL_COLS: ColId[] = [
   "taskId",
 ];
 
-const DEFAULT_VISIBLE: Set<ColId> = new Set([
-  "when",
-  "customer",
-  "key",
-  "endpoint",
-  "duration",
-  "audio",
-  "tier",
-  "eur",
-  "status",
-  "taskId",
-]);
+// Show every column by default — admin asked for full visibility.
+// Power users can hide columns via the "Cột" dropdown.
+const DEFAULT_VISIBLE: Set<ColId> = new Set(ALL_COLS);
 
 export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
   const [visible, setVisible] = useState<Set<ColId>>(DEFAULT_VISIBLE);
@@ -157,7 +148,7 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
                 )}
                 {visible.has("endpoint") && (
                   <td className="px-3 py-2 whitespace-nowrap">
-                    {r.endpoint === "kling-v3" ? "Video" : "Improve"}
+                    {renderEndpoint(r.endpoint)}
                   </td>
                 )}
                 {visible.has("duration") && (
@@ -237,7 +228,7 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
                     className="px-3 py-2 font-mono text-[10px] text-muted-foreground"
                     title={r.freepikTaskId ?? ""}
                   >
-                    {r.freepikTaskId?.slice(0, 8) ?? "—"}
+                    {r.freepikTaskId ?? "—"}
                   </td>
                 )}
               </tr>
@@ -257,6 +248,28 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Friendly label for the upstream endpoint column. Older rows are
+ * 'kling-v3' or 'improve-prompt' from before WAN/Kling-4K shipped;
+ * keep them mapped to their tier-agnostic names.
+ */
+function renderEndpoint(endpoint: string): string {
+  switch (endpoint) {
+    case "kling-v3":
+      return "Kling 3";
+    case "kling-4k-t2v":
+      return "Kling 4K T2V";
+    case "kling-4k-i2v":
+      return "Kling 4K I2V";
+    case "wan-v27":
+      return "WAN 2.7";
+    case "improve-prompt":
+      return "Improve";
+    default:
+      return endpoint;
+  }
 }
 
 function StatusBadge({ status }: { status: UsageStatus }) {
