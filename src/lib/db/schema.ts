@@ -38,13 +38,16 @@ export const freepikKeys = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     /**
      * Max simultaneous in-flight generations the orchestrator will
-     * route to this key. Default 8 per the Magnific account quota
-     * conventions; admin can raise/lower per-key. pickActiveKey
-     * filters by `inflight < max_concurrent` so a single key can't
-     * be hammered past the upstream's concurrency tolerance. Migration
-     * 0006.
+     * route to this key. Default raised from 8 → 30 in migration 0010
+     * after a 2026-05-13 probe showed the upstream allows 300 req/min
+     * per key (rate-limit-limit header). At ~12 polls/min/task the
+     * 30-task cap stays comfortably under that budget (~360/min peak;
+     * orchestrator's 429 → KEY_TRANSIENT_FAILURE rotation handles
+     * occasional spikes). Admin can raise/lower per-key. pickActiveKey
+     * filters by `inflight < max_concurrent` so a single key can't be
+     * hammered past the upstream's concurrency tolerance.
      */
-    maxConcurrent: integer("max_concurrent").notNull().default(8),
+    maxConcurrent: integer("max_concurrent").notNull().default(30),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -63,23 +63,6 @@ export default function HomePage() {
         imageUrl = payload.params.start_image_url;
         mode = imageUrl ? "i2v" : "t2v";
       }
-      // JSON-as-prompt detector: production logs caught a customer
-      // pasting a JSON params blob (`{"aspect_ratio":"9:16",...}`) into
-      // the prompt field — every task failed because the upstream
-      // renderer treats the prompt as a text description, not a config
-      // object. Surface a one-shot warning. The customer can still
-      // proceed if they actually want JSON-like text in the video.
-      const promptText = (payload.params.prompt ?? "").trim();
-      const looksLikeJson =
-        (promptText.startsWith("{") && promptText.endsWith("}")) ||
-        (promptText.startsWith("[") && promptText.endsWith("]"));
-      if (looksLikeJson && promptText.length > 10) {
-        toast.warning(
-          "Prompt là mô tả bằng văn bản, không phải JSON cấu hình. Hãy mô tả nội dung video bạn muốn (ví dụ: 'một con mèo chạy trên bãi biển'). Chọn 16:9 / 9:16, chất lượng… ở các ô bên dưới.",
-          { duration: 10000 },
-        );
-      }
-
       // Repeat-failure check: if this exact prompt/image just failed
       // 3+ times in the last 10 min, the upstream renderer is almost
       // certainly rejecting the input deterministically (content
