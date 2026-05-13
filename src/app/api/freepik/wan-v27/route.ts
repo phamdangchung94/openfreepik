@@ -109,6 +109,7 @@ export async function POST(request: Request) {
     tier: params.resolution === "720P" ? "std" : "pro",
     durationSeconds: params.duration ?? 5,
     withAudio: false,
+    prompt: params.prompt ?? null,
     callFreepik: (apiKey) =>
       freepik.wanV27.generate(paramsWithWebhook, { apiKey }),
     extractTaskId: (data) => data.task_id,

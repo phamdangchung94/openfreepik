@@ -1,9 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { GeneratorForm, type GeneratorFormHandle } from "@/components/generator/generator-form";
 import { ImprovePromptDialog } from "@/components/generator/improve-prompt-dialog";
 import { PreviewPanel } from "@/components/preview/preview-panel";
@@ -40,6 +50,14 @@ export default function HomePage() {
   // (no activation code OR no history yet). Hides automatically.
   const showOnboarding = !activationCode || Object.keys(tasks).length === 0;
 
+  // Pending payload + failure count surfaced by the BLOCK-tier
+  // repeat-failure dialog. Ref-based fingerprint allowlist persists
+  // across renders without re-triggering the modal once the customer
+  // has explicitly chosen "Tôi vẫn muốn thử" for a given input.
+  const overriddenFingerprints = useRef<Set<string>>(new Set());
+  const [blockedPayload, setBlockedPayload] =
+    useState<{ payload: GeneratePayload; failedCount: number; fingerprint: string } | null>(null);
+
   const handleSingleSubmit = useCallback(
     async (payload: GeneratePayload) => {
       const { activationCode } = useAuthStore.getState();
@@ -63,22 +81,38 @@ export default function HomePage() {
         imageUrl = payload.params.start_image_url;
         mode = imageUrl ? "i2v" : "t2v";
       }
-      // Repeat-failure check: if this exact prompt/image just failed
-      // 3+ times in the last 10 min, the upstream renderer is almost
-      // certainly rejecting the input deterministically (content
-      // policy, bad image, etc.). Surface a non-blocking toast so the
-      // customer knows to tweak the input instead of burning more
-      // refunded tasks. We DON'T block — false positives are possible
-      // and the user keeps agency.
-      const { shouldWarn, failedCount } = checkRecentRepeatFailures({
+      // Repeat-failure check — two tiers (audit 2026-05-13):
+      //   - 3+ identical failures → warn-tier toast (non-blocking)
+      //   - 5+ identical failures → block-tier modal (must confirm
+      //     before proceeding). Customer can still override but the
+      //     dialog forces a conscious decision.
+      // We DON'T hard-block — false positives possible, user keeps
+      // ultimate agency. Override decisions are remembered for the
+      // rest of the session per fingerprint so the dialog doesn't
+      // re-fire on every retry.
+      const failureCheck = checkRecentRepeatFailures({
         prompt: payload.params.prompt ?? "",
         mode,
         imageUrl,
         tasks: useTaskStore.getState().tasks,
       });
-      if (shouldWarn) {
+      if (
+        failureCheck.severity === "block" &&
+        !overriddenFingerprints.current.has(failureCheck.fingerprint)
+      ) {
+        // Block-tier: open modal and bail out. The modal's confirm
+        // handler re-enters handleSingleSubmit after marking the
+        // fingerprint as overridden.
+        setBlockedPayload({
+          payload,
+          failedCount: failureCheck.failedCount,
+          fingerprint: failureCheck.fingerprint,
+        });
+        return;
+      }
+      if (failureCheck.severity === "warn") {
         toast.warning(
-          `Prompt/ảnh này đã thất bại ${failedCount} lần gần đây — hãy thử đổi mô tả hoặc ảnh khác. Tiền của các lần thất bại đã được hoàn vào mã.`,
+          `Prompt/ảnh này đã thất bại ${failureCheck.failedCount} lần gần đây — hãy thử đổi mô tả hoặc ảnh khác. Tiền của các lần thất bại đã được hoàn vào mã.`,
           { duration: 8000 },
         );
       }
@@ -193,6 +227,57 @@ export default function HomePage() {
           return n;
         }}
       />
+
+      {/* Block-tier repeat-failure confirmation. Opens when the same
+          prompt/image just failed 5+ times — forces a conscious choice
+          before the customer burns another refunded task. */}
+      <AlertDialog
+        open={blockedPayload !== null}
+        onOpenChange={(next) => {
+          if (!next) setBlockedPayload(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Prompt/ảnh này đã thất bại {blockedPayload?.failedCount ?? 0} lần
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Trong 10 phút qua, hệ thống AI tạo video đã từ chối yêu cầu
+              này nhiều lần với cùng một input. Nhiều khả năng cần đổi
+              prompt hoặc ảnh.
+              <br />
+              <br />
+              Gợi ý:
+              <br />
+              • Diễn đạt prompt theo cách khác hoặc dùng từ đơn giản hơn
+              <br />
+              • Đổi ảnh nguồn nếu đang dùng I2V
+              <br />
+              • Thử chất lượng thấp hơn (720p) hoặc thời lượng ngắn hơn
+              <br />
+              <br />
+              Tiền của các lần thất bại đã được hoàn về mã của bạn.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>OK, tôi sẽ đổi input</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!blockedPayload) return;
+                overriddenFingerprints.current.add(blockedPayload.fingerprint);
+                const pending = blockedPayload.payload;
+                setBlockedPayload(null);
+                // Re-enter the submit pipeline — the fingerprint is now
+                // in the override set so the block branch passes.
+                void handleSingleSubmit(pending);
+              }}
+            >
+              Tôi vẫn muốn thử lại
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -63,6 +63,13 @@ export interface OrchestrateOptions<T> {
   tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;
   withAudio?: boolean;
+  /**
+   * Customer prompt to persist into usage_logs.prompt — used by admin
+   * usage page + repeat-failure analysis. Null for endpoints with no
+   * customer prompt; callers should still pass through whatever
+   * params.prompt the user supplied.
+   */
+  prompt?: string | null;
   /** Closure that performs the Freepik HTTP call with the chosen key. */
   callFreepik: (apiKey: string) => Promise<T>;
   /** Extract the Freepik task_id from the response, for logging. */

@@ -103,6 +103,7 @@ export async function POST(request: Request) {
     tier: "4k",
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
+    prompt: params.prompt ?? null,
     callFreepik: (apiKey) =>
       freepik.kling4k.generateT2v(paramsWithWebhook, { apiKey }),
     extractTaskId: (data) => data.task_id,

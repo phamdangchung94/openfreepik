@@ -146,6 +146,15 @@ export const usageLogs = pgTable(
      * before display to customers. Migration 0009.
      */
     errorMessage: text("error_message"),
+    /**
+     * Customer prompt verbatim at POST time. Persisted for admin
+     * support + repeat-failure analysis (audit 2026-05-13: customer
+     * '5-XuanHuy' retried 15 identical inputs and we had no way to
+     * tell from server-side data whether the prompt was the same or
+     * different). Nullable — improve-prompt rows and legacy data
+     * stay valid. Migration 0011.
+     */
+    prompt: text("prompt"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

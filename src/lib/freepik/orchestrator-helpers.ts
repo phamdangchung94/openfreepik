@@ -24,6 +24,13 @@ export interface LogUsageOpts {
   durationSeconds?: number | null;
   withAudio?: boolean;
   costEur: number;
+  /**
+   * Customer prompt verbatim — persisted into usage_logs.prompt for
+   * admin debug. Null/undefined for endpoints without a customer
+   * prompt (improve-prompt has its own prompt but we still log it).
+   * Migration 0011.
+   */
+  prompt?: string | null;
 }
 
 export type OrchestrateResult<T> =
@@ -101,6 +108,7 @@ export async function logUsage(
       costEur: opts.costEur.toFixed(2),
       freepikTaskId,
       status,
+      prompt: opts.prompt ?? null,
     });
   } catch (err) {
     log.error("USAGE_LOG_INSERT_FAILED", {

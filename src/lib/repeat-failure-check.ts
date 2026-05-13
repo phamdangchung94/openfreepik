@@ -16,8 +16,14 @@
 
 import type { GenerationTask } from "@/store/task-store";
 
-/** How many identical recent failures we need before warning. */
-const THRESHOLD = 3;
+/** How many identical recent failures we need before WARNING (toast). */
+const WARN_THRESHOLD = 3;
+
+/** How many identical recent failures before BLOCKING (modal dialog).
+ * Customer can override but the dialog forces them to confirm.
+ * Audit 2026-05-13: a customer fired 15 identical inputs in 35 min;
+ * the toast warning alone wasn't enough to make them stop. */
+const BLOCK_THRESHOLD = 5;
 
 /** Look-back window. 10 min is generous — covers the typical retry
  * cluster while excluding stale history from earlier sessions. */
@@ -31,11 +37,20 @@ export interface RepeatFailureCheckInput {
   tasks: Record<string, GenerationTask>;
 }
 
+export type RepeatFailureSeverity = "ok" | "warn" | "block";
+
 export interface RepeatFailureResult {
+  severity: RepeatFailureSeverity;
+  /** Compatibility flag — true for both 'warn' and 'block'. */
   shouldWarn: boolean;
+  /** Block-tier flag — exposed so callers can branch. */
+  shouldBlock: boolean;
   failedCount: number;
   /** Most-recent matching failure (for showing time-since in the toast). */
   latestFailedAt: number | null;
+  /** Stable fingerprint string — callers use it as a key when remembering
+   * which inputs the customer already chose to override. */
+  fingerprint: string;
 }
 
 /**
@@ -80,9 +95,19 @@ export function checkRecentRepeatFailures(
     }
   }
 
+  const severity: RepeatFailureSeverity =
+    failedCount >= BLOCK_THRESHOLD
+      ? "block"
+      : failedCount >= WARN_THRESHOLD
+        ? "warn"
+        : "ok";
+
   return {
-    shouldWarn: failedCount >= THRESHOLD,
+    severity,
+    shouldWarn: severity !== "ok",
+    shouldBlock: severity === "block",
     failedCount,
     latestFailedAt,
+    fingerprint: wanted,
   };
 }

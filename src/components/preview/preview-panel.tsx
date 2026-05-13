@@ -105,7 +105,24 @@ function ErrorState({
         </p>
       </div>
       {task.error && !cancelled && (
-        <p className="text-sm text-destructive/80">{friendlyError(task.error)}</p>
+        <>
+          <p className="text-sm text-destructive/80">{friendlyError(task.error)}</p>
+          {/* Recovery hint — most upstream failures are one of these
+              four causes. Shown on every FAILED task so the customer
+              has a concrete next step instead of just clicking Tạo lại
+              with the same input. */}
+          <div className="rounded-md border border-destructive/20 bg-destructive/5 p-2.5 text-[11px] text-muted-foreground">
+            <p className="mb-1 font-medium text-foreground/80">
+              💡 Nếu cùng prompt/ảnh vẫn thất bại nhiều lần, thử:
+            </p>
+            <ul className="ml-3 list-disc space-y-0.5">
+              <li>Diễn đạt prompt khác hoặc dùng từ ngắn gọn hơn</li>
+              <li>Đổi ảnh nguồn (nếu đang dùng Image-to-Video)</li>
+              <li>Đổi chất lượng (720p / 1080p / 4K) hoặc thời lượng ngắn hơn</li>
+              <li>Tắt audio nếu đang bật</li>
+            </ul>
+          </div>
+        </>
       )}
       <p className="text-sm text-muted-foreground">
         {task.prompt}

@@ -71,6 +71,7 @@ export async function POST(request: Request) {
     preValidated: validation,
     endpoint: "improve-prompt",
     costEur: 0,
+    prompt: parsed.data.prompt ?? null,
     callFreepik: (apiKey) =>
       freepik.improvePrompt.create(parsed.data, { apiKey }),
     extractTaskId: (data) => data.task_id,

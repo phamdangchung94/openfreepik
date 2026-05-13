@@ -122,6 +122,7 @@ export async function POST(request: Request) {
     tier,
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
+    prompt: params.prompt ?? null,
     callFreepik: (apiKey) =>
       freepik.klingV3.generate(paramsWithWebhook, { tier, apiKey }),
     extractTaskId: (data) => data.task_id,

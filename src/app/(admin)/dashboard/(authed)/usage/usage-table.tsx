@@ -37,6 +37,11 @@ export interface UsageLogRow {
    * run it through `friendlyError` for brand-scrub + i18n.
    */
   errorMessage: string | null;
+  /**
+   * Customer prompt verbatim. Persisted at POST time for admin debug
+   * + repeat-failure analysis. Migration 0011.
+   */
+  prompt: string | null;
 }
 
 /**
@@ -54,6 +59,7 @@ type ColId =
   | "tier"
   | "eur"
   | "status"
+  | "prompt"
   | "error"
   | "magnific"
   | "r2"
@@ -69,6 +75,7 @@ const COLUMN_LABEL: Record<ColId, string> = {
   tier: "Tier",
   eur: "Giá",
   status: "Trạng thái",
+  prompt: "Prompt",
   error: "Lý do fail (raw)",
   magnific: "URL gốc",
   r2: "URL CDN",
@@ -85,6 +92,7 @@ const ALL_COLS: ColId[] = [
   "tier",
   "eur",
   "status",
+  "prompt",
   "error",
   "magnific",
   "r2",
@@ -196,6 +204,20 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
                 {visible.has("status") && (
                   <td className="px-3 py-2">
                     <StatusBadge status={r.status} />
+                  </td>
+                )}
+                {visible.has("prompt") && (
+                  <td
+                    className="px-3 py-2 max-w-[280px] text-[11px]"
+                    title={r.prompt ?? ""}
+                  >
+                    {r.prompt ? (
+                      <span className="line-clamp-2 break-words">
+                        {r.prompt}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                 )}
                 {visible.has("error") && (
@@ -410,6 +432,8 @@ function csvCell(r: UsageLogRow, col: ColId): string | number {
       return Math.round(Number(r.costEur) * 1000);
     case "status":
       return r.status;
+    case "prompt":
+      return r.prompt ?? "";
     case "error":
       return r.errorMessage ?? "";
     case "magnific":
