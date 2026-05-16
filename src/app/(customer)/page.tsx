@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { toast } from "sonner";
+import { Wand2, Eye, History } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import {
   AlertDialog,
@@ -57,6 +59,30 @@ export default function HomePage() {
   const overriddenFingerprints = useRef<Set<string>>(new Set());
   const [blockedPayload, setBlockedPayload] =
     useState<{ payload: GeneratePayload; failedCount: number; fingerprint: string } | null>(null);
+
+  // Mobile-only tab state. Desktop renders all 3 sections side-by-side
+  // (md+ unchanged); mobile shows one at a time + a bottom tab bar.
+  // After Generate, auto-switch to "preview" so the customer sees the
+  // task progress instead of staring at the form they just submitted.
+  type MobileTab = "form" | "preview" | "history";
+  const [mobileTab, setMobileTab] = useState<MobileTab>("form");
+
+  // Badge counts for the bottom tab bar.
+  const tabCounts = useMemo(() => {
+    let running = 0;
+    let failed = 0;
+    for (const t of Object.values(tasks)) {
+      if (t.status === "IN_PROGRESS" || t.status === "CREATED" || t.status === "QUEUED") {
+        running++;
+      } else if (
+        (t.status === "FAILED" || t.status === "TIMEOUT") &&
+        !t.errorAcknowledgedAt
+      ) {
+        failed++;
+      }
+    }
+    return { running, failed };
+  }, [tasks]);
 
   const handleSingleSubmit = useCallback(
     async (payload: GeneratePayload) => {
@@ -123,6 +149,11 @@ export default function HomePage() {
           imageUrl,
         });
         setActiveTaskId(localId);
+        // Mobile UX: after a successful submit, switch to the Preview
+        // tab so the customer actually sees their task progressing
+        // instead of staring at the same form. No-op on desktop where
+        // all 3 sections are visible simultaneously.
+        setMobileTab("preview");
         toast.success("Đã bắt đầu tạo video");
       } catch {
         toast.error("Không thể bắt đầu tạo video");
@@ -139,6 +170,9 @@ export default function HomePage() {
         return;
       }
       startBatch(items, sharedParams);
+      // Same mobile auto-switch as single submit — point customer at
+      // the running tasks instead of leaving them on the form.
+      setMobileTab("preview");
       toast.success(`Đã bắt đầu batch: ${items.length} video`);
     },
     [startBatch],
@@ -151,6 +185,9 @@ export default function HomePage() {
         mode: task.mode,
         imageUrl: task.imageUrl,
       });
+      // Mobile: regenerate populates the form, so jump back to the
+      // Form tab so the customer can see/edit before re-submitting.
+      setMobileTab("form");
       toast.info("Đã tải lại — chỉnh prompt và tạo lại");
     },
     [],
@@ -173,15 +210,23 @@ export default function HomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-6">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 pb-24 md:pb-6">
       {/*
-       * 3-column at lg+ (form + preview/onboarding + history)
-       * 2-column at md  (form + history; preview/onboarding hidden — user sees it after submit)
-       * 1-column at sm  (form only; sidebar lives in a sheet from header)
+       * Desktop (md+): 3-column at lg+, 2-column at md — unchanged.
+       * Mobile (<md): one section at a time controlled by mobileTab,
+       *   with a fixed bottom tab bar for switching. Auto-switches to
+       *   "preview" after Generate so the customer sees their result.
        */}
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_260px] lg:grid-cols-[minmax(0,1fr)_420px_260px]">
-        {/* Left: Generator Form */}
-        <div className="min-w-0">
+        {/* Left: Generator Form.
+            Mobile (<md): visible only when tab === "form".
+            Desktop (md+): always visible, layout unchanged. */}
+        <div
+          className={cn(
+            "min-w-0 md:block",
+            mobileTab === "form" ? "block" : "hidden",
+          )}
+        >
           <GeneratorForm
             ref={formRef}
             onSubmitSingle={handleSingleSubmit}
@@ -192,8 +237,15 @@ export default function HomePage() {
         </div>
 
         {/* Center: Preview panel — replaced by Onboarding for first-visit users.
-            Hidden under lg so tablets prioritise form + history. */}
-        <div className="hidden lg:order-2 lg:block">
+            Mobile (<md): visible only when tab === "preview".
+            md→lg: hidden (tablets prioritise form + history, unchanged).
+            lg+: always visible in column 2, unchanged. */}
+        <div
+          className={cn(
+            "md:hidden lg:order-2 lg:block",
+            mobileTab === "preview" ? "block" : "hidden",
+          )}
+        >
           {showOnboarding ? (
             <CustomerOnboarding />
           ) : (
@@ -201,13 +253,52 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Right: History Sidebar — visible from tablet up. */}
-        <div className="hidden md:order-3 md:block">
-          <div className="sticky top-4 h-[calc(100vh-6rem)] rounded-3xl border bg-card">
+        {/* Right: History Sidebar.
+            Mobile (<md): visible only when tab === "history".
+            Desktop (md+): always visible, sticky sidebar unchanged. */}
+        <div
+          className={cn(
+            "md:order-3 md:block",
+            mobileTab === "history" ? "block" : "hidden",
+          )}
+        >
+          <div className="rounded-3xl border bg-card md:sticky md:top-4 md:h-[calc(100vh-6rem)]">
             <HistorySidebar />
           </div>
         </div>
       </div>
+
+      {/* Mobile bottom tab nav — hidden on md+. Fixed bottom; respects
+          iOS safe-area-inset. Badges show running task count (preview
+          tab) and unread-error count (history tab). */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        <div className="mx-auto grid max-w-[1600px] grid-cols-3">
+          <MobileTabButton
+            active={mobileTab === "form"}
+            onClick={() => setMobileTab("form")}
+            icon={<Wand2 className="size-5" />}
+            label="Tạo"
+          />
+          <MobileTabButton
+            active={mobileTab === "preview"}
+            onClick={() => setMobileTab("preview")}
+            icon={<Eye className="size-5" />}
+            label="Xem"
+            badge={tabCounts.running > 0 ? tabCounts.running : undefined}
+          />
+          <MobileTabButton
+            active={mobileTab === "history"}
+            onClick={() => setMobileTab("history")}
+            icon={<History className="size-5" />}
+            label="Lịch sử"
+            badge={tabCounts.failed > 0 ? tabCounts.failed : undefined}
+            badgeVariant="destructive"
+          />
+        </div>
+      </nav>
 
       {/* Sticky bottom-right batch progress widget. Replaces the per-task
           toast spam — one piece of UI tracks all in-flight work. Hides
@@ -295,5 +386,57 @@ function ImprovePromptWrapper() {
       currentPrompt={currentPrompt}
       onAccept={(improved) => setValue("prompt", improved)}
     />
+  );
+}
+
+/**
+ * Single tab button for the mobile bottom nav. Active state uses
+ * primary color + a thin top accent bar so the user always knows
+ * which view they're on. Badge slot (top-right of the icon) is for
+ * running-task / unread-error counts.
+ */
+function MobileTabButton({
+  active,
+  onClick,
+  icon,
+  label,
+  badge,
+  badgeVariant = "default",
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+  badgeVariant?: "default" | "destructive";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col items-center justify-center gap-0.5 px-2 py-2 text-[11px] font-medium transition-colors",
+        active ? "text-primary" : "text-muted-foreground hover:text-foreground",
+      )}
+      aria-current={active ? "page" : undefined}
+    >
+      {active && (
+        <span className="absolute inset-x-4 top-0 h-0.5 rounded-b bg-primary" />
+      )}
+      <span className="relative">
+        {icon}
+        {badge !== undefined && badge > 0 && (
+          <span
+            className={cn(
+              "absolute -right-2 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold leading-none text-white",
+              badgeVariant === "destructive" ? "bg-destructive" : "bg-primary",
+            )}
+          >
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
+      </span>
+      <span>{label}</span>
+    </button>
   );
 }
