@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -8,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export interface UsageFilterValue {
   status: string;
@@ -46,6 +49,16 @@ export function UsageFilters({
 }) {
   const [codes, setCodes] = useState<CodeOption[]>([]);
   const [keys, setKeys] = useState<KeyOption[]>([]);
+  // Mobile-only collapse state. md+ ignores this and always renders
+  // the filter row inline.
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Count of non-default filters for the chip on the mobile toggle.
+  const activeCount =
+    (value.status !== ALL ? 1 : 0) +
+    (value.codeId !== ALL ? 1 : 0) +
+    (value.keyId !== ALL ? 1 : 0) +
+    (value.limit !== 100 ? 1 : 0);
 
   useEffect(() => {
     async function load() {
@@ -68,7 +81,42 @@ export function UsageFilters({
   }, []);
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+    <div className="space-y-2">
+      {/* Mobile toggle — tap to expand/collapse the filter row.
+          Shows an active-count badge so admin knows filters are
+          applied even when the row is hidden. */}
+      <button
+        type="button"
+        onClick={() => setMobileOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-sm transition-colors hover:bg-muted/40 md:hidden"
+        aria-expanded={mobileOpen}
+      >
+        <span className="flex items-center gap-2">
+          <SlidersHorizontal className="size-4 text-muted-foreground" />
+          <span className="font-medium">Bộ lọc</span>
+          {activeCount > 0 && (
+            <Badge variant="default" className="h-5 px-1.5 text-[10px]">
+              {activeCount}
+            </Badge>
+          )}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            mobileOpen && "rotate-180",
+          )}
+        />
+      </button>
+
+      {/* Filter row — always rendered on md+ (existing inline layout).
+          On mobile, hidden when collapsed; the 'md:flex md:flex-wrap'
+          classes ensure desktop is unaffected regardless of mobileOpen. */}
+      <div
+        className={cn(
+          "grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center",
+          !mobileOpen && "hidden md:flex",
+        )}
+      >
       <Select
         value={value.status}
         onValueChange={(v) => v && onChange({ ...value, status: v })}
@@ -136,6 +184,7 @@ export function UsageFilters({
           <SelectItem value="2000">2000 dòng</SelectItem>
         </SelectContent>
       </Select>
+      </div>
     </div>
   );
 }
