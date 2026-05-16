@@ -91,7 +91,7 @@ export function BatchProgressWidget({
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 w-[calc(100vw-2rem)] max-w-[20rem] rounded-2xl border bg-card/95 p-4 shadow-lg backdrop-blur md:bottom-4 md:w-80"
+      className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] right-4 z-50 w-[calc(100vw-2rem)] max-w-[20rem] rounded-2xl border bg-card/95 p-4 shadow-lg backdrop-blur md:bottom-4 md:w-80"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">

@@ -31,6 +31,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { useRegenerateHandler } from "@/store/regenerate-handler-store";
 import { CustomerOnboarding } from "@/components/customer-onboarding";
 import { BatchProgressWidget } from "@/components/batch/batch-progress-widget";
+import { MobileNowPlayingBar } from "@/components/preview/mobile-now-playing-bar";
 import { toApiParams } from "@/lib/form/to-api-params";
 import { checkRecentRepeatFailures } from "@/lib/repeat-failure-check";
 import type { GenerationTask } from "@/store/task-store";
@@ -267,6 +268,14 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile "now playing" bar — floats above the bottom tab nav,
+          shows current/recent task at a glance, tap to open Xem. Hides
+          when no relevant task or when already on Xem tab. */}
+      <MobileNowPlayingBar
+        hidden={mobileTab === "preview"}
+        onOpen={() => setMobileTab("preview")}
+      />
 
       {/* Mobile bottom tab nav — hidden on md+. Fixed bottom; respects
           iOS safe-area-inset. Badges show running task count (preview

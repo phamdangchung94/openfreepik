@@ -17,9 +17,23 @@ import { UrlCountdown } from "./url-countdown";
 import { friendlyError } from "@/lib/error-messages";
 import { buildFilename, downloadVideo } from "@/lib/auto-download";
 import { ParametersBlock } from "./parameters-block";
+import { RecentTaskStrip } from "./recent-task-strip";
+import { cn } from "@/lib/utils";
 
 interface PreviewPanelProps {
   onRegenerate?: (task: GenerationTask) => void;
+}
+
+/**
+ * Map the task's aspect-ratio param to the matching Tailwind class so
+ * preview placeholders (empty/loading/error) sit on the same footprint
+ * the eventual video will occupy — no jarring resize when the task
+ * transitions COMPLETED.
+ */
+function aspectClass(ratio?: string) {
+  if (ratio === "9:16") return "aspect-[9/16] max-h-[70vh]";
+  if (ratio === "1:1") return "aspect-square";
+  return "aspect-video";
 }
 
 function EmptyState() {
@@ -52,7 +66,12 @@ function LoadingState({
 
   return (
     <div className="space-y-4">
-      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-muted">
+      <div
+        className={cn(
+          "relative w-full overflow-hidden rounded-xl bg-muted",
+          aspectClass(task.params?.aspectRatio),
+        )}
+      >
         <Skeleton className="h-full w-full" />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
           <Loader2
@@ -89,9 +108,11 @@ function ErrorState({
   return (
     <div className="space-y-4">
       <div
-        className={`flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl ${
-          cancelled ? "bg-muted/40" : "bg-destructive/5"
-        }`}
+        className={cn(
+          "flex w-full flex-col items-center justify-center gap-3 rounded-xl",
+          aspectClass(task.params?.aspectRatio),
+          cancelled ? "bg-muted/40" : "bg-destructive/5",
+        )}
       >
         <AlertCircle
           className={`h-10 w-10 ${cancelled ? "text-muted-foreground" : "text-destructive"}`}
@@ -185,6 +206,7 @@ function CompletedState({
       <VideoPlayer
         src={task.videoUrl ?? ""}
         poster={task.thumbnailUrl ?? undefined}
+        aspectRatio={task.params?.aspectRatio}
       />
       <div className="space-y-3">
         {/* Prompt + meta-row condensed: badges instead of long Vietnamese
@@ -265,6 +287,10 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Mobile-only: horizontal thumbnail strip lets the customer
+            switch between recent tasks without leaving Xem tab.
+            Hidden on md+ (History sidebar handles it). */}
+        <RecentTaskStrip />
         {!task && <EmptyState />}
         {task?.status === "COMPLETED" && (
           <CompletedState task={task} onRegenerate={handleRegenerate} />
