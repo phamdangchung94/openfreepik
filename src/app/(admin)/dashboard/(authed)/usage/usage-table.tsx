@@ -123,7 +123,7 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
       </div>
 
       <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[860px] text-xs">
           <thead className="bg-muted/60">
             <tr>
               {ALL_COLS.filter((c) => visible.has(c)).map((c) => (

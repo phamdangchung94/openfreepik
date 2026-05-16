@@ -69,11 +69,11 @@ export default function AdminPricingPage() {
   }
 
   return (
-    <div className="space-y-4 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Pricing rules</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 p-4 sm:p-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold sm:text-2xl">Pricing rules</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             Edit cost per (endpoint × tier × duration × audio). Changes apply
             to the next request.
           </p>
@@ -83,6 +83,7 @@ export default function AdminPricingPage() {
           size="sm"
           onClick={load}
           disabled={loading}
+          className="w-full sm:w-auto"
         >
           <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
@@ -97,7 +98,7 @@ export default function AdminPricingPage() {
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full min-w-[560px] text-xs">
               <thead className="bg-muted/60">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Endpoint</th>

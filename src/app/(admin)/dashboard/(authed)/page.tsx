@@ -46,15 +46,15 @@ export default async function DashboardOverviewPage() {
       : 0;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 p-4 sm:space-y-6 sm:p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Overview</h1>
-        <p className="text-sm text-muted-foreground">
-          Activation codes, Freepik key pool, and recent usage.
+        <h1 className="text-xl font-semibold sm:text-2xl">Overview</h1>
+        <p className="text-xs text-muted-foreground sm:text-sm">
+          Activation codes, key pool, and recent usage.
         </p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatCard
           label="Active codes"
           value={data.codes.active}
@@ -84,18 +84,17 @@ export default async function DashboardOverviewPage() {
           <CardTitle className="text-sm">API key pool budget</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="flex items-baseline justify-between text-xs">
-            <span>Used across all keys</span>
+          <div className="flex flex-col gap-1 text-xs sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-muted-foreground">Used across all keys</span>
             <span className="font-mono">
               {formatVndWithEur(data.keys.totalUsedEur)} /{" "}
               {formatVndWithEur(data.keys.totalAssignedEur)}
             </span>
           </div>
           <Progress value={keyPct} className="h-1.5" />
-          <p className="text-xs text-muted-foreground">
-            {formatVndWithEur(data.keys.remainingEur)} remaining · customers
-            have spent {formatVndWithEur(data.codes.totalUsedEur)}{" "}
-            cumulatively (revenue).
+          <p className="text-[11px] text-muted-foreground sm:text-xs">
+            {formatVndWithEur(data.keys.remainingEur)} remaining · doanh thu:{" "}
+            {formatVndWithEur(data.codes.totalUsedEur)}
           </p>
         </CardContent>
       </Card>
@@ -116,13 +115,17 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="space-y-1 p-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
+      <CardContent className="space-y-1 p-3 sm:p-4">
+        <p className="text-[11px] text-muted-foreground sm:text-xs">{label}</p>
         <div className="flex items-baseline gap-1">
-          <span className="text-3xl font-bold tabular-nums">{value}</span>
-          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
+          <span className="text-2xl font-bold tabular-nums sm:text-3xl">
+            {value}
+          </span>
+          {unit && <span className="text-[10px] text-muted-foreground sm:text-xs">{unit}</span>}
         </div>
-        <p className="font-mono text-[11px] text-muted-foreground">{sub}</p>
+        <p className="truncate font-mono text-[10px] text-muted-foreground sm:text-[11px]" title={sub}>
+          {sub}
+        </p>
       </CardContent>
     </Card>
   );

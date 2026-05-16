@@ -60,15 +60,15 @@ export default function AdminCodesPage() {
   }, []);
 
   return (
-    <div className="space-y-4 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Activation codes</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 p-4 sm:p-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold sm:text-2xl">Activation codes</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             {rows.length} {rows.length === 1 ? "code" : "codes"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -84,8 +84,12 @@ export default function AdminCodesPage() {
 
       <Card>
         <CardContent className="p-0">
+          {/* Horizontal scroll wrapper so the 7-column table doesn't
+              force-clip on a phone viewport. ScrollArea handles
+              vertical; this div handles X. */}
           <ScrollArea className="max-h-[calc(100vh-220px)]">
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-xs">
               <thead className="sticky top-0 bg-muted/60 backdrop-blur">
                 <tr>
                   <th className="px-3 py-2 text-left font-medium">Code</th>
@@ -110,6 +114,7 @@ export default function AdminCodesPage() {
                 )}
               </tbody>
             </table>
+            </div>
           </ScrollArea>
         </CardContent>
       </Card>

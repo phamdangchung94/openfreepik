@@ -58,11 +58,11 @@ export default function AdminUsagePage() {
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">Usage logs</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 p-4 sm:p-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold sm:text-2xl">Usage logs</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             Đang xem {rows.length} log gần nhất
             {filters.status === ALL ? "" : ` · trạng thái ${filters.status}`}
             {filters.codeId !== ALL ? " · filter khách" : ""}
@@ -74,6 +74,7 @@ export default function AdminUsagePage() {
           size="sm"
           onClick={refreshAll}
           disabled={loading}
+          className="w-full sm:w-auto"
         >
           <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
           Làm mới

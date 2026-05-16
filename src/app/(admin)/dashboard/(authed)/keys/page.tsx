@@ -163,17 +163,17 @@ export default function AdminKeysPage() {
   }, []);
 
   return (
-    <div className="space-y-4 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">API keys</h1>
-          <p className="text-sm text-muted-foreground">
+    <div className="space-y-4 p-4 sm:p-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold sm:text-2xl">API keys</h1>
+          <p className="text-xs text-muted-foreground sm:text-sm">
             {rows.length} {rows.length === 1 ? "key" : "keys"} in the rotation
             pool. Spend tracked locally — upstream exposes no balance API, so
             verify against the provider dashboard periodically.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"

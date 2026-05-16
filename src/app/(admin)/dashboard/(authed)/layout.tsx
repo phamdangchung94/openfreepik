@@ -13,9 +13,12 @@ export default async function AuthedDashboardLayout({
 }) {
   await requireAdmin();
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* DashboardNav internally renders the top bar on mobile and
+          the side rail on md+ — keep the layout container neutral so
+          neither layer fights for position. */}
       <DashboardNav />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden">{children}</main>
     </div>
   );
 }

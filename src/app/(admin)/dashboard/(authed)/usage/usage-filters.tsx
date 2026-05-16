@@ -68,12 +68,12 @@ export function UsageFilters({
   }, []);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
       <Select
         value={value.status}
         onValueChange={(v) => v && onChange({ ...value, status: v })}
       >
-        <SelectTrigger className="w-[150px]">
+        <SelectTrigger className="w-full sm:w-[150px]">
           <SelectValue placeholder="Trạng thái" />
         </SelectTrigger>
         <SelectContent>
@@ -89,7 +89,7 @@ export function UsageFilters({
         value={value.codeId}
         onValueChange={(v) => v && onChange({ ...value, codeId: v })}
       >
-        <SelectTrigger className="w-[200px]">
+        <SelectTrigger className="w-full sm:w-[200px]">
           <SelectValue placeholder="Khách hàng" />
         </SelectTrigger>
         <SelectContent>
@@ -106,7 +106,7 @@ export function UsageFilters({
         value={value.keyId}
         onValueChange={(v) => v && onChange({ ...value, keyId: v })}
       >
-        <SelectTrigger className="w-[200px]">
+        <SelectTrigger className="w-full sm:w-[200px]">
           <SelectValue placeholder="API Key" />
         </SelectTrigger>
         <SelectContent>
@@ -125,7 +125,7 @@ export function UsageFilters({
           v && onChange({ ...value, limit: Number(v) || 100 })
         }
       >
-        <SelectTrigger className="w-[120px]">
+        <SelectTrigger className="w-full sm:w-[120px]">
           <SelectValue placeholder="Limit" />
         </SelectTrigger>
         <SelectContent>
