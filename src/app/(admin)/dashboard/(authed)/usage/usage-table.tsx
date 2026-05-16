@@ -117,12 +117,28 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
 
   return (
     <div>
-      <div className="mb-2 flex items-center justify-end gap-2">
+      {/* Column toggle + CSV export — desktop only. Mobile card view
+          shows a curated fixed field set so column visibility is moot
+          there; CSV download still works from the desktop view. */}
+      <div className="mb-2 hidden items-center justify-end gap-2 md:flex">
         <ExportCsvButton rows={rows} visible={visible} />
         <ColumnToggle visible={visible} onToggle={toggleCol} />
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      {/* ── Mobile (<md): vertical card per log ──────────────── */}
+      <div className="space-y-2 md:hidden">
+        {rows.map((r) => (
+          <UsageMobileCard key={r.id} row={r} />
+        ))}
+        {rows.length === 0 && (
+          <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+            Không có log nào khớp filter này.
+          </div>
+        )}
+      </div>
+
+      {/* ── Desktop (md+): full table unchanged ──────────────── */}
+      <div className="hidden overflow-x-auto rounded-md border md:block">
         <table className="w-full min-w-[860px] text-xs">
           <thead className="bg-muted/60">
             <tr>
@@ -300,6 +316,156 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
  * 'kling-v3' or 'improve-prompt' from before WAN/Kling-4K shipped;
  * keep them mapped to their tier-agnostic names.
  */
+/**
+ * Mobile-only card view for one usage_log row. Curated field set —
+ * no column toggle, just the data admin needs at a glance on phone:
+ *   - status pill + time-ago
+ *   - endpoint · tier · duration · audio
+ *   - amount (VND)
+ *   - prompt preview (2 lines max, captured by migration 0011)
+ *   - customer · key labels
+ *   - error_message highlighted when refunded/failed
+ *   - collapsible footer for task_id + URLs (debug-only, hidden by
+ *     default to keep the card compact)
+ */
+function UsageMobileCard({ row }: { row: UsageLogRow }) {
+  const [open, setOpen] = useState(false);
+  const isFailure = row.status === "refunded" || row.status === "failed";
+  const endpointLabel = renderEndpoint(row.endpoint);
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border p-3 text-xs",
+        isFailure ? "border-destructive/30 bg-destructive/5" : "bg-card",
+      )}
+    >
+      {/* Row 1: status + time ago */}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <StatusBadge status={row.status} />
+        <span
+          className="font-mono text-[10px] text-muted-foreground"
+          title={new Date(row.createdAt).toLocaleString()}
+        >
+          {timeAgoShort(row.createdAt)}
+        </span>
+      </div>
+
+      {/* Row 2: endpoint + meta chips */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+        <span className="font-medium text-foreground">{endpointLabel}</span>
+        {row.tier && (
+          <Badge variant="secondary" className="text-[10px]">
+            {row.tier}
+          </Badge>
+        )}
+        {row.durationSeconds && (
+          <span className="font-mono text-muted-foreground">
+            {row.durationSeconds}s
+          </span>
+        )}
+        {row.withAudio ? (
+          <Volume2 className="size-3 text-muted-foreground" />
+        ) : (
+          <VolumeX className="size-3 text-muted-foreground/50" />
+        )}
+        <span
+          className="ml-auto font-mono font-medium text-foreground"
+          title={`${Number(row.costEur).toFixed(2)} EUR`}
+        >
+          {formatVnd(Number(row.costEur))}
+        </span>
+      </div>
+
+      {/* Row 3: prompt preview (if any) */}
+      {row.prompt && (
+        <p
+          className="mb-2 line-clamp-2 break-words text-[11px] text-foreground/80"
+          title={row.prompt}
+        >
+          {row.prompt}
+        </p>
+      )}
+
+      {/* Row 4: customer · key */}
+      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <span className="truncate" title={row.codeLabel ?? ""}>
+          {row.codeLabel ?? "(no label)"}
+        </span>
+        <span>·</span>
+        <span className="truncate" title={row.keyLabel ?? ""}>
+          {row.keyLabel ?? "(no key)"}
+        </span>
+      </div>
+
+      {/* Row 5: error message — highlighted */}
+      {isFailure && row.errorMessage && (
+        <p className="mt-2 line-clamp-2 break-words text-[11px] text-destructive/80">
+          ⚠ {row.errorMessage}
+        </p>
+      )}
+
+      {/* Collapsible debug footer */}
+      {(row.freepikTaskId || row.magnificVideoUrl || row.videoUrl) && (
+        <div className="mt-2 border-t pt-2">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex w-full items-center justify-between text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            <span>Chi tiết</span>
+            <ChevronDown
+              className={cn("size-3 transition-transform", open && "rotate-180")}
+            />
+          </button>
+          {open && (
+            <div className="mt-2 space-y-1.5 text-[10px]">
+              {row.freepikTaskId && (
+                <div className="font-mono break-all text-muted-foreground">
+                  <span className="text-foreground/60">task_id:</span>{" "}
+                  {row.freepikTaskId}
+                </div>
+              )}
+              {row.magnificVideoUrl && (
+                <a
+                  href={row.magnificVideoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  URL gốc <ExternalLink className="size-3" />
+                </a>
+              )}
+              {row.videoUrl && row.videoUrl !== row.magnificVideoUrl && (
+                <a
+                  href={row.videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-3 inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  URL CDN <ExternalLink className="size-3" />
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Short relative time for tight mobile rows ('2m', '5h', '3d'). */
+function timeAgoShort(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
+}
+
 function renderEndpoint(endpoint: string): string {
   switch (endpoint) {
     case "kling-v3":
