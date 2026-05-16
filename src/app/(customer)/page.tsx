@@ -211,7 +211,7 @@ export default function HomePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-6 pb-24 md:pb-6">
+    <div className="mx-auto max-w-[1600px] px-4 py-6 pb-32 md:pb-6">
       {/*
        * Desktop (md+): 3-column at lg+, 2-column at md — unchanged.
        * Mobile (<md): one section at a time controlled by mobileTab,

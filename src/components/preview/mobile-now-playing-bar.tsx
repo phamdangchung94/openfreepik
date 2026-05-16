@@ -1,8 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTaskStore, type GenerationTask } from "@/store/task-store";
-import { Loader2, AlertCircle, CheckCircle2, ChevronRight, Video } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  Video,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MobileNowPlayingBarProps {
@@ -37,9 +44,18 @@ export function MobileNowPlayingBar({ onOpen, hidden }: MobileNowPlayingBarProps
   const activeTaskId = useTaskStore((s) => s.activeTaskId);
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
 
+  // Dismiss state — keyed by `${taskId}::${status}` so that when the
+  // same task transitions to a new state (e.g. IN_PROGRESS → COMPLETED),
+  // the bar re-appears with the new status. Dismissals don't persist
+  // across reloads — a fresh visit shows the bar again.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
   const candidate = useMemo(() => pickCandidate(tasks, activeTaskId), [tasks, activeTaskId]);
 
   if (!candidate || hidden) return null;
+
+  const dismissKey = `${candidate.id}::${candidate.status}`;
+  if (dismissed.has(dismissKey)) return null;
 
   const handleClick = () => {
     // Make sure the preview panel shows THIS task when the customer
@@ -48,28 +64,56 @@ export function MobileNowPlayingBar({ onOpen, hidden }: MobileNowPlayingBarProps
     onOpen();
   };
 
+  const handleDismiss = (e: React.MouseEvent) => {
+    // Don't bubble to the bar's main click — the user wants to hide,
+    // not open the preview.
+    e.stopPropagation();
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(dismissKey);
+      return next;
+    });
+  };
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <div
       // Sits between content and the bottom tab nav (bottom = nav height +
       // safe-area inset). Hidden on md+ — desktop has the full preview
-      // pane visible already.
-      className="fixed inset-x-0 z-30 mx-3 mb-2 flex items-center gap-3 rounded-xl border bg-card/95 px-3 py-2 shadow-lg backdrop-blur transition-colors hover:bg-card md:hidden"
+      // pane visible already. Outer is a <div> (not <button>) so we can
+      // nest the dismiss <button> without invalid HTML.
+      className="fixed inset-x-0 z-30 mx-3 mb-2 flex items-center gap-2 rounded-xl border bg-card/95 shadow-lg backdrop-blur md:hidden"
       style={{ bottom: "calc(4rem + env(safe-area-inset-bottom))" }}
-      aria-label="Mở chi tiết video"
     >
-      <NowPlayingMedia task={candidate} />
-      <div className="min-w-0 flex-1 text-left">
-        <p className="truncate text-[12px] font-medium leading-tight text-foreground">
-          <NowPlayingHeadline task={candidate} />
-        </p>
-        <p className="truncate text-[11px] leading-tight text-muted-foreground">
-          {candidate.prompt || "Không có prompt"}
-        </p>
-      </div>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-    </button>
+      <button
+        type="button"
+        onClick={handleClick}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-l-xl px-3 py-2 text-left transition-colors hover:bg-muted/40"
+        aria-label="Mở chi tiết video"
+      >
+        <NowPlayingMedia task={candidate} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12px] font-medium leading-tight text-foreground">
+            <NowPlayingHeadline task={candidate} />
+          </p>
+          <p className="truncate text-[11px] leading-tight text-muted-foreground">
+            {candidate.prompt || "Không có prompt"}
+          </p>
+        </div>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+      </button>
+      <button
+        type="button"
+        onClick={handleDismiss}
+        // Compact tap target (~36px) — large enough on touch but doesn't
+        // dominate the bar visually. Vertical separator gives a clear
+        // boundary between "open" and "dismiss" affordances.
+        className="flex h-11 items-center justify-center rounded-r-xl border-l px-3 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        aria-label="Ẩn thông báo"
+        title="Ẩn"
+      >
+        <X className="size-4" />
+      </button>
+    </div>
   );
 }
 
