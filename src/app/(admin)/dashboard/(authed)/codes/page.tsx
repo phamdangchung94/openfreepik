@@ -474,11 +474,30 @@ function CreateCodeDialog({ onCreated }: { onCreated: () => void }) {
         if (!o) reset();
       }}
     >
+      {/* Desktop trigger — sits inline in the header. Hidden on mobile
+          because the FAB below takes over the primary-action role. */}
       <DialogTrigger
         render={
-          <Button size="sm">
+          <Button size="sm" className="hidden md:inline-flex">
             <Plus className="size-3.5" />
             Create code
+          </Button>
+        }
+      />
+      {/* Mobile FAB — fixed bottom-right, clears the bottom tab bar
+          (bottom-20 ≈ tab height) + safe-area inset. Same dialog
+          backend so functionality is identical. */}
+      <DialogTrigger
+        render={
+          <Button
+            size="icon"
+            className="fixed right-4 z-30 size-14 rounded-full shadow-lg md:hidden"
+            aria-label="Tạo code mới"
+            style={{
+              bottom: "calc(5rem + env(safe-area-inset-bottom))",
+            }}
+          >
+            <Plus className="size-6" />
           </Button>
         }
       />

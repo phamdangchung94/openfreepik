@@ -701,11 +701,28 @@ function AddKeyDialog({ onAdded }: { onAdded: () => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* Desktop trigger — header inline button. Hidden on mobile;
+          FAB below covers the primary-action role there. */}
       <DialogTrigger
         render={
-          <Button size="sm">
+          <Button size="sm" className="hidden md:inline-flex">
             <Plus className="size-3.5" />
             Add key
+          </Button>
+        }
+      />
+      {/* Mobile FAB — fixed bottom-right, above the bottom tab bar. */}
+      <DialogTrigger
+        render={
+          <Button
+            size="icon"
+            className="fixed right-4 z-30 size-14 rounded-full shadow-lg md:hidden"
+            aria-label="Thêm API key"
+            style={{
+              bottom: "calc(5rem + env(safe-area-inset-bottom))",
+            }}
+          >
+            <Plus className="size-6" />
           </Button>
         }
       />
