@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 
 type Mode = "unlimited" | "quota" | "topup";
 
@@ -82,7 +83,8 @@ export default function AdminCodesPage() {
         </div>
       </header>
 
-      <Card>
+      {/* ── Desktop (md+): table unchanged ─────────────────────── */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           {/* Horizontal scroll wrapper so the 7-column table doesn't
               force-clip on a phone viewport. ScrollArea handles
@@ -118,7 +120,178 @@ export default function AdminCodesPage() {
           </ScrollArea>
         </CardContent>
       </Card>
+
+      {/* ── Mobile (<md): card list — same data, vertical layout ── */}
+      <div className="space-y-2 md:hidden">
+        {rows.map((r) => (
+          <CodeMobileCard key={r.id} row={r} onChanged={load} />
+        ))}
+        {rows.length === 0 && (
+          <Card>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Chưa có code nào. Nhấn nút <span className="font-medium">+</span>{" "}
+              ở góc phải dưới để tạo.
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
+  );
+}
+
+/**
+ * Mobile card variant of the codes-table row. Vertical layout, larger
+ * touch targets, same backend calls (toggle active / top-up / copy)
+ * inlined from CodeRowItem so customer admin gets identical
+ * functionality without dragging the table component in.
+ */
+function CodeMobileCard({
+  row,
+  onChanged,
+}: {
+  row: CodeRow;
+  onChanged: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  function copyCode() {
+    navigator.clipboard.writeText(row.code);
+    setCopied(true);
+    toast.success("Đã copy code");
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function toggleActive() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/codes/${row.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ isActive: !row.isActive }),
+      });
+      if (!res.ok) toast.error("Cập nhật thất bại");
+      else {
+        toast.success(row.isActive ? "Đã thu hồi code" : "Đã khôi phục code");
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function topUp() {
+    const input = prompt("Nạp thêm số dư (VND):", "10000");
+    if (!input) return;
+    const vnd = Number(input.replace(/[^\d]/g, ""));
+    if (!Number.isFinite(vnd) || vnd <= 0) {
+      toast.error("Số tiền không hợp lệ");
+      return;
+    }
+    const eur = vnd / 1000;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/codes/${row.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ addEur: eur }),
+      });
+      if (!res.ok) toast.error("Nạp thất bại");
+      else {
+        toast.success(`Đã nạp ${formatVnd(eur)}`);
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const usedEur = Number(row.usedEur);
+  const quotaEur = row.quotaEur ? Number(row.quotaEur) : null;
+  const remainingPct = quotaEur ? (usedEur / quotaEur) * 100 : null;
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-3">
+        {/* Header: label + status dot */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-medium">
+              {row.label ?? "(chưa đặt tên)"}
+            </h3>
+            <Badge variant="secondary" className="mt-1 text-[10px]">
+              {row.mode}
+            </Badge>
+          </div>
+          <Badge
+            variant={row.isActive ? "default" : "destructive"}
+            className="shrink-0 text-[10px]"
+          >
+            {row.isActive ? "active" : "revoked"}
+          </Badge>
+        </div>
+
+        {/* Code chip + copy */}
+        <button
+          type="button"
+          onClick={copyCode}
+          className="flex w-full items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
+          title="Tap để copy code"
+        >
+          <code className="min-w-0 flex-1 truncate font-mono text-[11px]">
+            {row.code}
+          </code>
+          {copied ? (
+            <Check className="size-3.5 shrink-0 text-emerald-600" />
+          ) : (
+            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+          )}
+        </button>
+
+        {/* Quota usage */}
+        {quotaEur !== null ? (
+          <div className="space-y-1">
+            <div className="flex items-baseline justify-between text-xs">
+              <span className="text-muted-foreground">Đã dùng</span>
+              <span
+                className="font-mono"
+                title={`${usedEur.toFixed(2)} / ${quotaEur.toFixed(2)} EUR`}
+              >
+                {formatVnd(usedEur)} / {formatVnd(quotaEur)}
+              </span>
+            </div>
+            <Progress value={remainingPct ?? 0} className="h-1.5" />
+          </div>
+        ) : (
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="text-muted-foreground">Đã dùng</span>
+            <span className="font-mono">{formatVnd(usedEur)} / ∞</span>
+          </div>
+        )}
+
+        {/* Meta + actions row */}
+        <div className="flex items-center justify-between gap-2 border-t pt-2">
+          <span className="text-[11px] text-muted-foreground">
+            {row.videosGenerated} video
+          </span>
+          <div className="flex gap-1">
+            {row.mode === "topup" && row.isActive && (
+              <Button variant="outline" size="xs" onClick={topUp} disabled={busy}>
+                Nạp
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={toggleActive}
+              disabled={busy}
+            >
+              {row.isActive ? "Thu hồi" : "Khôi phục"}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

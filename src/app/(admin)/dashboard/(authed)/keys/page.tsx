@@ -332,14 +332,17 @@ function KeyCard({
           <Progress value={pct} className="h-1.5" />
         </div>
 
-        <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+        {/* Mobile: stack "last used" above action row so action buttons
+            don't get crushed at 375px. md+ keeps the original
+            inline-justify-between layout. */}
+        <div className="flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-1">
           <span className="truncate">
             Last used:{" "}
             {row.lastUsedAt
               ? new Date(row.lastUsedAt).toLocaleString()
               : "never"}
           </span>
-          <div className="flex shrink-0 items-center gap-0.5">
+          <div className="flex flex-wrap items-center gap-0.5 sm:shrink-0 sm:flex-nowrap">
             <Button
               variant="ghost"
               size="xs"
