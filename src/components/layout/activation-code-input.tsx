@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Key, LogOut, Infinity } from "lucide-react";
+import { Key, LogOut, Infinity, Copy, Check, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuthStore, type ActivationMetadata } from "@/store/auth-store";
 import { formatVnd } from "@/lib/format-currency";
 
@@ -73,7 +78,13 @@ export function ActivationCodeInput() {
 
   // Activated state — show label + balance + logout
   if (activationCode && metadata) {
-    return <ActivatedDisplay metadata={metadata} onLogout={clear} />;
+    return (
+      <ActivatedDisplay
+        metadata={metadata}
+        activationCode={activationCode}
+        onLogout={clear}
+      />
+    );
   }
 
   // Hydration in progress (code in localStorage but metadata not yet loaded)
@@ -110,16 +121,37 @@ export function ActivationCodeInput() {
 
 function ActivatedDisplay({
   metadata,
+  activationCode,
   onLogout,
 }: {
   metadata: ActivationMetadata;
+  activationCode: string;
   onLogout: () => void;
 }) {
   const label = metadata.label ?? "Khách hàng";
   return (
     <div className="flex items-center gap-2 text-xs">
-      <Key className="h-4 w-4 text-green-500" />
-      <span className="font-medium">{label}</span>
+      {/* Click label/key icon → open dropdown with the full activation
+          code + copy button. Lets customer copy the code to use on
+          another device without re-asking support. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors hover:bg-muted/60"
+              aria-label="Hiển thị mã kích hoạt"
+            >
+              <Key className="h-4 w-4 text-green-500" />
+              <span className="font-medium">{label}</span>
+              <ChevronDown className="size-3 text-muted-foreground" />
+            </button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-72 p-3">
+          <ActivationCodeDisplay code={activationCode} />
+        </DropdownMenuContent>
+      </DropdownMenu>
       <span className="text-muted-foreground">·</span>
       {/* Balance is read-only display now. Detailed usage opens via the
           dedicated UsageStatsButton in the header (see app-header.tsx). */}
@@ -134,6 +166,54 @@ function ActivatedDisplay({
       >
         <LogOut />
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Shows the full activation code with a copy-to-clipboard button. Used
+ * inside the header dropdown so customers can copy + share/save the
+ * code to use on other devices. Code itself is shown verbatim — same
+ * info the customer typed in when activating, no extra secrets exposed.
+ */
+function ActivationCodeDisplay({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      toast.success("Đã sao chép mã kích hoạt");
+      // Reset the icon after a beat so user knows next click also copies.
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error("Không thể sao chép — copy thủ công từ ô bên dưới");
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        Mã kích hoạt của bạn
+      </p>
+      <div className="flex items-center gap-1.5">
+        <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
+          {code}
+        </code>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCopy}
+          aria-label="Sao chép mã"
+          className="size-8 shrink-0 [&_svg]:size-3.5"
+        >
+          {copied ? <Check className="text-emerald-500" /> : <Copy />}
+        </Button>
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">
+        Lưu lại để dùng trên thiết bị khác. Đừng chia sẻ với người
+        khác — quota dùng chung.
+      </p>
     </div>
   );
 }

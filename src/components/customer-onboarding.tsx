@@ -85,15 +85,27 @@ export function CustomerOnboarding() {
           ))}
         </ol>
 
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          Chưa có mã kích hoạt?{" "}
-          <a
-            href="mailto:tproxy.team@gmail.com"
-            className="inline-flex items-center gap-0.5 text-accent hover:underline"
-          >
-            Liên hệ với chúng tôi <ArrowUpRight className="size-3" />
-          </a>
-        </p>
+        <div className="space-y-1.5 text-xs text-muted-foreground">
+          <p>Chưa có mã kích hoạt? Liên hệ với chúng tôi:</p>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="https://t.me/chugaxai"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full bg-[#229ED9]/10 px-3 py-1 font-medium text-[#229ED9] hover:bg-[#229ED9]/15"
+            >
+              Telegram <ArrowUpRight className="size-3" />
+            </a>
+            <a
+              href="https://zalo.me/0336788856"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full bg-[#0068FF]/10 px-3 py-1 font-medium text-[#0068FF] hover:bg-[#0068FF]/15"
+            >
+              Zalo <ArrowUpRight className="size-3" />
+            </a>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

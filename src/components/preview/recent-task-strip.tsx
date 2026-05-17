@@ -30,9 +30,13 @@ export function RecentTaskStrip() {
   if (recent.length < 2) return null;
 
   return (
-    <div className="-mx-1 mb-3 md:hidden">
+    // Negative margin matches CardContent's px-4 so the strip extends
+    // edge-to-edge of the card; inner padding keeps thumbs visually
+    // aligned with surrounding content. Gradient overlay at the right
+    // edge hints "scroll for more".
+    <div className="relative -mx-4 mb-3 md:hidden">
       <div
-        className="flex gap-2 overflow-x-auto px-1 pb-1"
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto scroll-smooth px-4 pb-1"
         // Hide scrollbar visually but keep keyboard accessibility.
         style={{ scrollbarWidth: "none" }}
       >
@@ -45,6 +49,11 @@ export function RecentTaskStrip() {
           />
         ))}
       </div>
+      {/* Right-edge fade — visual cue that more thumbs scroll. Only
+          shown when 5+ tasks (likely overflow on 375px viewport). */}
+      {recent.length >= 5 && (
+        <div className="pointer-events-none absolute right-0 top-0 h-14 w-8 bg-gradient-to-l from-card to-transparent" />
+      )}
     </div>
   );
 }
@@ -65,7 +74,7 @@ function TaskThumb({
       aria-current={active ? "true" : undefined}
       aria-label={task.prompt ? `Xem: ${task.prompt.slice(0, 40)}` : "Xem video"}
       className={cn(
-        "relative size-14 shrink-0 overflow-hidden rounded-md border-2 bg-muted transition-all",
+        "relative size-14 shrink-0 snap-start overflow-hidden rounded-md border-2 bg-muted transition-all",
         active
           ? "border-primary shadow-md"
           : "border-transparent opacity-80 hover:opacity-100",
