@@ -241,6 +241,45 @@ export const failedLogins = pgTable(
   (t) => [index("failed_logins_locked_until_idx").on(t.lockedUntil)],
 );
 
+/**
+ * Broadcast announcements shown to all customers — admin posts a
+ * message (maintenance window, new feature, price change, etc.) and
+ * every customer sees a banner at the top of the page. Per-customer
+ * dismissal is tracked client-side in localStorage by announcement
+ * id, so dismissing on one device doesn't dismiss on another (intent:
+ * if you log in from a new phone, you still see the recent notice).
+ *
+ * `severity` drives banner color: info=neutral, warn=amber, critical
+ * =red. `expiresAt` lets admin schedule auto-hide (null = never).
+ * `active=false` is a soft-hide for drafts or deprecated announcements
+ * without losing the record.
+ */
+export const announcements = pgTable(
+  "announcements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    /**
+     * Optional CTA — when set, the banner renders a link button next
+     * to the body text. e.g. {label: "Xem giá mới", url: "/pricing"}.
+     */
+    ctaLabel: text("cta_label"),
+    ctaUrl: text("cta_url"),
+    severity: text("severity").notNull().default("info"), // info | warn | critical
+    active: boolean("active").notNull().default(true),
+    /** Null = no expiry, banner shows until admin deactivates. */
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("announcements_active_idx").on(t.active, t.createdAt)],
+);
+
 export type FreepikKey = typeof freepikKeys.$inferSelect;
 export type NewFreepikKey = typeof freepikKeys.$inferInsert;
 export type ActivationCode = typeof activationCodes.$inferSelect;
@@ -249,3 +288,5 @@ export type UsageLog = typeof usageLogs.$inferSelect;
 export type NewUsageLog = typeof usageLogs.$inferInsert;
 export type PricingRule = typeof pricingRules.$inferSelect;
 export type NewPricingRule = typeof pricingRules.$inferInsert;
+export type Announcement = typeof announcements.$inferSelect;
+export type NewAnnouncement = typeof announcements.$inferInsert;

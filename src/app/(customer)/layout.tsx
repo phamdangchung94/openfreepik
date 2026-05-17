@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/layout/app-header";
+import { AnnouncementBanner } from "@/components/layout/announcement-banner";
 
 /**
  * Layout for customer-facing routes only. Wraps children with the AppHeader
@@ -20,6 +21,10 @@ export default function CustomerLayout({
         Bỏ qua đến nội dung chính
       </a>
       <AppHeader />
+      {/* Admin-broadcast banner — fetches /api/announcements, shows the
+          most recent active+non-expired item. Per-device dismiss. Sits
+          below the sticky header so it's always visible until acked. */}
+      <AnnouncementBanner />
       <main id="main-content" className="flex-1">
         {children}
       </main>

@@ -8,6 +8,7 @@ import {
   Server,
   Tag,
   Activity,
+  Megaphone,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/keys", label: "API keys", shortLabel: "Keys", icon: Server, exact: false },
   { href: "/dashboard/pricing", label: "Pricing", shortLabel: "Giá", icon: Tag, exact: false },
   { href: "/dashboard/usage", label: "Usage logs", shortLabel: "Log", icon: Activity, exact: false },
+  { href: "/dashboard/announcements", label: "Announcements", shortLabel: "Tin", icon: Megaphone, exact: false },
 ] as const;
 
 /**
