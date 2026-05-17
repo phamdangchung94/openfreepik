@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Volume2, VolumeX, ExternalLink, ChevronDown, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Volume2,
+  VolumeX,
+  ExternalLink,
+  ChevronDown,
+  Check,
+  ChevronsDown,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -103,8 +110,28 @@ const ALL_COLS: ColId[] = [
 // Power users can hide columns via the "Cột" dropdown.
 const DEFAULT_VISIBLE: Set<ColId> = new Set(ALL_COLS);
 
+/**
+ * Initial cap on rows rendered to the DOM. At >100 rows the mobile
+ * card list + desktop table both start to lag on touch scroll and
+ * filter re-render. We progressively render in chunks — first 100 on
+ * mount, +PAGE_SIZE more each time admin taps "Tải thêm". CSV export
+ * still operates on the full `rows` array (not the visible slice).
+ */
+const PAGE_SIZE = 100;
+
 export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
   const [visible, setVisible] = useState<Set<ColId>>(DEFAULT_VISIBLE);
+  const [renderLimit, setRenderLimit] = useState(PAGE_SIZE);
+
+  // Reset progressive render whenever the row set changes (new fetch,
+  // filter change, refresh) so admin always starts at the top of a
+  // fresh result instead of inheriting a deep scroll from prior data.
+  useEffect(() => {
+    setRenderLimit(PAGE_SIZE);
+  }, [rows]);
+
+  const visibleRows = rows.slice(0, renderLimit);
+  const hasMore = renderLimit < rows.length;
 
   function toggleCol(c: ColId) {
     setVisible((prev) => {
@@ -113,6 +140,10 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
       else next.add(c);
       return next;
     });
+  }
+
+  function loadMore() {
+    setRenderLimit((n) => Math.min(n + PAGE_SIZE, rows.length));
   }
 
   return (
@@ -125,9 +156,21 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
         <ColumnToggle visible={visible} onToggle={toggleCol} />
       </div>
 
+      {/* Render-count indicator — visible from 100+ so admin knows the
+          table is paginated client-side and what's currently in DOM. */}
+      {rows.length > PAGE_SIZE && (
+        <p className="mb-2 text-[11px] text-muted-foreground">
+          Đang hiển thị <span className="font-medium text-foreground">{visibleRows.length}</span>
+          {" / "}
+          <span className="font-medium text-foreground">{rows.length}</span> dòng
+          {" — "}
+          tải dần để giữ UI mượt. CSV export vẫn lấy toàn bộ.
+        </p>
+      )}
+
       {/* ── Mobile (<md): vertical card per log ──────────────── */}
       <div className="space-y-2 md:hidden">
-        {rows.map((r) => (
+        {visibleRows.map((r) => (
           <UsageMobileCard key={r.id} row={r} />
         ))}
         {rows.length === 0 && (
@@ -137,10 +180,10 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
         )}
       </div>
 
-      {/* ── Desktop (md+): full table unchanged ──────────────── */}
+      {/* ── Desktop (md+): full table — progressively rendered ──────── */}
       <div className="hidden overflow-x-auto rounded-md border md:block">
         <table className="w-full min-w-[860px] text-xs">
-          <thead className="bg-muted/60">
+          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
             <tr>
               {ALL_COLS.filter((c) => visible.has(c)).map((c) => (
                 <th
@@ -156,7 +199,7 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {visibleRows.map((r) => (
               <tr key={r.id} className="border-t hover:bg-muted/30">
                 {visible.has("when") && (
                   <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
@@ -307,6 +350,26 @@ export function UsageTable({ rows }: { rows: UsageLogRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {/* "Tải thêm" button — shared between mobile + desktop. Adds
+          another PAGE_SIZE rows to the visible window per click. Shown
+          only when there's actually more to reveal. */}
+      {hasMore && (
+        <div className="mt-3 flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadMore}
+            className="gap-1.5"
+          >
+            <ChevronsDown className="size-3.5" />
+            Tải thêm {Math.min(PAGE_SIZE, rows.length - renderLimit)} dòng
+            <span className="text-[10px] text-muted-foreground">
+              ({rows.length - renderLimit} còn lại)
+            </span>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
