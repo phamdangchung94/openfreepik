@@ -38,7 +38,7 @@ function aspectClass(ratio?: string) {
 
 function EmptyState() {
   return (
-    <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-muted/50 px-6 text-center">
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 rounded-xl bg-muted/50 px-6 text-center max-md:-mx-4 max-md:w-auto max-md:rounded-none">
       <Video className="h-12 w-12 text-muted-foreground" />
       <p className="text-sm text-foreground/70">Chưa chọn video</p>
       <p className="text-xs text-muted-foreground">
@@ -66,9 +66,14 @@ function LoadingState({
 
   return (
     <div className="space-y-4">
+      {/* `max-md:-mx-4` pulls the placeholder edge-to-edge with the
+          Card on mobile (Card has px-4 on CardContent), making it feel
+          like a real "hero" video frame. `max-md:rounded-none` strips
+          the corner radius since the parent Card already provides the
+          outer rounding. */}
       <div
         className={cn(
-          "relative w-full overflow-hidden rounded-xl bg-muted",
+          "relative w-full overflow-hidden rounded-xl bg-muted max-md:-mx-4 max-md:w-auto max-md:rounded-none",
           aspectClass(task.params?.aspectRatio),
         )}
       >
@@ -109,7 +114,7 @@ function ErrorState({
     <div className="space-y-4">
       <div
         className={cn(
-          "flex w-full flex-col items-center justify-center gap-3 rounded-xl",
+          "flex w-full flex-col items-center justify-center gap-3 rounded-xl max-md:-mx-4 max-md:w-auto max-md:rounded-none",
           aspectClass(task.params?.aspectRatio),
           cancelled ? "bg-muted/40" : "bg-destructive/5",
         )}
@@ -203,11 +208,17 @@ function CompletedState({
 
   return (
     <div className="space-y-4">
-      <VideoPlayer
-        src={task.videoUrl ?? ""}
-        poster={task.thumbnailUrl ?? undefined}
-        aspectRatio={task.params?.aspectRatio}
-      />
+      {/* Edge-to-edge video on mobile (max-md:-mx-4) — phone preview
+          deserves max real estate; the parent Card's overflow-hidden
+          + rounded-3xl clips cleanly. Desktop unchanged. */}
+      <div className="max-md:-mx-4">
+        <VideoPlayer
+          src={task.videoUrl ?? ""}
+          poster={task.thumbnailUrl ?? undefined}
+          aspectRatio={task.params?.aspectRatio}
+          className="max-md:rounded-none"
+        />
+      </div>
       <div className="space-y-3">
         {/* Prompt + meta-row condensed: badges instead of long Vietnamese
             phrases — saves vertical space while staying readable. */}
@@ -279,9 +290,11 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
   const handleRegenerate = task && onRegenerate ? () => onRegenerate(task) : undefined;
 
   return (
-    <Card className="sticky top-4">
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
+    // Sticky only on desktop — on mobile this Card is the only thing
+    // in the Xem tab so sticky just adds a useless 16px gap at top.
+    <Card className="md:sticky md:top-4">
+      <CardHeader className="max-md:pb-2">
+        <CardTitle className="flex items-center justify-between gap-2 max-md:text-base">
           <span>Xem trước</span>
           {task && <StatusBadge status={task.status} />}
         </CardTitle>

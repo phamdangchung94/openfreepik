@@ -240,10 +240,14 @@ export default function HomePage() {
         {/* Center: Preview panel — replaced by Onboarding for first-visit users.
             Mobile (<md): visible only when tab === "preview".
             md→lg: hidden (tablets prioritise form + history, unchanged).
-            lg+: always visible in column 2, unchanged. */}
+            lg+: always visible in column 2, unchanged.
+            `min-w-0` forces this grid item to obey the track width
+            instead of expanding to fit its widest content (the recent
+            task strip's 12+ thumbs would otherwise push the Card past
+            the viewport edge). */}
         <div
           className={cn(
-            "md:hidden lg:order-2 lg:block",
+            "min-w-0 md:hidden lg:order-2 lg:block",
             mobileTab === "preview" ? "block" : "hidden",
           )}
         >
@@ -259,7 +263,7 @@ export default function HomePage() {
             Desktop (md+): always visible, sticky sidebar unchanged. */}
         <div
           className={cn(
-            "md:order-3 md:block",
+            "min-w-0 md:order-3 md:block",
             mobileTab === "history" ? "block" : "hidden",
           )}
         >
