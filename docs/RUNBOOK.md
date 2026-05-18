@@ -124,6 +124,25 @@ Dashboard → **Codes** → row → **Revoke**. Customer's next request gets HTT
 
 Dashboard → **Codes** → row → **Top-up** → enter EUR to add. Atomic SQL increment, race-safe under concurrent customer charges.
 
+### Post an announcement to all customers
+
+Dashboard → **Announcements** → **+ Mới**:
+
+- **Tiêu đề** + **Nội dung**: shown verbatim on the customer banner. Plain text, max 200 / 2000 chars.
+- **Mức độ**: `info` (xanh, neutral) · `warn` (cam, attention) · `critical` (đỏ, urgent — maintenance, outage).
+- **CTA label + URL** (optional): renders a link in the banner. URL must start with `http(s)://` or `/` (internal path); other schemes silently rejected.
+- **Hết hạn** (optional): admin schedules auto-hide. Leave empty → banner shows until you toggle `active=false` or delete it.
+- **Bật ngay**: defaults on; toggling off keeps the draft hidden.
+
+Customers see the banner within ~60s (client polls `/api/announcements` every 60s) — no reload needed for online users. Per-device dismiss tracked in localStorage by id; new banners surface on every device until dismissed there.
+
+To hide a live announcement: row → **Bật** toggle off. To delete permanently: row → trash icon (irrecoverable).
+
+Common patterns:
+- Scheduled maintenance: `critical` severity, set `expiresAt` to end of window so it auto-hides.
+- New feature: `info` severity, CTA to `/pricing` or feature page.
+- Outage update: `critical` severity, no expiry, manually toggle off when resolved.
+
 ### Rotate `KEY_ENCRYPTION_SECRET` (only if compromised)
 
 This is **destructive** if done wrong because all existing Freepik keys re-encrypt with the new secret. Procedure:

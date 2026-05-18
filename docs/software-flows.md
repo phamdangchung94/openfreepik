@@ -24,9 +24,14 @@ vốn theo góc nhìn kỹ thuật).
 | 9 | Admin CRUD | `/api/admin/*` | `auth/admin-server.ts` + Drizzle | tất cả bảng |
 | 10 | Cron purge + key healthcheck | Vercel cron → `/api/cron/purge` | dọn rate_limit/sessions, probe + auto-deactivate dead keys | `rate_limit_buckets`, `admin_sessions`, `failed_logins`, `freepik_keys` |
 | 11 | Magnific webhook receiver | `/api/freepik/webhook` | HMAC verify (Svix-style) → `finalizeUsageOnPoll` | `usage_logs`, `activation_codes` (refund), `freepik_keys` (secret lookup) |
+| 12 | Announcement broadcast | admin: `/api/admin/announcements` CRUD · customer: `/api/announcements` poll (60s) | `AnnouncementBanner` mount + per-device dismiss qua localStorage | `announcements` (migration 0012) |
 
 **Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
 Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).
+
+**Layer riêng cho mobile UX** (parallel render với desktop, không đụng desktop UX):
+- Customer page: bottom tab nav (3 ô Tạo/Xem/Lịch sử), now-playing bar trên tab nav, recent task strip trong Xem tab, adaptive video aspect (16:9/9:16/1:1) + PiP button — xem `src/app/(customer)/page.tsx` + `src/components/preview/*`.
+- Admin dashboard: 6-ô bottom tab nav, card lists thay tables (`/codes` `/keys` `/usage`), FAB cho create dialogs, progressive render cho `/usage` >100 rows, collapsible filters — xem `src/components/dashboard/dashboard-nav.tsx`.
 
 ---
 
@@ -46,7 +51,14 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   │
 │   │   ├── ▶ FLOW 1: ONBOARDING & ACTIVATION ────────────────────────────────────
 │   │   │   • components/customer-onboarding.tsx → hiển thị khi chưa kích hoạt
-│   │   │   • components/layout/activation-code-input.tsx → input code
+│   │   │       (chip Telegram t.me/chugaxai + Zalo 0336788856)
+│   │   │   • components/layout/activation-code-input.tsx → input code; sau khi
+│   │   │       activated → click label trong header → DropdownMenu hiển thị
+│   │   │       full activation code + nút Copy (user dùng trên thiết bị khác)
+│   │   │   • components/layout/contact-button.tsx → header icon Send → link
+│   │   │       thẳng tới t.me/chugaxai (1-tap support)
+│   │   │   • components/layout/announcement-banner.tsx → dưới header, poll
+│   │   │       /api/announcements mỗi 60s, dismiss per-device qua localStorage
 │   │   │   • POST /api/activate ────► api/activate/route.ts
 │   │   │       → lib/auth/activation.ts → validateCode()
 │   │   │       → DB: activation_codes (mode: unlimited|quota|topup)
@@ -140,7 +152,15 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   │     └── history-item.tsx ............. card từng task
 │   │   │   components/preview/
 │   │   │     ├── preview-panel.tsx ............ video chính + Regenerate
-│   │   │     ├── video-player.tsx
+│   │   │     │   (mobile: md:sticky md:top-4, max-md:-mx-4 edge-to-edge)
+│   │   │     ├── video-player.tsx ............. aspect-adaptive (đọc
+│   │   │     │   task.params.aspectRatio → aspect-[9/16] / aspect-square
+│   │   │     │   / aspect-video) + Picture-in-Picture button
+│   │   │     ├── mobile-now-playing-bar.tsx ... mobile-only, float trên
+│   │   │     │   bottom tab nav. Pick running > recently completed (10min)
+│   │   │     │   > recently failed (5min). Dismiss per-(taskId,status)
+│   │   │     ├── recent-task-strip.tsx ........ mobile-only, horizontal
+│   │   │     │   scroll thumb strip trong Xem tab. Tap để switch task
 │   │   │     ├── status-badge.tsx
 │   │   │     ├── url-countdown.tsx ............ đếm ngược TTL
 │   │   │     └── parameters-block.tsx
@@ -213,12 +233,33 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │       │   → DELETE /api/admin/pricing/[id]
 │       │     DB: pricing_rules (lookup: endpoint+tier+duration+audio)
 │       │
-│       └── ▶ FLOW A5: USAGE LOGS & STATS ─────────────────────────────────────────
-│           usage/page.tsx + usage-filters.tsx + usage-stats.tsx + usage-table.tsx
-│           → GET /api/admin/usage ───────── log từng request (paginate, filter)
-│           → GET /api/admin/usage/summary ─ tổng hợp theo ngày/code/key
-│             DB: usage_logs
+│       ├── ▶ FLOW A5: USAGE LOGS & STATS ─────────────────────────────────────────
+│       │   usage/page.tsx + usage-filters.tsx + usage-stats.tsx + usage-table.tsx
+│       │   → GET /api/admin/usage ───────── log từng request (filter; max 2000)
+│       │   → GET /api/admin/usage/summary ─ tổng hợp theo ngày/code/key
+│       │     DB: usage_logs
+│       │   • Client-side progressive render: PAGE_SIZE=100, nút "Tải thêm"
+│       │     load thêm chunk. Reset về 100 khi filter đổi. Sticky table header.
+│       │   • Mobile: usage-filters collapsible (active count badge);
+│       │     usage-table dùng UsageMobileCard thay vì <table>.
+│       │
+│       └── ▶ FLOW A6: ANNOUNCEMENTS BROADCAST ──────────────────────────────────
+│           announcements/page.tsx
+│           → GET    /api/admin/announcements ──── list (active + inactive)
+│           → POST   /api/admin/announcements ──── tạo (title, body, severity,
+│                                                  optional CTA + expiry)
+│           → PATCH  /api/admin/announcements?id=X update / toggle active
+│           → DELETE /api/admin/announcements?id=X xoá hẳn
+│             DB: announcements (migration 0012)
+│           • Severity: info (xanh) / warn (cam) / critical (đỏ) — drives
+│             banner color trên customer page
+│           • CTA URL chỉ chấp nhận http(s)://... hoặc /internal-path (chặn
+│             javascript:/data: injection từ compromised admin session)
+│           • Mobile: FAB cho create dialog (giống /codes /keys)
+│           • Customer poll /api/announcements mỗi 60s — urgent broadcast
+│             tới user đang online không cần reload
 │
+
 ├── ┌──────────────────────────────────────────────────────────────────────────────┐
 │   │  ⚙️ LUỒNG NỀN (background / infra)                                          │
 │   └──────────────────────────────────────────────────────────────────────────────┘

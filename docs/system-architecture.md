@@ -207,17 +207,23 @@ freepik_keys         pool of upstream Freepik API keys (AES-GCM encrypted)
 activation_codes     customer bearer codes (mode, quota_eur, used_eur)
 usage_logs           one row per request (status, cost, video URLs, TTL,
                        key_id, freepik_task_id — indexed via migration 0008
-                       so poll routes look up the creator key in O(1))
+                       so poll routes look up the creator key in O(1));
+                       error_message (migration 0009) + prompt (0011)
+                       captured for repeat-failure analysis
 pricing_rules        lookup matrix (endpoint, tier, duration, audio)
                        — tier enum: 'pro' | 'std' | '4k' (Kling 3's 4K tier
                        lives on the kling-4k-* endpoints, indexed by tier='4k')
 admin_sessions       SHA-256 cookie tokens (24h TTL)
 rate_limit_buckets   fixed-window counters (cleaned by cron)
 failed_logins        per-IP admin login throttle
+announcements        broadcast messages shown to all customers as a
+                       top-of-page banner — title/body/severity, optional
+                       CTA + expiry, dismiss tracked per-device in
+                       localStorage (migration 0012, 2026-05-17)
 ```
 
 Migrations live in [`drizzle/migrations/`](../drizzle/migrations) —
-files 0000-0008 currently. `scripts/db-migrate.ts` walks them
+files 0000-0012 currently. `scripts/db-migrate.ts` walks them
 alphabetically against a `__drizzle_migrations` tracking table; the
 journal in `meta/_journal.json` was used by older `drizzle-kit`
 versions but isn't consulted at apply time today.
@@ -265,6 +271,55 @@ exactly.
 - **URL allowlist** (`lib/url-allowlist.ts`) blocks SSRF via
   `start_image_url` — Magnific fetches the URL server-side so an
   attacker could otherwise probe internal IPs.
+
+## Mobile UX (parallel render paths)
+
+Customer page (`/`) and admin dashboard (`/dashboard/*`) both use a
+strict mobile/desktop split via Tailwind `md:` breakpoints. The rule:
+**desktop UX is frozen** — every mobile improvement renders in a
+parallel `md:hidden` branch alongside the original `hidden md:block`
+desktop branch.
+
+### Customer page (`src/app/(customer)/page.tsx`)
+- **Bottom tab nav** (mobile-only): 3 tabs — Tạo (Form) / Xem (Preview) /
+  Lịch sử (History). Auto-switches to "Xem" after Generate/Batch so
+  the customer sees their result. Badges: running count on Xem,
+  unread-error count on Lịch sử. Desktop keeps the 3-column layout
+  (form + preview + history).
+- **Now-playing bar** (`src/components/preview/mobile-now-playing-bar.tsx`,
+  mobile-only): floats above the bottom tab nav, shows current/recent
+  task at a glance, tap to open Xem, X button to dismiss. Per-(taskId,
+  status) dismiss key so banner re-appears when state changes.
+- **Recent task strip** (`src/components/preview/recent-task-strip.tsx`,
+  mobile-only): horizontal-scroll thumbnail strip in the Xem tab, up
+  to 12 tasks. Tap to switch active task without leaving the tab.
+- **Adaptive video aspect** (`src/components/preview/video-player.tsx`):
+  reads `task.params.aspectRatio` → renders `aspect-[9/16]` /
+  `aspect-square` / `aspect-video`. Placeholders (empty/loading/error)
+  follow the same aspect so no layout shift when transitioning.
+- **PiP button** on video player — uses native `document.pictureInPicture`
+  API, auto-hides on browsers without support.
+- **Announcement banner** (`src/components/layout/announcement-banner.tsx`):
+  fetches `/api/announcements` on mount + every 60s, shows the most
+  recent active+non-expired item below the header. Dismiss tracked
+  in localStorage by id (per-device).
+- **Contact button** in header → 1-tap link to Telegram support
+  (`t.me/chugaxai`). Zalo reachable from the onboarding card.
+
+### Admin dashboard (`src/components/dashboard/dashboard-nav.tsx`)
+- **6-tab bottom nav** on mobile (Tổng / Codes / Keys / Giá / Log /
+  Tin). Desktop renders the original 224px sidebar unchanged via
+  `hidden md:flex`.
+- **Card lists** instead of tables on mobile for `/codes`, `/keys`,
+  `/usage`. Desktop tables preserved verbatim via parallel render.
+- **Floating action button** (FAB, mobile-only, `bottom-[calc(5rem+env(
+  safe-area-inset-bottom))]`) on `/codes`, `/keys`, `/announcements` —
+  reuses the existing Dialog via a second DialogTrigger.
+- **Progressive render** in `/usage` (`PAGE_SIZE=100`): table renders
+  first 100 rows, "Tải thêm" button appends next chunk. Sticky table
+  header. CSV export still operates on full row set.
+- **Collapsible filters** on `/usage` mobile (active-count badge in
+  the collapsed toggle).
 
 ## Vercel Deploy
 
