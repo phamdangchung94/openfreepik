@@ -70,6 +70,15 @@ export async function PATCH(
       newUsedEur: parsed.data.usedEur,
     });
   }
+  // Distinguish admin manual deactivate from orchestrator's auto-
+  // deactivate (KEY_EXHAUSTED). When investigating a "why is this key
+  // inactive" question, the two events tell totally different stories
+  // (was it quota, or did someone click the button?).
+  if (parsed.data.isActive === false) {
+    log.info("KEY_DEACTIVATED_BY_ADMIN", { id });
+  } else if (parsed.data.isActive === true) {
+    log.info("KEY_REACTIVATED_BY_ADMIN", { id });
+  }
 
   const [updated] = await db
     .update(freepikKeys)

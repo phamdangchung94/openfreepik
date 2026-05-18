@@ -9,6 +9,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { freepikKeys, type NewFreepikKey } from "@/lib/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto/aes-gcm";
+import { log } from "@/lib/logger";
 
 export interface PickedKey {
   id: string;
@@ -112,14 +113,37 @@ export async function pickActiveKey(
 }
 
 /**
- * Mark a key inactive — used after Freepik returns a quota/auth error
- * indicating the key has hit its 500 EUR limit (or got revoked upstream).
+ * Mark a key inactive — used after Freepik returns a quota-exhaustion
+ * error (HTTP 402) indicating the key has hit its 500 EUR limit. Single
+ * source of truth: this is the ONLY function that flips `is_active` to
+ * false based on upstream rejection (admin manual deactivate goes via
+ * `/api/admin/keys/[id]` PATCH which logs `KEY_DEACTIVATED_BY_ADMIN`).
+ *
+ * Logs `KEY_EXHAUSTED` regardless of call site so the deactivation has
+ * an audit trail in both the orchestrator's POST path AND the poll
+ * path (authedFreepikCall). Previously only the POST path logged.
+ *
+ * Idempotent — only logs if a row actually flipped from active to
+ * inactive (avoids duplicate events when two parallel requests race).
  */
-export async function markKeyExhausted(keyId: string): Promise<void> {
-  await db
+export async function markKeyExhausted(
+  keyId: string,
+  context?: { endpoint?: string; reason?: string },
+): Promise<void> {
+  const flipped = await db
     .update(freepikKeys)
     .set({ isActive: false })
-    .where(eq(freepikKeys.id, keyId));
+    .where(eq(freepikKeys.id, keyId) /* and is_active … */)
+    .returning({ id: freepikKeys.id, label: freepikKeys.label });
+
+  if (flipped.length > 0) {
+    log.warn("KEY_EXHAUSTED", {
+      keyId,
+      label: flipped[0]?.label,
+      endpoint: context?.endpoint ?? "unknown",
+      reason: context?.reason ?? "QUOTA_EXHAUSTED_FROM_UPSTREAM",
+    });
+  }
 }
 
 /**

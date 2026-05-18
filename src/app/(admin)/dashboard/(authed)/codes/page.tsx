@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Plus, RefreshCw, Copy, Check } from "lucide-react";
+import { Plus, RefreshCw, Copy, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { formatVnd, formatVndWithEur } from "@/lib/format-currency";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { BulkCreateCodeDialog } from "./bulk-create-dialog";
+import { MultiSelectActions } from "./multi-select-actions";
 
 type Mode = "unlimited" | "quota" | "topup";
 
@@ -44,6 +47,26 @@ interface CodeRow {
 export default function AdminCodesPage() {
   const [rows, setRows] = useState<CodeRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // Selection state for bulk actions (revoke / reactivate / topup).
+  // Cleared on Refresh / page navigation; non-persistent.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleSelectAll() {
+    setSelected((prev) =>
+      prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id)),
+    );
+  }
+  function clearSelection() {
+    setSelected(new Set());
+  }
 
   async function load() {
     setLoading(true);
@@ -51,6 +74,9 @@ export default function AdminCodesPage() {
       const res = await fetch("/api/admin/codes");
       const json = await res.json();
       if (json.ok) setRows(json.codes);
+      // Drop stale selections after reload — codes might have been
+      // deleted, or admin shouldn't operate on stale state.
+      setSelected(new Set());
     } finally {
       setLoading(false);
     }
@@ -79,9 +105,16 @@ export default function AdminCodesPage() {
             <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
+          <BulkCreateCodeDialog onCreated={load} />
           <CreateCodeDialog onCreated={load} />
         </div>
       </header>
+
+      <MultiSelectActions
+        selectedIds={selected}
+        onClear={clearSelection}
+        onChanged={load}
+      />
 
       {/* ── Desktop (md+): table unchanged ─────────────────────── */}
       <Card className="hidden md:block">
@@ -91,9 +124,20 @@ export default function AdminCodesPage() {
               vertical; this div handles X. */}
           <ScrollArea className="max-h-[calc(100vh-220px)]">
             <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-xs">
+            <table className="w-full min-w-[680px] text-xs">
               <thead className="sticky top-0 bg-muted/60 backdrop-blur">
                 <tr>
+                  <th className="w-8 px-3 py-2 text-left">
+                    {/* Select-all toggle — checked when every row selected,
+                        indeterminate not shown (not worth the visual noise). */}
+                    <input
+                      type="checkbox"
+                      checked={selected.size > 0 && selected.size === rows.length}
+                      onChange={toggleSelectAll}
+                      aria-label="Chọn tất cả codes"
+                      className="size-4 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left font-medium">Code</th>
                   <th className="px-3 py-2 text-left font-medium">Label</th>
                   <th className="px-3 py-2 text-left font-medium">Mode</th>
@@ -105,11 +149,17 @@ export default function AdminCodesPage() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <CodeRowItem key={r.id} row={r} onChanged={load} />
+                  <CodeRowItem
+                    key={r.id}
+                    row={r}
+                    onChanged={load}
+                    selected={selected.has(r.id)}
+                    onToggleSelect={() => toggleSelect(r.id)}
+                  />
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       No codes yet. Click &quot;Create code&quot; to mint one.
                     </td>
                   </tr>
@@ -124,7 +174,13 @@ export default function AdminCodesPage() {
       {/* ── Mobile (<md): card list — same data, vertical layout ── */}
       <div className="space-y-2 md:hidden">
         {rows.map((r) => (
-          <CodeMobileCard key={r.id} row={r} onChanged={load} />
+          <CodeMobileCard
+            key={r.id}
+            row={r}
+            onChanged={load}
+            selected={selected.has(r.id)}
+            onToggleSelect={() => toggleSelect(r.id)}
+          />
         ))}
         {rows.length === 0 && (
           <Card>
@@ -148,9 +204,13 @@ export default function AdminCodesPage() {
 function CodeMobileCard({
   row,
   onChanged,
+  selected,
+  onToggleSelect,
 }: {
   row: CodeRow;
   onChanged: () => void;
+  selected: boolean;
+  onToggleSelect: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -211,17 +271,30 @@ function CodeMobileCard({
   const remainingPct = quotaEur ? (usedEur / quotaEur) * 100 : null;
 
   return (
-    <Card>
+    <Card className={selected ? "ring-2 ring-primary" : undefined}>
       <CardContent className="space-y-3 p-3">
-        {/* Header: label + status dot */}
+        {/* Header: checkbox + label + status dot */}
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-medium">
-              {row.label ?? "(chưa đặt tên)"}
-            </h3>
-            <Badge variant="secondary" className="mt-1 text-[10px]">
-              {row.mode}
-            </Badge>
+          <div className="flex min-w-0 items-start gap-2">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={onToggleSelect}
+              aria-label={`Chọn code ${row.label ?? row.code.slice(0, 8)}`}
+              className="mt-0.5 size-4 cursor-pointer"
+            />
+            <div className="min-w-0">
+              <Link
+                href={`/dashboard/codes/${row.id}`}
+                className="inline-flex items-center gap-1 truncate text-sm font-medium hover:text-primary hover:underline"
+              >
+                {row.label ?? "(chưa đặt tên)"}
+                <ExternalLink className="size-3 opacity-50" />
+              </Link>
+              <Badge variant="secondary" className="mt-1 text-[10px]">
+                {row.mode}
+              </Badge>
+            </div>
           </div>
           <Badge
             variant={row.isActive ? "default" : "destructive"}
@@ -295,7 +368,17 @@ function CodeMobileCard({
   );
 }
 
-function CodeRowItem({ row, onChanged }: { row: CodeRow; onChanged: () => void }) {
+function CodeRowItem({
+  row,
+  onChanged,
+  selected,
+  onToggleSelect,
+}: {
+  row: CodeRow;
+  onChanged: () => void;
+  selected: boolean;
+  onToggleSelect: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -353,7 +436,16 @@ function CodeRowItem({ row, onChanged }: { row: CodeRow; onChanged: () => void }
   }
 
   return (
-    <tr className="border-t">
+    <tr className={`border-t ${selected ? "bg-primary/5" : ""}`}>
+      <td className="w-8 px-3 py-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Chọn code ${row.label ?? row.code.slice(0, 8)}`}
+          className="size-4 cursor-pointer"
+        />
+      </td>
       <td className="px-3 py-2 font-mono text-[11px]">
         <button
           onClick={copyCode}
@@ -364,7 +456,16 @@ function CodeRowItem({ row, onChanged }: { row: CodeRow; onChanged: () => void }
           {copied ? <Check className="size-3" /> : <Copy className="size-3 opacity-50" />}
         </button>
       </td>
-      <td className="px-3 py-2">{row.label ?? "—"}</td>
+      <td className="px-3 py-2">
+        <Link
+          href={`/dashboard/codes/${row.id}`}
+          className="inline-flex items-center gap-1 hover:text-primary hover:underline"
+          title="Mở drilldown — usage chi tiết + export CSV"
+        >
+          {row.label ?? "—"}
+          <ExternalLink className="size-3 opacity-50" />
+        </Link>
+      </td>
       <td className="px-3 py-2">
         <Badge variant="secondary" className="text-[10px]">
           {row.mode}

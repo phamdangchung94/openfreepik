@@ -266,18 +266,13 @@ async function runOrchestrate<T>(
         continue; // try the next key — but key stays is_active=true
       }
       if (isKeyExhaustedError(err)) {
-        // P0-7: emit the documented KEY_EXHAUSTED event so admin has
-        // observability when a key flips inactive. Without this the
-        // pool can drain silently and admin only finds out via the
-        // ALL_KEYS_EXHAUSTED panic at the end.
-        // Now ONLY fires on QUOTA_EXHAUSTED (402) — see helpers comment.
-        log.warn("KEY_EXHAUSTED", {
-          requestId,
-          keyId: key.id,
+        // markKeyExhausted now emits KEY_EXHAUSTED itself (single source
+        // of truth, also covers the poll path). We just add the request
+        // context here.
+        await markKeyExhausted(key.id, {
           endpoint: opts.endpoint,
-          ...errFields(err),
+          reason: `QUOTA_EXHAUSTED_FROM_UPSTREAM (req ${requestId})`,
         });
-        await markKeyExhausted(key.id);
         triedKeyIds.add(key.id); // P1-3
         continue; // try the next key
       }
@@ -405,7 +400,10 @@ export async function authedFreepikCall<T>(opts: {
     return { ok: true, data, metadata: validation.metadata };
   } catch (err) {
     if (isKeyExhaustedError(err)) {
-      await markKeyExhausted(key.id);
+      await markKeyExhausted(key.id, {
+        endpoint: "authedFreepikCall (poll)",
+        reason: "QUOTA_EXHAUSTED_FROM_UPSTREAM (poll path)",
+      });
     }
     if (err instanceof FreepikApiError) {
       return fail(err.status || 500, err.code, err.message);
