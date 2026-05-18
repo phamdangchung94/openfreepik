@@ -88,6 +88,9 @@ export async function pickActiveKey(
         AND (k.assigned_eur - k.used_eur) >= ${cost}::numeric
         AND ${excludeClause}
         AND COALESCE(i.n, 0) < k.max_concurrent
+        -- Skip keys auto-paused by the healthcheck (rate-limit burst).
+        -- NULL = never paused; past-timestamp = pause window expired.
+        AND (k.paused_until IS NULL OR k.paused_until < now())
       ORDER BY k.last_used_at ASC NULLS FIRST, k.created_at ASC
       FOR UPDATE OF k
       LIMIT 1

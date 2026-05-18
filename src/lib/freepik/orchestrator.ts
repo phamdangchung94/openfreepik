@@ -28,6 +28,7 @@ import {
   recordKeyCost,
 } from "@/lib/freepik/key-pool";
 import { errFields, log } from "@/lib/logger";
+import { logAndAlert } from "@/lib/alerts/telegram";
 import {
   fail,
   isKeyExhaustedError,
@@ -328,13 +329,22 @@ async function runOrchestrate<T>(
   // Audit P1-11: bumped from warn → error. This is the panic path —
   // every key in the pool is dead and customers are getting refunded
   // requests. Log drains often filter `warn` out of alert pipelines
-  // so this needs to surface at the highest level.
-  log.error("ALL_KEYS_EXHAUSTED", {
-    requestId,
-    endpoint: opts.endpoint,
-    codeId,
-    costEur: opts.costEur,
-    ...errFields(lastErr),
+  // so this needs to surface at the highest level. Telegram alert
+  // fires immediately so admin knows BEFORE customers report it.
+  logAndAlert({
+    severity: "critical",
+    event: "ALL_KEYS_EXHAUSTED",
+    title: "🔥 Pool keys cạn — customer đang được hoàn tiền",
+    body:
+      `Endpoint: ${opts.endpoint}\nCost: ${opts.costEur} EUR\nrequestId: ${requestId}\n\n` +
+      `Hành động: kiểm tra /dashboard/keys, topup Magnific hoặc reactivate keys đã bị auto-deactivate.`,
+    fields: {
+      requestId,
+      endpoint: opts.endpoint,
+      codeId,
+      costEur: opts.costEur,
+      ...errFields(lastErr),
+    },
   });
   return fail(
     503,

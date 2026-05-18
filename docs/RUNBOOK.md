@@ -33,6 +33,8 @@ All of these are set in Vercel production AND mirrored in `.env.local` for devel
 | `ADMIN_SESSION_SECRET` | Cookie session validation | All admin sessions invalidated immediately on rotation |
 | `CRON_SECRET` | Bearer for `/api/cron/purge` | Vercel Cron auto-uses the new value on next scheduled run |
 | `WEBHOOK_BASE_URL` | Optional override for Magnific webhook callback (e.g. custom domain). Falls back to `https://${VERCEL_PROJECT_PRODUCTION_URL}` when `VERCEL_ENV=production`. | None — read fresh on every POST to `/api/freepik/*` |
+| `TELEGRAM_BOT_TOKEN` | Optional. Bot token from @BotFather. When set together with `TELEGRAM_CHAT_ID`, critical events (`ALL_KEYS_EXHAUSTED`, `KEY_AUTO_DEACTIVATED`, `ORPHAN_CHARGE_REFUNDED`, etc.) send a Telegram DM to admin. When unset, alerts are silently no-op (still logged). | None — read fresh on every alert |
+| `TELEGRAM_CHAT_ID` | Optional. Numeric chat id for the bot to message. Get from `https://api.telegram.org/bot<TOKEN>/getUpdates` after `/start`-ing the bot. | None |
 
 ---
 
@@ -283,6 +285,45 @@ To persist logs beyond Vercel's 1h Hobby buffer:
 3. Vercel project → **Settings** → **Log Drains** → **Add Drain**
 4. Paste URL, set format = JSON, environments = Production
 5. Test by hitting `/api/cron/purge` with the bearer; structured JSON appears in your destination within ~10s
+
+### Setup Telegram alerts (Phase 1.3 — optional, 5min)
+
+Pipes critical events directly to admin's Telegram DM so incidents don't wait for log inspection.
+
+1. **Create the bot**: open Telegram → message `@BotFather` → `/newbot` → follow prompts. Save the token (`123456:ABC-DEF...`).
+2. **Get your chat id**: start a chat with your new bot, send `/start`. Then visit `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `result[0].message.chat.id` (a number like `987654321`).
+3. **Set Vercel env vars**:
+   ```bash
+   vercel env add TELEGRAM_BOT_TOKEN production
+   # paste the token
+   vercel env add TELEGRAM_CHAT_ID production
+   # paste the chat id
+   ```
+4. **Redeploy** to pick up the env vars (or wait for next push).
+5. **Test**: trigger any handler that calls `logAndAlert()`. Easiest = temporarily call `sendAlert({severity:"info", event:"TEST", title:"alerts working"})` from a dev route.
+
+**Without these vars**: `src/lib/alerts/telegram.ts` becomes a no-op. Alerts still write to logs; just no Telegram delivery. Safe to ship code that uses `logAndAlert()` before the bot is set up.
+
+**Events hooked**:
+- `ALL_KEYS_EXHAUSTED` (critical) — orchestrator panic, refunds happening
+- `KEY_AUTO_DEACTIVATED` (critical) — probe returned 401/403, key revoked
+- `KEY_AUTO_PAUSED` (warn) — probe returned 429, key paused 1h
+- `KEY_SLOW` (warn) — probe took >5s
+- `ORPHAN_CHARGE_REFUNDED` (warn) — sweeper found pending task >10min, refunded
+- `ORPHAN_SWEEP_OVER_CAP` (critical) — sweeper found >50 orphans in one run (likely outage)
+
+### Orphan charge sweeper (Phase 1.5)
+
+`/api/cron/sweep-orphan-charges` runs every 15min. Finds `usage_logs` rows stuck at `status='pending'` for >10min and refunds them (`refundCode` → flip status to `refunded`, log + Telegram alert).
+
+**Manual run** (to test or recover from a stuck state):
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/sweep-orphan-charges
+```
+
+**Tuning**: orphan age threshold is `ORPHAN_AGE_MINUTES = 10` in `src/app/api/cron/sweep-orphan-charges/route.ts`. Bump if customer has legitimate long-running tasks; lower if you want faster refund-visible behavior. Cap is `MAX_REFUNDS_PER_SWEEP = 50` — if a single sweep hits that, the script bails and sends critical alert instead of refunding blindly (likely a system-wide outage or clock bug).
+
+**False-positive risk**: if a webhook is delayed past 10min, the sweep will refund a task that later succeeds. Customer gets the video *and* a refund. Acceptable since (a) failures are far more common than late webhooks, (b) the customer wins from any false positive. If this happens often, raise the threshold to 15min.
 
 ---
 

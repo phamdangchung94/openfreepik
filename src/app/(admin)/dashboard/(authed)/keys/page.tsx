@@ -5,6 +5,8 @@ import {
   Activity,
   Check,
   Copy,
+  Eye,
+  EyeOff,
   Pencil,
   Plus,
   RefreshCw,
@@ -75,6 +77,12 @@ export default function AdminKeysPage() {
   // them all at once, single-key refresh writes one entry.
   const [probes, setProbes] = useState<Record<string, ProbeResult>>({});
   const [probingIds, setProbingIds] = useState<Set<string>>(new Set());
+  // Default view: only show keys still usable for new requests. Admin
+  // can flip "Hiện tất cả" to see inactive / exhausted keys (e.g. when
+  // auditing why a key was deactivated, or to delete it). Stale keys
+  // hidden by default so the picker mental model is "what's running
+  // right now" instead of "what's ever been added".
+  const [showAll, setShowAll] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -162,18 +170,60 @@ export default function AdminKeysPage() {
     load();
   }, []);
 
+  // Active = is_active AND quota not exhausted (used < assigned).
+  // "Hiện tất cả" toggle bypasses this filter to surface inactive +
+  // exhausted keys for audit / cleanup.
+  const visibleRows = showAll
+    ? rows
+    : rows.filter((k) => {
+        if (!k.isActive) return false;
+        const used = Number(k.usedEur);
+        const assigned = Number(k.assignedEur);
+        // Exhausted = used has caught up with assigned (within €0.01).
+        // Treats assigned=0 as not-exhausted (admin-set "no cap"
+        // sentinel) — that pattern shouldn't exist but be defensive.
+        if (assigned > 0 && used >= assigned - 0.01) return false;
+        return true;
+      });
+  const hiddenCount = rows.length - visibleRows.length;
+
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold sm:text-2xl">API keys</h1>
           <p className="text-xs text-muted-foreground sm:text-sm">
-            {rows.length} {rows.length === 1 ? "key" : "keys"} in the rotation
-            pool. Spend tracked locally — upstream exposes no balance API, so
+            {showAll ? rows.length : visibleRows.length}{" "}
+            {(showAll ? rows.length : visibleRows.length) === 1 ? "key" : "keys"}{" "}
+            in the rotation pool
+            {!showAll && hiddenCount > 0 && (
+              <>
+                {" "}
+                · {hiddenCount} ẩn (inactive/hết quota)
+              </>
+            )}
+            . Spend tracked locally — upstream exposes no balance API, so
             verify against the provider dashboard periodically.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAll((v) => !v)}
+            title={
+              showAll
+                ? "Đang xem tất cả keys (kể cả inactive + hết quota)"
+                : "Đang chỉ xem keys còn quota — bấm để hiện tất cả"
+            }
+          >
+            {showAll ? (
+              <Eye className="size-3.5" />
+            ) : (
+              <EyeOff className="size-3.5" />
+            )}
+            {showAll ? "Hiện tất cả" : `Chỉ active${hiddenCount > 0 ? ` (+${hiddenCount} ẩn)` : ""}`}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -210,7 +260,7 @@ export default function AdminKeysPage() {
       </header>
 
       <div className="grid gap-3 md:grid-cols-2">
-        {rows.map((k) => (
+        {visibleRows.map((k) => (
           <KeyCard
             key={k.id}
             row={k}
@@ -224,6 +274,14 @@ export default function AdminKeysPage() {
           <Card className="md:col-span-2">
             <CardContent className="p-8 text-center text-sm text-muted-foreground">
               No API keys yet — add one so customers can generate.
+            </CardContent>
+          </Card>
+        )}
+        {rows.length > 0 && visibleRows.length === 0 && !showAll && (
+          <Card className="md:col-span-2">
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">
+              Tất cả {rows.length} key đang inactive hoặc hết quota. Bấm
+              &ldquo;Hiện tất cả&rdquo; để xem.
             </CardContent>
           </Card>
         )}
@@ -269,11 +327,27 @@ function KeyCard({
   }
 
   async function remove() {
+    // Step 1 — warn about consequence + recommend deactivate-then-delete
+    // pattern (which is what the server's pending-task guard enforces).
     if (
       !confirm(
-        `Delete key "${row.label}"? Lịch sử usage_logs giữ lại nhưng key blob mất vĩnh viễn — phải nhập lại plaintext nếu muốn dùng lại.`,
+        `Xoá vĩnh viễn key "${row.label}"?\n\n` +
+          `• Lịch sử usage_logs giữ lại (key_id sẽ null)\n` +
+          `• Encrypted key blob mất — phải nhập lại plaintext nếu muốn dùng lại\n` +
+          `• Server từ chối nếu key còn task pending\n\n` +
+          `Nếu chỉ muốn ngừng dùng key này, hãy "Deactivate" thay vì xoá.`,
       )
     ) {
+      return;
+    }
+    // Step 2 — type the label exactly to confirm. Defensive against
+    // accidental clicks on the trash icon next to other buttons.
+    const typed = window.prompt(
+      `Bước xác nhận — gõ chính xác tên key để xoá:\n\n${row.label}`,
+    );
+    if (typed === null) return; // cancelled
+    if (typed.trim() !== row.label) {
+      toast.error("Tên không khớp — huỷ xoá");
       return;
     }
     setBusy(true);

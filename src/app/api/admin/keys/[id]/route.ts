@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { freepikKeys } from "@/lib/db/schema";
+import { freepikKeys, usageLogs } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
 import { log } from "@/lib/logger";
@@ -100,6 +100,12 @@ export async function PATCH(
  * stay intact (just lose their key attribution). The encrypted key blob
  * is gone for good — admin must re-add the plaintext if they ever want
  * the key back.
+ *
+ * Guard: refuse if the key has any `pending` or `succeeded`-but-not-
+ * webhook-confirmed task in flight — deleting mid-flight orphans the
+ * task's polling thread and customer never sees a result. Admin must
+ * either wait for tasks to complete or deactivate (PATCH isActive=false)
+ * and delete later.
  */
 export async function DELETE(
   _request: Request,
@@ -109,6 +115,33 @@ export async function DELETE(
   if (denied) return denied;
 
   const { id } = await params;
+
+  // Pending guard — count tasks that haven't reached a terminal state
+  // yet. `succeeded` rows where the URL hasn't expired are also blocked
+  // because the customer may still be downloading.
+  const pending = await db
+    .select({ id: usageLogs.id })
+    .from(usageLogs)
+    .where(
+      and(
+        eq(usageLogs.keyId, id),
+        inArray(usageLogs.status, ["pending"]),
+      ),
+    )
+    .limit(1);
+
+  if (pending.length > 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "HAS_PENDING_TASKS",
+        message:
+          "Key đang có task chưa hoàn thành. Đặt isActive=false rồi đợi tasks xong trước khi xoá.",
+      },
+      { status: 409 },
+    );
+  }
+
   const [deleted] = await db
     .delete(freepikKeys)
     .where(eq(freepikKeys.id, id))

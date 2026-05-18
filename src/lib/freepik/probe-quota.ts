@@ -18,6 +18,7 @@ import { db } from "@/lib/db/client";
 import { freepikKeys } from "@/lib/db/schema";
 import { decrypt } from "@/lib/crypto/aes-gcm";
 import { log } from "@/lib/logger";
+import { logAndAlert } from "@/lib/alerts/telegram";
 
 const API_BASE_URL = process.env.FREEPIK_API_BASE_URL ?? "https://api.magnific.com";
 const API_KEY_HEADER = process.env.FREEPIK_API_KEY_HEADER ?? "x-magnific-api-key";
@@ -104,20 +105,37 @@ export async function probeKeyQuota(encryptedKey: string): Promise<QuotaProbeRes
 }
 
 /**
+ * Latency threshold — if probe takes longer than this AND it's
+ * succeeded (no error), we still flag the key as "slow" via Telegram.
+ * Magnific p50 is ~200-500ms; >5s sustained = something upstream
+ * (or the key's account-level rate limiting) is degrading.
+ */
+const SLOW_PROBE_THRESHOLD_MS = 5000;
+
+/**
  * Cron-friendly health check: probe every active key, surface results
- * in logs, and auto-deactivate keys whose probe returns 401 (Magnific
- * has revoked them — admin had to know anyway and the pool was going
- * to fail every request that picked them).
+ * in logs, and auto-deactivate / auto-pause keys based on probe outcome.
+ *
+ * Detection rules:
+ *   - 401/403 → auto-deactivate (`isActive=false`), Telegram critical
+ *     alert. Magnific has revoked the key; no recovery without admin
+ *     re-issuing.
+ *   - 429    → auto-pause for 1h (set `pausedUntil = now + 1h`), warn
+ *     alert. Key is rate-limited at the account level; `pickActiveKey`
+ *     skips it during the window, comes back online after.
+ *   - ok but elapsedMs > 5s → log + warn alert (no state change). Key
+ *     is slow; admin should check upstream status page.
+ *   - 5xx / network / timeout → log only (transient — could be Magnific).
  *
  * Does NOT touch `used_eur` — Magnific doesn't publish a single
  * canonical "remaining credit" header today, so we'd be guessing. The
  * server-side accounting (`recordKeyCost`) remains source of truth.
- * Once webhook + balance-endpoint integration lands we can update this
- * to pull the authoritative number.
  */
 export async function probeAndHealthcheckActiveKeys(): Promise<{
   probed: number;
   deactivated: number;
+  paused: number;
+  slow: number;
   failed: number;
 }> {
   const keys = await db
@@ -130,28 +148,64 @@ export async function probeAndHealthcheckActiveKeys(): Promise<{
     .where(eq(freepikKeys.isActive, true));
 
   let deactivated = 0;
+  let paused = 0;
+  let slow = 0;
   let failed = 0;
 
   await Promise.all(
     keys.map(async (k) => {
       const probe = await probeKeyQuota(k.keyEncrypted);
-      if (probe.ok) return;
 
-      if (probe.status === 401) {
+      if (probe.ok) {
+        // OK but slow — surface but don't change state.
+        if (probe.elapsedMs > SLOW_PROBE_THRESHOLD_MS) {
+          logAndAlert({
+            severity: "warn",
+            event: "KEY_SLOW",
+            title: `Key "${k.label}" probe chậm`,
+            body: `Latency ${probe.elapsedMs}ms (ngưỡng ${SLOW_PROBE_THRESHOLD_MS}ms)`,
+            fields: { keyId: k.id, elapsedMs: probe.elapsedMs },
+          });
+          slow++;
+        }
+        return;
+      }
+
+      if (probe.status === 401 || probe.status === 403) {
         // Magnific revoked the key — auto-deactivate to stop the
-        // orchestrator burning retries on it. Admin sees the warning
-        // log and can investigate.
+        // orchestrator burning retries on it. Admin sees the alert
+        // and can investigate.
         await db
           .update(freepikKeys)
           .set({ isActive: false })
           .where(eq(freepikKeys.id, k.id));
-        log.warn("KEY_AUTO_DEACTIVATED", {
-          keyId: k.id,
-          label: k.label,
-          status: probe.status,
-          reason: "PROBE_401",
+        logAndAlert({
+          severity: "critical",
+          event: "KEY_AUTO_DEACTIVATED",
+          title: `Key "${k.label}" auto-deactivate`,
+          body: `Probe trả về ${probe.status} — Magnific đã revoke key, cần admin xử lý`,
+          fields: { keyId: k.id, status: probe.status, reason: "PROBE_UNAUTHORIZED" },
         });
         deactivated++;
+        return;
+      }
+
+      if (probe.status === 429) {
+        // Rate-limited at the account level — pause for 1h so
+        // pickActiveKey skips it. Auto-recovers after window.
+        const pausedUntil = new Date(Date.now() + 60 * 60_000);
+        await db
+          .update(freepikKeys)
+          .set({ pausedUntil })
+          .where(eq(freepikKeys.id, k.id));
+        logAndAlert({
+          severity: "warn",
+          event: "KEY_AUTO_PAUSED",
+          title: `Key "${k.label}" paused 1 giờ (rate limit)`,
+          body: `Probe trả về 429 — pickActiveKey skip cho đến ${pausedUntil.toISOString()}`,
+          fields: { keyId: k.id, pausedUntil: pausedUntil.toISOString() },
+        });
+        paused++;
         return;
       }
 
@@ -168,5 +222,5 @@ export async function probeAndHealthcheckActiveKeys(): Promise<{
     }),
   );
 
-  return { probed: keys.length, deactivated, failed };
+  return { probed: keys.length, deactivated, paused, slow, failed };
 }

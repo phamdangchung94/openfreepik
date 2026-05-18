@@ -48,6 +48,15 @@ export const freepikKeys = pgTable(
      * hammered past the upstream's concurrency tolerance.
      */
     maxConcurrent: integer("max_concurrent").notNull().default(30),
+    /**
+     * Temporary auto-pause set by the healthcheck cron when the key
+     * hits a rate-limit burst (>5 hits within 5min) or sustained
+     * latency degradation. While `paused_until > now()`, `pickActiveKey`
+     * skips this key but does NOT deactivate it — admin sees a "Paused"
+     * badge in the dashboard. After the timestamp passes, the key
+     * silently re-enters rotation. Migration 0013.
+     */
+    pausedUntil: timestamp("paused_until", { withTimezone: true }),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -167,6 +176,11 @@ export const usageLogs = pgTable(
     // single-column created_at index forces a sort over status-matching
     // rows; with 10K+ usage rows that's measurably slow.
     index("usage_logs_status_created_at_idx").on(t.status, t.createdAt),
+    // Migration 0013: needed by Phase 3 per-key health dashboard
+    // (GROUP BY key_id, status) and orphan sweeper (filter by keyId
+    // when scoping to a single key). FK constraint exists but no
+    // index → seq-scan on 10K+ rows.
+    index("usage_logs_key_id_idx").on(t.keyId),
   ],
 );
 

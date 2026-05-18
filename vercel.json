@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/purge",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/sweep-orphan-charges",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
