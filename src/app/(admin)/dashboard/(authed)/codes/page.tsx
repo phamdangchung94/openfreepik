@@ -23,7 +23,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { BulkCreateCodeDialog } from "./bulk-create-dialog";
@@ -116,16 +115,17 @@ export default function AdminCodesPage() {
         onChanged={load}
       />
 
-      {/* ── Desktop (md+): table unchanged ─────────────────────── */}
+      {/* ── Desktop (md+): table — page-level scroll ──────────────
+          Bỏ ScrollArea max-h vì nó tạo inner scroll container, page
+          chính không scroll được khi nhiều codes (user phải scroll
+          trong table). Giờ overflow-x-auto cho horizontal only;
+          vertical theo page scroll như Usage/Keys/Costs pages khác.
+          Sticky thead vẫn dính theo page viewport. */}
       <Card className="hidden md:block">
         <CardContent className="p-0">
-          {/* Horizontal scroll wrapper so the 7-column table doesn't
-              force-clip on a phone viewport. ScrollArea handles
-              vertical; this div handles X. */}
-          <ScrollArea className="max-h-[calc(100vh-220px)]">
-            <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[680px] text-xs">
-              <thead className="sticky top-0 bg-muted/60 backdrop-blur">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                 <tr>
                   <th className="w-8 px-3 py-2 text-left">
                     {/* Select-all toggle — checked when every row selected,
@@ -166,8 +166,7 @@ export default function AdminCodesPage() {
                 )}
               </tbody>
             </table>
-            </div>
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 
