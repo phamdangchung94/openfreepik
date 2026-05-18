@@ -50,6 +50,24 @@ function visibilityAwareDelay(intervalMs: number, attempt: number): number {
   return base;
 }
 
+/**
+ * Exponential backoff for consecutive fetch errors. After N errors in a
+ * row, we cap at 30s and (separately) abort the polling loop entirely —
+ * a permanently broken endpoint shouldn't spam fetches for 30 minutes.
+ *
+ * Doubles each time: 4s, 8s, 16s, 30s (cap).
+ */
+function errorBackoffDelay(intervalMs: number, consecutiveErrors: number): number {
+  return Math.min(intervalMs * Math.pow(2, consecutiveErrors), 30_000);
+}
+
+/**
+ * Hard cap on consecutive errors before we surface FAILED to the caller.
+ * Beyond this point the issue is structural (DNS, auth, server outage),
+ * not transient — retrying just wastes battery and budget.
+ */
+const MAX_CONSECUTIVE_ERRORS = 5;
+
 export type PollEndpoint =
   | "kling-v3"
   | "kling-4k-t2v"
@@ -96,6 +114,11 @@ export async function pollTaskUntilDone(
 
   const start = Date.now();
   let attempt = 0;
+  // Resets on every successful fetch (any HTTP response, even non-
+  // terminal in-progress polls). Increments on catch (network /
+  // timeout / DNS / 5xx that throws). Drives exponential backoff and
+  // the hard-abort guard below.
+  let consecutiveErrors = 0;
 
   while (Date.now() - start < maxTimeMs) {
     if (signal?.aborted) {
@@ -132,6 +155,10 @@ export async function pollTaskUntilDone(
 
       if (!res.ok) throw new Error(await extractErrorMessage(res));
 
+      // Got a 2xx response — clear the error streak even if we still
+      // need to keep polling for a terminal status.
+      consecutiveErrors = 0;
+
       const json = await res.json();
       const { status, generated, error_message } = json.data as {
         status: TaskStatus;
@@ -159,13 +186,31 @@ export async function pollTaskUntilDone(
       if (signal?.aborted) {
         return { status: "CANCELLED", generated: [], error: "cancelled" };
       }
-      console.warn(`[pollTask:${endpoint}] retry after error:`, err);
+      consecutiveErrors++;
+      console.warn(
+        `[pollTask:${endpoint}] retry after error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`,
+        err,
+      );
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        // Structural failure — DNS, sustained 5xx, etc. Better to
+        // surface FAILED than burn battery + budget for 30 min.
+        return {
+          status: "FAILED",
+          generated: [],
+          error: `Polling failed ${MAX_CONSECUTIVE_ERRORS} times in a row — check connection or try again later`,
+        };
+      }
     } finally {
       if (!releasedEarly) releasePollSlot();
     }
 
     attempt++;
-    const delay = visibilityAwareDelay(intervalMs, attempt);
+    // Pick delay: exponential backoff after errors so we stop hammering
+    // a sick endpoint; steady-state visibility-aware delay otherwise.
+    const delay =
+      consecutiveErrors > 0
+        ? errorBackoffDelay(intervalMs, consecutiveErrors)
+        : visibilityAwareDelay(intervalMs, attempt);
     await new Promise((r) => setTimeout(r, delay));
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { UsageStats } from "./usage-stats";
@@ -33,7 +33,7 @@ export default function AdminUsagePage() {
   const [filters, setFilters] = useState<UsageFilterValue>(DEFAULT_FILTERS);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(filters.limit) });
@@ -46,12 +46,11 @@ export default function AdminUsagePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filters]);
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters, refreshKey]);
+  }, [load, refreshKey]);
 
   function refreshAll() {
     setRefreshKey((k) => k + 1);

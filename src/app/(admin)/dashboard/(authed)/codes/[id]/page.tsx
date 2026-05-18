@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download, RefreshCw, UserCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -75,7 +75,7 @@ export default function CodeDrilldownPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -89,7 +89,7 @@ export default function CodeDrilldownPage({
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
   async function impersonate() {
     if (
@@ -132,8 +132,7 @@ export default function CodeDrilldownPage({
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [load]);
 
   if (loading && !data) {
     return (
