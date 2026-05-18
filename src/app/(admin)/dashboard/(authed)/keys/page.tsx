@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   Activity,
   Check,
   Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   Pencil,
@@ -370,7 +372,14 @@ function KeyCard({
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-medium">{row.label}</h3>
+            <Link
+              href={`/dashboard/keys/${row.id}`}
+              className="inline-flex items-center gap-1 truncate text-sm font-medium hover:text-primary hover:underline"
+              title="Mở key health dashboard"
+            >
+              {row.label}
+              <ExternalLink className="size-3 opacity-50" />
+            </Link>
             {row.notes && (
               <p className="text-[11px] text-muted-foreground">{row.notes}</p>
             )}
