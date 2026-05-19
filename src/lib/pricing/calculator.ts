@@ -134,3 +134,31 @@ export function lookupForWanV27(
     withAudio: false,
   };
 }
+
+/**
+ * Convenience wrapper for Kling Motion Control. The endpoint string
+ * already encodes both version + tier (e.g. `kling-motion-v3-pro`),
+ * so the `tier` slot of the lookup is left null — admin pricing rows
+ * live under endpoint + duration alone.
+ *
+ * Pricing per second confirmed by admin 2026-05-19 (Magnific dashboard):
+ *   v2-6-std: 0.059 EUR/s    v2-6-pro: 0.118 EUR/s
+ *   v3-std:   0.126 EUR/s    v3-pro:   0.168 EUR/s
+ *
+ * Allowed output durations: 5, 10, 15, 30 (5/10 only when
+ * character_orientation=image; the route handler enforces this).
+ * Audio is not a price modifier — motion control doesn't generate
+ * audio, so `withAudio` is always false.
+ */
+export function lookupForKlingMotion(
+  version: "v2-6" | "v3",
+  tier: "std" | "pro",
+  durationSeconds: number,
+): PricingLookup {
+  return {
+    endpoint: `kling-motion-${version}-${tier}`,
+    tier: null,
+    durationSeconds,
+    withAudio: false,
+  };
+}

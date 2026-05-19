@@ -47,6 +47,7 @@ import {
   lookupForKling4k,
   lookupForImprovePrompt,
   lookupForWanV27,
+  lookupForKlingMotion,
   PricingNotFoundError,
 } from "./calculator";
 
@@ -139,6 +140,40 @@ describe("lookupForWanV27", () => {
 
   it("defaults duration to 5s", () => {
     expect(lookupForWanV27({}).durationSeconds).toBe(5);
+  });
+});
+
+describe("lookupForKlingMotion", () => {
+  it("encodes both version and tier into the endpoint string", () => {
+    expect(lookupForKlingMotion("v2-6", "std", 5).endpoint).toBe(
+      "kling-motion-v2-6-std",
+    );
+    expect(lookupForKlingMotion("v2-6", "pro", 5).endpoint).toBe(
+      "kling-motion-v2-6-pro",
+    );
+    expect(lookupForKlingMotion("v3", "std", 5).endpoint).toBe(
+      "kling-motion-v3-std",
+    );
+    expect(lookupForKlingMotion("v3", "pro", 5).endpoint).toBe(
+      "kling-motion-v3-pro",
+    );
+  });
+
+  it("leaves tier null (endpoint string already carries the discriminant)", () => {
+    expect(lookupForKlingMotion("v3", "pro", 10).tier).toBeNull();
+    expect(lookupForKlingMotion("v2-6", "std", 30).tier).toBeNull();
+  });
+
+  it("passes durationSeconds through verbatim", () => {
+    expect(lookupForKlingMotion("v3", "pro", 5).durationSeconds).toBe(5);
+    expect(lookupForKlingMotion("v3", "pro", 10).durationSeconds).toBe(10);
+    expect(lookupForKlingMotion("v3", "pro", 15).durationSeconds).toBe(15);
+    expect(lookupForKlingMotion("v3", "pro", 30).durationSeconds).toBe(30);
+  });
+
+  it("never bills motion with audio (not a price modifier)", () => {
+    expect(lookupForKlingMotion("v3", "pro", 5).withAudio).toBe(false);
+    expect(lookupForKlingMotion("v2-6", "std", 30).withAudio).toBe(false);
   });
 });
 

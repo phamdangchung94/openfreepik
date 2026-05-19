@@ -1,5 +1,5 @@
 /**
- * Client-side image upload to temporary public hosts.
+ * Client-side file upload to temporary public hosts.
  * Uploading directly from the browser bypasses Vercel's 4.5MB body limit.
  *
  * Audit P1-10: hard dependency on a single host (Litterbox) is a known
@@ -7,11 +7,16 @@
  * Mitigations layered here:
  *   - Try `tmpfiles.org` first, fall back to `litterbox.catbox.moe` if
  *     it rejects or times out. One host being down doesn't block the
- *     i2v / start-end-frame upload flow.
+ *     i2v / motion / start-end-frame upload flow.
  *   - 30s AbortSignal.timeout per host so a slow host doesn't hang the
  *     UI; the failure rolls into the fallback path.
  *   - Vietnamese customer-facing error messages distinguish timeout vs.
  *     connection failure vs. service rejection.
+ *
+ * **Video support**: Kling Motion Control endpoints need a reference
+ * video URL. Litterbox accepts files up to ~1GB (we cap to 50MB to keep
+ * customer wait time bounded); tmpfiles is image-only in practice so we
+ * skip it for video uploads (would just waste the 30s timeout).
  *
  * Vercel Blob (paid feature) is the right next layer once free hosts
  * become unreliable — deferred until traffic justifies it.
@@ -23,8 +28,24 @@ const UPLOAD_TIMEOUT_MS = 30_000;
 
 export interface UploadResult {
   publicUrl: string;
+  /** Data URI only for image uploads (used for instant preview); empty for video. */
   dataUri: string;
   filename: string;
+}
+
+/**
+ * Generic uploader — dispatches to image or video pipeline based on
+ * MIME type. Caller passes a File; we infer kind from `file.type`.
+ *   - `image/*`  → tmpfiles → litterbox fallback, includes dataUri
+ *   - `video/*`  → litterbox only, no dataUri (caller uses
+ *     URL.createObjectURL for preview to avoid 50MB base64 bloat)
+ *
+ * Throws with Vietnamese error message on full failure.
+ */
+export async function uploadFileToHost(file: File): Promise<UploadResult> {
+  if (file.type.startsWith("video/")) return uploadVideoToHost(file);
+  // Default to image flow for anything else (backwards-compatible).
+  return uploadImageToHost(file);
 }
 
 export async function uploadImageToHost(file: File): Promise<UploadResult> {
@@ -46,6 +67,24 @@ export async function uploadImageToHost(file: File): Promise<UploadResult> {
   throw new Error(
     `Tải ảnh thất bại — cả 2 dịch vụ tải ảnh đều từ chối. Vui lòng thử lại sau. (${errors.join(" | ")})`,
   );
+}
+
+/**
+ * Video upload — Litterbox only. Skip tmpfiles since it's image-only
+ * in practice (would waste the 30s timeout on every call). No dataUri
+ * (50MB base64 would slow down the React tree); preview should use
+ * URL.createObjectURL() on the File directly.
+ */
+export async function uploadVideoToHost(file: File): Promise<UploadResult> {
+  try {
+    const publicUrl = await uploadToLitterbox(file);
+    return { publicUrl, dataUri: "", filename: file.name };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Tải video thất bại — dịch vụ tải video đang không hoạt động. Vui lòng thử lại sau. (${msg})`,
+    );
+  }
 }
 
 async function uploadToTmpfiles(file: File): Promise<string> {

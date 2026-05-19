@@ -58,6 +58,10 @@ export interface OrchestrateOptions<T> {
     | "kling-4k-t2v"
     | "kling-4k-i2v"
     | "wan-v27"
+    | "kling-motion-v2-6-std"
+    | "kling-motion-v2-6-pro"
+    | "kling-motion-v3-std"
+    | "kling-motion-v3-pro"
     | "improve-prompt";
   costEur: number;
   /** Persisted to usage_logs for filtering — e.g. "pro"/"std" */

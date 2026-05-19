@@ -146,6 +146,42 @@ export interface WanV27GenerateParams {
   webhook_url?: string;
 }
 
+// --------------- Kling Motion Control ---------------
+//
+// Four endpoints, one shared request shape: character image + reference
+// motion video. Magnific keeps versions and tiers as separate URLs so
+// each combination is its own resource:
+//   POST /v1/ai/video/kling-v2-6-motion-control-std
+//   POST /v1/ai/video/kling-v2-6-motion-control-pro
+//   POST /v1/ai/video/kling-v3-motion-control-std
+//   POST /v1/ai/video/kling-v3-motion-control-pro
+//
+// `character_orientation` drives max output duration:
+//   "video" (default) → up to 30s, better for complex motion
+//   "image"           → up to 10s, better when camera follows the image
+
+export type KlingMotionVersion = "v2-6" | "v3";
+export type KlingMotionTier = "std" | "pro";
+export type KlingMotionOrientation = "video" | "image";
+
+export interface KlingMotionGenerateParams {
+  /** Character image URL (must be publicly accessible, 300x300+, ≤10MB). */
+  image_url: string;
+  /** Reference motion video URL (publicly accessible, 3-30s, MP4/MOV/WEBM/M4V). */
+  video_url: string;
+  /** Optional text prompt to guide the motion transfer. */
+  prompt?: string;
+  /**
+   * Default "video". "image" caps output at 10s but follows camera
+   * movements better. Magnific's docs say this is the only knob for
+   * output duration — there is no explicit `duration` param.
+   */
+  character_orientation?: KlingMotionOrientation;
+  /** 0-1, default 0.5. Higher = stronger prompt adherence. */
+  cfg_scale?: number;
+  webhook_url?: string;
+}
+
 // --------------- Improve Prompt ---------------
 
 export type ImprovePromptType = "image" | "video";
