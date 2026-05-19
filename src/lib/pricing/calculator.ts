@@ -141,9 +141,9 @@ export function lookupForWanV27(
  * so the `tier` slot of the lookup is left null — admin pricing rows
  * live under endpoint + duration alone.
  *
- * Pricing per second confirmed by admin 2026-05-19 (Magnific dashboard):
- *   v2-6-std: 0.059 EUR/s    v2-6-pro: 0.118 EUR/s
- *   v3-std:   0.126 EUR/s    v3-pro:   0.168 EUR/s
+ * Retail pricing per second (base table + 10% markup, 2026-05-19 v2):
+ *   v2-6-std: 0.1386 EUR/s   v2-6-pro: 0.2761 EUR/s
+ *   v3-std:   0.2948 EUR/s   v3-pro:   0.3938 EUR/s
  *
  * Allowed output durations: 5, 10, 15, 30 (5/10 only when
  * character_orientation=image; the route handler enforces this).

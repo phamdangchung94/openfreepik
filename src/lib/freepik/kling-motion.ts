@@ -6,9 +6,9 @@
  * picks the endpoint URL via ENDPOINT_MAP. All four return the
  * standard TaskData (task_id → poll until COMPLETED).
  *
- * Pricing (seeded into `pricing_rules`, anh confirmed 2026-05-19):
- *   v2-6-std: 0.059 EUR/s output  v2-6-pro: 0.118 EUR/s
- *   v3-std:   0.126 EUR/s         v3-pro:   0.168 EUR/s
+ * Pricing (seeded into `pricing_rules`, retail = base + 10% markup):
+ *   v2-6-std: 0.1386 EUR/s   v2-6-pro: 0.2761 EUR/s
+ *   v3-std:   0.2948 EUR/s   v3-pro:   0.3938 EUR/s
  *
  * Output duration cap:
  *   character_orientation="video" (default) → 30s max

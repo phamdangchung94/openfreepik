@@ -22,7 +22,7 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  * Per-second rate shown in VND (formatVnd handles the EUR→VND
  * conversion at the fixed display rate) so customers see the same
  * currency they're charged in. Rate per second is precise enough to
- * round in VND without losing precision: 0.059 EUR → 59 đ/s.
+ * round in VND without losing precision: 0.1386 EUR → 139 đ/s.
  */
 const OPTIONS = [
   { id: "v2-6-std" as const, label: "2.6 Std", rateEurPerSec: 0.1386 },
