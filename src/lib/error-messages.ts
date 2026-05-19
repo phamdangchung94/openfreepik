@@ -89,7 +89,7 @@ const PHRASE_MAP: Array<[RegExp, string]> = [
  * extract time, but this pass catches anything that bypasses the API
  * layer (e.g. log strings copy-pasted into errors, future regressions).
  */
-function stripBrandNames(s: string): string {
+export function stripBrandNames(s: string): string {
   return s
     .replace(/\bMagnific\b/gi, "máy chủ AI")
     .replace(/\bFreepik\b/gi, "máy chủ AI")

@@ -90,11 +90,17 @@ export interface OrchestrateOptions<T> {
 export async function orchestrateFreepikCall<T>(
   opts: OrchestrateOptions<T>,
 ): Promise<OrchestrateResult<T>> {
-  if (!opts.bearerCode) {
-    return fail(401, "AUTH", "Activation code is required.");
+  // Either path is fine:
+  //   - bearerCode set, no preValidated → validate here
+  //   - preValidated set (API key path), bearerCode may be null
+  //   - both null → 401
+  let validation = opts.preValidated;
+  if (!validation) {
+    if (!opts.bearerCode) {
+      return fail(401, "AUTH", "Auth required.");
+    }
+    validation = await validateCode(opts.bearerCode);
   }
-
-  const validation = opts.preValidated ?? (await validateCode(opts.bearerCode));
   if (!validation.ok) {
     return fail(401, validation.reason.toUpperCase(), reasonMessage(validation.reason));
   }
@@ -373,11 +379,15 @@ export async function authedFreepikCall<T>(opts: {
    */
   preferredKeyId?: string | null;
 }): Promise<OrchestrateResult<T>> {
-  if (!opts.bearerCode) {
-    return fail(401, "AUTH", "Activation code is required.");
+  // Same dual-path as orchestrateFreepikCall: accept preValidated
+  // (API key auth) OR bearerCode (web UI activation code).
+  let validation = opts.preValidated;
+  if (!validation) {
+    if (!opts.bearerCode) {
+      return fail(401, "AUTH", "Auth required.");
+    }
+    validation = await validateCode(opts.bearerCode);
   }
-
-  const validation = opts.preValidated ?? (await validateCode(opts.bearerCode));
   if (!validation.ok) {
     return fail(
       401,
