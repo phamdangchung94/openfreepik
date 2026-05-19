@@ -76,19 +76,46 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 ### Admin-side
 1. **Login** → cookie-gated `/dashboard/(authed)` routes.
 2. **Overview** — pool spend, code count, recent usage.
-3. **Codes / Keys / Pricing / Usage** — CRUD with the same Drizzle
-   tables the customer flow reads.
+3. **Codes** — list + create + per-code drilldown (`/dashboard/codes/[id]`
+   with 30-day spend chart, last 50 tasks, CSV export of full history).
+   Bulk-create with prefix pattern (`ABC-001`…`ABC-050`), multi-select
+   revoke/reactivate/topup, customer impersonation (copies bearer code
+   + opens `/` in new tab, audit-logged).
+4. **Keys** — default filter shows only `is_active=true` keys with
+   balance remaining; toggle "Hiện tất cả" surfaces hidden. Two-step
+   confirm delete (server refuses 409 if pending tasks).
+5. **Pricing** — admin-editable rate matrix.
+6. **Usage** — paginated table (client-side progressive render at
+   100/page); sticky header; column-toggle + CSV export.
+7. **Announcements** — broadcast banner CRUD (migration 0012).
+8. **Costs** (Phase 3) — per-key Freepik EUR balance + 7-day burn
+   rate + days-until-exhaustion forecast.
+9. **R2 ops** — JSON endpoints (`/api/admin/r2-audit`,
+   `/api/admin/r2-cleanup`); admin invokes via DevTools console.
 
 ### Background
-- **Cron** (`/api/cron/purge`, daily 02:00 UTC, sin1) — prunes
-  `rate_limit_buckets`, expired `admin_sessions`, old `failed_logins`,
-  AND runs `probeAndHealthcheckActiveKeys` to auto-deactivate any
-  Magnific key that comes back 401 (revoked upstream).
+Four Vercel-managed crons, all bearer-protected by `CRON_SECRET`:
+
+- **`/api/cron/purge`** (daily 02:00 UTC) — prunes `rate_limit_buckets`,
+  expired `admin_sessions`, old `failed_logins`, AND runs
+  `probeAndHealthcheckActiveKeys` which:
+  - 401/403 → `KEY_AUTO_DEACTIVATED` (sets `is_active=false`)
+  - 429 → `KEY_AUTO_PAUSED` (sets `paused_until = now + 1h`, key
+    auto-resumes after window via `pickActiveKey` filter)
+  - >5s response → `KEY_SLOW` (warn only, no state change)
+- **`/api/cron/sweep-orphan-charges`** (every 15min, Phase 1.5) — finds
+  `usage_logs.status='pending'` rows older than 10min and refunds them
+  atomically (flip status → `refundCode` → log `ORPHAN_CHARGE_REFUNDED`
+  + Telegram alert). Cap 50/sweep; over-cap = critical alert.
+- **`/api/cron/sweep-expired-urls`** (every 6h) — `UPDATE usage_logs
+  SET video_url=NULL WHERE video_url_expires_at < now()`. Keeps
+  `magnific_video_url` (permanent record). Prevents history hydration
+  from re-pushing dead R2 URLs into customers' local stores.
 - **Webhook receiver** (`/api/freepik/webhook`) — Magnific push
   delivery; see the dedicated section below.
-- **Reconcile** (`pnpm admin:reconcile`) — manual sweep for
-  `usage_logs.status='pending'` orphans; probes Magnific and finalizes
-  via the same `finalizeUsageOnPoll` helper.
+- **Reconcile** (`pnpm admin:reconcile`) — manual sweep, same finalize
+  path; mostly obsoleted by `sweep-orphan-charges` cron but kept for
+  ad-hoc recovery.
 
 ## Billing Contract (charge / refund)
 
@@ -123,7 +150,8 @@ against Magnific's current task state.
 ## Key Pool & Concurrency
 
 `freepik_keys` rows store: encrypted key, `assigned_eur`, `used_eur`,
-`max_concurrent` (default 8, per migration 0006), `is_active`,
+`max_concurrent` (default 30, per migration 0010), `is_active`,
+`paused_until` (migration 0013, auto-pause for rate-limit bursts),
 `last_used_at`.
 
 `pickActiveKey(costEur, excludeKeyIds)`:
@@ -133,7 +161,8 @@ against Magnific's current task state.
    NULL`). Self-healing — crashed tasks stop counting after 5 min.
 2. `picked` CTE selects the LRU active key where
    `assigned - used >= cost` AND `inflight < max_concurrent` AND
-   `id NOT IN (excludeKeyIds)`.
+   `id NOT IN (excludeKeyIds)` AND `(paused_until IS NULL OR
+   paused_until < now())`.
 3. `UPDATE` touches `last_used_at` so the next call picks a
    different key.
 
@@ -144,11 +173,17 @@ caused spurious 503s under burst traffic with 1-key pools).
 ## Polling Strategy
 
 Client side (`poll-task.ts`):
-- Default `intervalMs = 2_000`, cap at 10s after backoff
+- Default `intervalMs = 2_000`. Steady-state cap 10s via
+  `visibilityAwareDelay` (grows by 0.5s per attempt for "taking
+  longer than expected" UX)
 - Default `maxTimeMs = 1_800_000` (30 min — bumped from 10 min in
   May 2026 for peak-hour Magnific rendering)
 - Visibility-aware: hidden tab polls every 30s minimum
 - Semaphore caps to 5 simultaneous polls across the whole tab
+- **Exponential error backoff** (Phase 5.4): consecutive fetch errors
+  delay 4s → 8s → 16s → 30s cap. 5 errors in a row → return FAILED
+  with "Polling failed N times" message (vs spamming for 30 min).
+  Counter resets on any 2xx response.
 
 Server side (`createTaskGetHandler`):
 - Per-`(code, task)` rate limit (60/min) gates polls — composite
@@ -204,12 +239,16 @@ env is set), so Magnific knows where to call back.
 ```
 freepik_keys         pool of upstream Freepik API keys (AES-GCM encrypted)
                        + optional webhook_secret_encrypted (migration 0007)
+                       + paused_until (migration 0013) for auto-pause
+                       on 429 bursts (1h window, auto-resume)
 activation_codes     customer bearer codes (mode, quota_eur, used_eur)
 usage_logs           one row per request (status, cost, video URLs, TTL,
                        key_id, freepik_task_id — indexed via migration 0008
                        so poll routes look up the creator key in O(1));
                        error_message (migration 0009) + prompt (0011)
-                       captured for repeat-failure analysis
+                       captured for repeat-failure analysis;
+                       key_id index added (migration 0013) for per-key
+                       drilldown + orphan sweeper
 pricing_rules        lookup matrix (endpoint, tier, duration, audio)
                        — tier enum: 'pro' | 'std' | '4k' (Kling 3's 4K tier
                        lives on the kling-4k-* endpoints, indexed by tier='4k')
@@ -256,8 +295,23 @@ exactly.
   Magnific and mirrors to R2 (`mirrorRemoteToR2` in `lib/storage/r2.ts`).
   Mirror URL is preferred (`usage_logs.video_url`); original Magnific
   URL kept in `magnific_video_url` for permanent record. R2 lifecycle
-  expires the mirror after 6h, so `video_url_expires_at` tracks the
-  client-facing TTL.
+  expires the mirror after 24h, so `video_url_expires_at = now + 24h`
+  at capture time tracks the client-facing TTL.
+- **Expired URL cleanup** (3-layer, post-24h):
+  1. Server cron `/api/cron/sweep-expired-urls` (every 6h) nulls
+     `usage_logs.video_url` where `video_url_expires_at < now()`
+  2. Client hook `useExpiredUrlCleaner` (mount + 5min interval) nulls
+     `videoUrl + thumbnailUrl` in local Zustand task store
+  3. UI `ExpiredVideoPanel` (preview-panel.tsx) renders Clock icon +
+     "Video đã hết hạn" message when `status=COMPLETED && !videoUrl`
+     — prevents broken `<video>` tag, keeps Tạo lại button enabled
+- **R2 ops endpoints**:
+  - `GET /api/admin/r2-audit` — age distribution, lifecycle rule list,
+    whole-bucket scan, multipart upload list, verdict (`ok` /
+    `stragglers_24-48h` / `broken_>48h`)
+  - `POST /api/admin/r2-cleanup?maxAgeHours=N&dryRun=true|false` —
+    one-shot delete when lifecycle is broken or admin wants stale
+    data gone now. Cap 1000/call, dry-run default.
 
 ## Security Notes
 

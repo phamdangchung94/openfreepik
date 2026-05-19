@@ -31,7 +31,7 @@ All of these are set in Vercel production AND mirrored in `.env.local` for devel
 | `KEY_ENCRYPTION_SECRET` | AES-GCM key for Freepik keys at rest | **All existing Freepik keys decrypt fail** — must re-encrypt every row before swap |
 | `ADMIN_PASSWORD` | Login to `/dashboard` | Active admin sessions still valid until cookie expires (24h) |
 | `ADMIN_SESSION_SECRET` | Cookie session validation | All admin sessions invalidated immediately on rotation |
-| `CRON_SECRET` | Bearer for `/api/cron/purge` | Vercel Cron auto-uses the new value on next scheduled run |
+| `CRON_SECRET` | Bearer for all `/api/cron/*` routes: `purge` (daily), `sweep-orphan-charges` (15min), `sweep-expired-urls` (6h) | Vercel Cron auto-uses the new value on next scheduled run |
 | `WEBHOOK_BASE_URL` | Optional override for Magnific webhook callback (e.g. custom domain). Falls back to `https://${VERCEL_PROJECT_PRODUCTION_URL}` when `VERCEL_ENV=production`. | None — read fresh on every POST to `/api/freepik/*` |
 | `TELEGRAM_BOT_TOKEN` | Optional. Bot token from @BotFather. When set together with `TELEGRAM_CHAT_ID`, critical events (`ALL_KEYS_EXHAUSTED`, `KEY_AUTO_DEACTIVATED`, `ORPHAN_CHARGE_REFUNDED`, etc.) send a Telegram DM to admin. When unset, alerts are silently no-op (still logged). | None — read fresh on every alert |
 | `TELEGRAM_CHAT_ID` | Optional. Numeric chat id for the bot to message. Get from `https://api.telegram.org/bot<TOKEN>/getUpdates` after `/start`-ing the bot. | None |
@@ -118,6 +118,55 @@ pnpm admin:create-code -- --mode=quota --quota=200 --label="Customer name"
 
 Copy the `FK-XXXXX-XXXXX-...` string and send to customer over a secure channel (email/Signal). They paste it into the activation input on the homepage.
 
+### Bulk-mint N codes with auto-numbered labels (Phase 2.1)
+
+Dashboard → **Codes** → **Bulk create**. Fill:
+- **Prefix**: e.g. `ABC` or `5-XuanHuy`
+- **Số bắt đầu**: usually 1
+- **Số lượng**: 1-200 (capped server-side)
+- **Mode** + **Quota EUR** + optional **Hết hạn**: applied to every code
+
+Codes get labels `ABC-001`…`ABC-050` (auto-padded to constant width).
+Code values stay random (still `FK-XXX...`) so they can't be guessed
+from the label. After mint: "Copy all (TSV)" pastes into any sheet,
+"Download .txt" exports a flat list. Codes shown ONCE — save before
+closing the dialog.
+
+### Bulk revoke / reactivate / topup (Phase 2.2)
+
+Dashboard → **Codes** → tick checkboxes (or the header checkbox for
+all-on-page) → floating action bar:
+- **Revoke** / **Reactivate**: flip `is_active`
+- **Top up**: dialog asks EUR; applies to every selected code BUT
+  silently skips non-`topup`-mode codes (server-side filter). Response
+  reports `requested vs updated vs skipped`.
+
+Cap 200 ids per call.
+
+### Drill into one code's usage (Phase 2.3)
+
+Dashboard → **Codes** → click the **label** of any row → opens
+`/dashboard/codes/[id]`. Shows:
+- 4 status-rollup cards (succeeded / failed / refunded / pending)
+- 30-day daily spend bars (text sparkline, no chart library)
+- Last 50 tasks with prompts + error messages
+- **Export CSV**: full task history up to 5000 rows, UTF-8 BOM (opens
+  cleanly in Excel)
+
+Use this when a customer asks "where did my money go". Email them the
+CSV.
+
+### Impersonate a customer to reproduce a bug (Phase 2.4)
+
+Drilldown page → **Impersonate** button. Two-step confirm, then:
+1. Customer's activation code is copied to your clipboard
+2. New tab opens at `/`
+3. Paste code into the activation input
+
+Audit log `ADMIN_IMPERSONATE_CODE` fires every call. Code is bearer-
+equivalent — DON'T leave the tab open on a shared screen. Refused if
+code is inactive (reactivate first).
+
 ### Revoke an activation code (lost / shared)
 
 Dashboard → **Codes** → row → **Revoke**. Customer's next request gets HTTP 401 immediately. No grace period.
@@ -125,6 +174,17 @@ Dashboard → **Codes** → row → **Revoke**. Customer's next request gets HTT
 ### Top up a `topup`-mode code
 
 Dashboard → **Codes** → row → **Top-up** → enter EUR to add. Atomic SQL increment, race-safe under concurrent customer charges.
+
+### Manage Freepik keys (Phase 1.1)
+
+Dashboard → **Keys**. Default filter shows only keys with `is_active=true` AND `used_eur < assigned_eur` (i.e. actually usable). Hidden keys count appears in header; toggle **Hiện tất cả** to surface inactive/exhausted.
+
+Each key card has:
+- **Deactivate** / **Reactivate**: flip `is_active`. Logs `KEY_DEACTIVATED_BY_ADMIN` (distinguishes from `KEY_EXHAUSTED` auto-deactivate)
+- **Xoá** (trash icon): two-step confirm (yes/no + type the key label). API refuses 409 if key has pending tasks.
+- **Probe** (lightning): forces a healthcheck against Magnific; updates `paused_until` if 429, deactivates if 401
+
+Auto-pause behavior (cron `/api/cron/purge` daily): probe → 401 = auto-deactivate (Telegram critical), 429 = `paused_until = now+1h` (Telegram warn, key skipped by `pickActiveKey` during window, auto-resumes).
 
 ### Post an announcement to all customers
 
@@ -239,42 +299,71 @@ DELETE FROM failed_logins WHERE ip = '1.2.3.4';
 
 ### Structured log events worth alerting on
 
-| Event | Severity | Action |
-|-------|----------|--------|
-| `REFUND_FAILED` | CRITICAL | Inspect `codeId` and `amountEur` fields; manual SQL refund via Neon console |
-| `ALL_KEYS_EXHAUSTED` | HIGH | Add another Freepik key immediately; customers seeing 503 |
-| `ORCHESTRATOR_UNEXPECTED` | MED | Read `errMessage` field; usually points to Freepik API change |
-| `CRON_PARTIAL` | LOW | Tomorrow's run will retry; only escalate if 3+ days in a row |
-| `CRON_MISCONFIGURED` | HIGH | `CRON_SECRET` not set on Vercel — re-add env var + redeploy |
-| `CHARGE_INITIATED` w/o matching `CHARGE_COMMITTED` | CRITICAL | Function crashed mid-call. Look up `requestId`, find `codeId` + `costEur`, refund manually via SQL |
-| `CHARGE_SLOW` | MED | Request still running >5s — usually slow Freepik. If clustered, check Freepik status page |
+Events are emitted by `src/lib/logger.ts` as single-line JSON. Critical
+ones also trigger a Telegram DM via `logAndAlert()` when bot is
+configured (see Setup Telegram alerts below).
 
-### Detecting orphan charges (audit #5)
+**Money / customer-facing**:
+
+| Event | Severity | Source | Action |
+|-------|----------|--------|--------|
+| `REFUND_FAILED` | CRITICAL | orchestrator-helpers | Inspect `codeId` + `amountEur`; manual SQL refund via Neon console |
+| `POLL_REFUND_FAILED` | CRITICAL | poll path finalize | Row marked refunded but balance not restored — manual SQL |
+| `ALL_KEYS_EXHAUSTED` | HIGH | orchestrator | Add Freepik key OR reactivate paused ones; customers seeing 503. Telegram alert fires automatically. |
+| `ORPHAN_CHARGE_REFUNDED` | INFO | sweep-orphan-charges cron | Auto-refund happened; no action needed unless frequent (then investigate root crash cause) |
+| `ORPHAN_SWEEP_OVER_CAP` | CRITICAL | sweep-orphan-charges cron | Sweeper found 50+ orphans — likely system-wide outage. Investigate before re-enabling |
+| `CHARGE_INITIATED` w/o matching `CHARGE_COMMITTED` | CRITICAL | orchestrator | Function crashed mid-call; sweep-orphan-charges (15min) will auto-refund |
+
+**Key pool**:
+
+| Event | Severity | Source | Action |
+|-------|----------|--------|--------|
+| `KEY_EXHAUSTED` | HIGH | markKeyExhausted (any caller) | Upstream account out of credit; topup Magnific OR add new key |
+| `KEY_AUTO_DEACTIVATED` | CRITICAL | probe-quota healthcheck | Probe got 401/403 — Magnific revoked key; re-issue + re-add |
+| `KEY_AUTO_PAUSED` | WARN | probe-quota healthcheck | Probe got 429; key auto-paused 1h (`paused_until` set), auto-resumes |
+| `KEY_SLOW` | WARN | probe-quota healthcheck | Probe > 5s; upstream degraded — check Magnific status |
+| `KEY_DEACTIVATED_BY_ADMIN` / `KEY_REACTIVATED_BY_ADMIN` | INFO | admin PATCH `/api/admin/keys/[id]` | Audit trail; admin manual action vs auto-deactivate |
+| `KEY_PROBE_FAILED` | MED | probe-quota healthcheck | Network/5xx/timeout — don't auto-deactivate (transient) |
+
+**Operational**:
+
+| Event | Severity | Source | Action |
+|-------|----------|--------|--------|
+| `CRON_MISCONFIGURED` | HIGH | any cron route | `CRON_SECRET` not set on Vercel — re-add env var + redeploy |
+| `CRON_PARTIAL` | LOW | purge cron | Tomorrow's run will retry; escalate if 3+ days |
+| `EXPIRED_URLS_SWEPT` | INFO | sweep-expired-urls cron | Healthy clean-up; `cleared: N` = dead R2 URLs nulled |
+| `ORPHAN_SWEEP_STARTED` / `ORPHAN_SWEEP_DONE` / `ORPHAN_SWEEP_CLEAN` | INFO | sweep-orphan-charges cron | Heartbeat; if absent for 1h+, cron stopped running |
+| `ADMIN_IMPERSONATE_CODE` | INFO | impersonate endpoint | Audit; admin took a customer's bearer code |
+| `ADMIN_R2_CLEANUP` | INFO | r2-cleanup endpoint | Audit; admin manually deleted R2 objects |
+
+### Detecting orphan charges — automated via cron (Phase 1.5)
 
 The orchestrator emits a `CHARGE_INITIATED` log right before charging
 the activation code, then `CHARGE_COMMITTED` after the Freepik call
-succeeds and the usage row is written. Both share a `requestId`.
+succeeds. If the function crashes between those two logs you get an
+orphan — customer charged with no usage row.
 
-If the function crashes between those two logs (Vercel timeout, OOM,
-deploy mid-request) you'll see an INITIATED with no matching
-COMMITTED. In your log drain, alert on:
+**Automated detection + refund** (`/api/cron/sweep-orphan-charges`,
+every 15min): scans `usage_logs` for rows stuck in `status='pending'`
+for >10min, flips to `refunded`, calls `refundCode()`, fires
+`ORPHAN_CHARGE_REFUNDED` log + Telegram alert with task IDs. Cap 50
+orphans per sweep; over-cap = `ORPHAN_SWEEP_OVER_CAP` (critical alert,
+no auto-action).
 
+Manual sweep trigger (e.g. immediately after a known crash):
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://openfreepik.vercel.app/api/cron/sweep-orphan-charges
 ```
-event = "CHARGE_INITIATED" and not exists(
-  event = "CHARGE_COMMITTED" within 5 minutes where requestId = $.requestId
-)
-```
 
-When this fires, refund the customer manually via Neon SQL:
-
+If the customer was already refunded by the sweep but admin still
+needs to confirm via SQL:
 ```sql
-UPDATE activation_codes
-SET used_eur = used_eur - <costEur from log>
-WHERE id = '<codeId from log>';
+SELECT id, status, cost_eur, error_message, created_at
+FROM usage_logs
+WHERE freepik_task_id = '<task_id from log>';
+-- Expected: status='refunded', error_message contains 'ORPHAN_CHARGE_AUTO_REFUNDED'
 ```
-
-This is a v0 mitigation — the proper fix is a `pending_charges` table
-with 2-phase commit + cron sweep, deferred to a future ticket.
 
 ### Setup Vercel Log Drain (audit #14, optional 15min)
 
@@ -324,6 +413,83 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/sweep-
 **Tuning**: orphan age threshold is `ORPHAN_AGE_MINUTES = 10` in `src/app/api/cron/sweep-orphan-charges/route.ts`. Bump if customer has legitimate long-running tasks; lower if you want faster refund-visible behavior. Cap is `MAX_REFUNDS_PER_SWEEP = 50` — if a single sweep hits that, the script bails and sends critical alert instead of refunding blindly (likely a system-wide outage or clock bug).
 
 **False-positive risk**: if a webhook is delayed past 10min, the sweep will refund a task that later succeeds. Customer gets the video *and* a refund. Acceptable since (a) failures are far more common than late webhooks, (b) the customer wins from any false positive. If this happens often, raise the threshold to 15min.
+
+---
+
+## Storage operations (R2)
+
+### Bucket overview
+
+- **Bucket**: `openfreepik`, public-read
+- **Key shape**: `videos/<freepikTaskId>.mp4` (flat, no nesting)
+- **Lifecycle rule**: delete objects after **1 day** (24h). Rule name
+  is historically `auto-delete-6h` — action was edited to 1 day, name
+  wasn't renamed. Don't be confused.
+- **Critical gotcha**: lifecycle Prefix field MUST be empty or
+  `videos/` (no leading slash). Setting `/videos` causes the rule to
+  match zero objects → bucket grows unbounded. Cloudflare UI does not
+  validate this.
+
+### Verify lifecycle is actually deleting — `/api/admin/r2-audit`
+
+Admin-only GET. Returns age distribution + lifecycle rule list + a
+verdict so you don't have to interpret numbers.
+
+In a browser tab logged into admin:
+```js
+await fetch('/api/admin/r2-audit').then(r => r.json())
+```
+
+Response highlights:
+- `verdict: "ok"` → all objects < 24h, lifecycle healthy
+- `verdict: "stragglers_24-48h"` → normal; R2 daily sweep allows 24-48h grace
+- `verdict: "broken_>48h"` → rule misconfigured (check `lifecycleRules[].prefix` field verbatim)
+- `wholeBucket.byPrefix[]` → if dashboard "Bucket Size" differs from `videos/` total, the gap lives elsewhere
+- `multipart.pendingUploads` → orphan multipart parts hold space silently; R2 default rule aborts after 7 days
+
+Dashboard "Bucket Size" metric is **cached and lags** (4-24h after
+bulk changes) — trust this endpoint, not the dashboard.
+
+### Manual cleanup — `/api/admin/r2-cleanup`
+
+Backstop for when lifecycle is broken or you want stale data gone NOW
+instead of waiting for the natural R2 sweep (1-3 days). POST with
+dry-run by default.
+
+Dry-run preview (default):
+```js
+await fetch('/api/admin/r2-cleanup?maxAgeHours=48', { method: 'POST' }).then(r => r.json())
+```
+
+Live delete (must pass explicit `dryRun=false`):
+```js
+await fetch('/api/admin/r2-cleanup?maxAgeHours=48&dryRun=false', { method: 'POST' }).then(r => r.json())
+```
+
+Caps:
+- 1000 deletions per call (DeleteObjects API limit)
+- Scans first 10K objects under `videos/` prefix
+- ListObjectsV2 returns lexicographic order, NOT date — re-run if you hit cap
+
+Logs `ADMIN_R2_CLEANUP` for audit.
+
+### Expired video URL handling (3-layer)
+
+When R2 deletes an object at 24h, the customer's saved task still has
+the dead URL. Without cleanup customer sees broken `<video>` tag.
+Layers:
+
+1. **Server**: cron `/api/cron/sweep-expired-urls` (every 6h) sets
+   `usage_logs.video_url = NULL` where `video_url_expires_at < now()`.
+   Keeps `magnific_video_url` (permanent record).
+2. **Client**: hook `useExpiredUrlCleaner` (mount + 5min interval)
+   nulls `videoUrl + thumbnailUrl` in task store for tasks past expiry.
+3. **UI**: `ExpiredVideoPanel` renders Clock icon + "Video đã hết hạn"
+   message when `status=COMPLETED && !videoUrl`. Tải về button auto-
+   hides; Tạo lại still works.
+
+No action needed in normal operation; if cron stops firing,
+`EXPIRED_URLS_SWEPT` event will be absent from logs (alert window: 12h).
 
 ---
 
@@ -387,14 +553,29 @@ Find your IP at https://api.ipify.org or via Vercel logs.
 
 ---
 
-## Audit-driven open backlog (as of 2026-05-03)
+## Audit-driven backlog (as of 2026-05-19)
 
 See [`plans/audits/`](../plans/audits/) for full reports.
 
+**Resolved in Phase 1-5 roadmap** (Apr-May 2026):
+
+| Issue | Resolution |
+|-------|------------|
+| #2 | DONE 2026-05-12 — Neon dev/prod branch split |
+| #5 | DONE Phase 1.5 — automated orphan charge sweeper (`/api/cron/sweep-orphan-charges`, 15min) replaced manual log alert + SQL refund |
+| #14 | DONE Phase 1.3 — Telegram bot wrapper (`src/lib/alerts/telegram.ts`), log drain instructions in this RUNBOOK |
+| KEY_EXHAUSTED misclassification | DONE Phase 2.5 — `markKeyExhausted` now logs verbatim from any caller; admin PATCH path logs `KEY_DEACTIVATED_BY_ADMIN` distinguishably |
+| Missing test coverage on financial code | DONE Phase 5.2 — 46 tests added across `pricing/calculator`, `auth/activation`, `freepik/orchestrator-helpers` |
+| Polling fixed-rate retry | DONE Phase 5.4 — exponential backoff (2s→30s cap) + 5-consecutive-error hard-abort |
+| Customer sees broken `<video>` after R2 deletes object | DONE — 3-layer cleanup (sweep-expired-urls cron + useExpiredUrlCleaner hook + ExpiredVideoPanel UI) |
+
+**Still open / manual**:
+
 | Issue | Severity | Owner / status |
 |-------|----------|---------------|
-| [#2](https://github.com/phamdangchung94/openfreepik/issues/2) | P0 | **Manual** — split dev/prod Neon project + secrets |
-| [#9](https://github.com/phamdangchung94/openfreepik/issues/9) | P0 | **Manual** — verify pricing matrix vs Freepik dashboard |
-| [#5](https://github.com/phamdangchung94/openfreepik/issues/5) | P1 | Crash window watchdog log |
+| [#9](https://github.com/phamdangchung94/openfreepik/issues/9) | P0 | **Manual** — verify pricing matrix vs Freepik dashboard periodically |
+| Single Freepik upstream account | P1 | When 1st key hits 80% used or shows degradation, register 2nd Magnific account, add via `/dashboard/keys` (failover code already supports pool of N) |
+| Page decomposition (`keys/page.tsx` 800 lines, `usage-table.tsx` 675, `codes/page.tsx` 606) | P2 | DEFERRED Phase 5.1 — cosmetic, no functional gain |
+| Email notifications + scheduled maintenance toggle | P2 | DEFERRED Phase 4 — Telegram alerts already cover admin-side; customer-side email pending demand |
 
-Every closed audit fix has its commit and PR linked from the issue thread.
+Every closed audit fix has its commit linked in the git log.
