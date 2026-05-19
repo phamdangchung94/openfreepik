@@ -5,7 +5,8 @@
  * official spec). After that, the customer's "Tải về" button breaks.
  * Mirroring to R2 lets us:
  *   - Serve via Cloudflare's CDN (faster from VN than Magnific's S3)
- *   - Control TTL (currently 6h via R2 lifecycle rule on the bucket)
+ *   - Control TTL (currently 24h via R2 lifecycle rule "auto-delete-6h"
+ *     on the bucket — rule name is stale, action is 1 day)
  *   - Keep the original Magnific URL as fallback (db column unchanged)
  *
  * R2 is S3-compatible — we use the AWS SDK V3 with R2's S3 endpoint.

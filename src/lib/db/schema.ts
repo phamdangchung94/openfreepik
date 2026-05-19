@@ -125,9 +125,9 @@ export const usageLogs = pgTable(
     freepikTaskId: text("freepik_task_id"),
     /**
      * Customer-facing URL — preferred to be the R2 mirror (cheaper egress,
-     * Cloudflare CDN, controlled 6h lifecycle). Falls back to the original
-     * Magnific URL when the mirror upload fails so customers still get a
-     * working link.
+     * Cloudflare CDN, 24h lifecycle on the bucket). Falls back to the
+     * original Magnific URL when the mirror upload fails so customers
+     * still get a working link.
      */
     videoUrl: text("video_url"),
     /**
