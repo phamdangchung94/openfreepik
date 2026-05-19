@@ -85,7 +85,20 @@ export const generatorFormSchema = z
     motion_orientation: z.enum(["video", "image"]).default("video"),
     /** Public URL of the reference motion video (litterbox). */
     motion_video_url: z.string().default(""),
-    /** Customer-chosen output duration. Drives pricing. */
+    /**
+     * Detected duration of the uploaded reference video (seconds).
+     * Set client-side by motion-video-picker after the <video>
+     * metadata loads. Drives auto-mapping to output_duration tier.
+     * Null/0 until upload completes.
+     */
+    motion_video_duration: z.number().default(0),
+    /**
+     * Output duration tier — 5/10/15/30. Auto-derived from
+     * `motion_video_duration` (ceiling to the nearest tier, capped
+     * by `motion_orientation`). Customer doesn't pick this manually
+     * any more; the form just shows it as a readonly badge after
+     * video upload.
+     */
     output_duration: MOTION_DURATION_ENUM.default("5"),
   })
   .superRefine((data, ctx) => {
@@ -106,18 +119,10 @@ export const generatorFormSchema = z
           path: ["motion_video_url"],
         });
       }
-      // 15s + 30s only allowed for orientation=video.
-      if (
-        data.motion_orientation === "image" &&
-        (data.output_duration === "15" || data.output_duration === "30")
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            "Orientation 'Ảnh' chỉ cho phép output tối đa 10s. Đổi sang 'Video' nếu muốn 15s/30s.",
-          path: ["output_duration"],
-        });
-      }
+      // output_duration is auto-derived from motion_video_duration +
+      // orientation cap (see motion-output-duration-picker.tsx). The
+      // route handler still enforces the cap server-side as defence
+      // against a malicious direct POST.
       return;
     }
 

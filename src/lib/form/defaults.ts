@@ -25,5 +25,6 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   motion_tier: "v2-6-std",
   motion_orientation: "video",
   motion_video_url: "",
+  motion_video_duration: 0,
   output_duration: "5",
 };

@@ -128,6 +128,14 @@ export function MotionVideoPicker() {
       const preview = URL.createObjectURL(file);
       setLocalPreview(preview);
 
+      // Store detected duration on the form so the auto-output-duration
+      // logic in the parent form can pick the right pricing tier
+      // without needing to know about this picker's internals.
+      const seconds = dur.seconds ?? 0;
+      if (seconds > 0) {
+        setValue("motion_video_duration", seconds, { shouldDirty: true });
+      }
+
       setIsUploading(true);
       try {
         const result = await uploadVideoToHost(file);
@@ -139,6 +147,7 @@ export function MotionVideoPicker() {
         URL.revokeObjectURL(preview);
         setLocalPreview("");
         setDurationSeconds(null);
+        setValue("motion_video_duration", 0, { shouldDirty: true });
       } finally {
         setIsUploading(false);
       }
@@ -152,6 +161,7 @@ export function MotionVideoPicker() {
     setDurationSeconds(null);
     setError(null);
     setValue("motion_video_url", "", { shouldDirty: true });
+    setValue("motion_video_duration", 0, { shouldDirty: true });
     if (inputRef.current) inputRef.current.value = "";
   }, [localPreview, setValue]);
 
