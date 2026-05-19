@@ -32,6 +32,8 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   const resolution = watch("resolution");
   const duration = watch("duration");
   const audio = watch("generate_audio");
+  const motionTier = watch("motion_tier");
+  const outputDuration = watch("output_duration");
 
   const rates = usePricingRates();
   const metadata = useAuthStore((s) => s.metadata);
@@ -40,11 +42,21 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   // count=100 this component re-renders on every form keystroke. Note:
   // hooks must precede every early return below (Rules of Hooks).
   //
-  // Model branch: WAN encodes resolution into the tier slot of the
-  // pricing table (std=720P, pro=1080P) and ignores audio entirely;
-  // see lookupForWanV27 in lib/pricing/calculator.ts.
+  // Model branch:
+  //   Motion → endpoint string is `kling-motion-${motionTier}`, tier null,
+  //            duration = output_duration (5/10/15/30), no audio.
+  //   WAN    → resolution encoded into tier (std=720P, pro=1080P);
+  //            see lookupForWanV27 in lib/pricing/calculator.ts.
   const perItem = useMemo(() => {
     if (!rates) return null;
+    if (model === "kling-motion") {
+      return lookupCost(rates, {
+        endpoint: `kling-motion-${motionTier}`,
+        tier: null,
+        durationSeconds: Number(outputDuration),
+        withAudio: false,
+      });
+    }
     if (model === "wan-v27") {
       return lookupCost(rates, {
         endpoint: "wan-v27",
@@ -69,7 +81,7 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
       durationSeconds: Number(duration),
       withAudio: !!audio,
     });
-  }, [rates, model, mode, tier, resolution, duration, audio]);
+  }, [rates, model, mode, tier, resolution, duration, audio, motionTier, outputDuration]);
 
   if (!rates) {
     // Skeleton matches the loaded card's footprint (rounded-2xl + same

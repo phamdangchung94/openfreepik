@@ -19,7 +19,7 @@ interface FrameSlotProps {
   onClear: () => void;
 }
 
-function FrameSlot({
+export function FrameSlot({
   label,
   required,
   url,

@@ -18,6 +18,7 @@ import {
   toApiParams,
   toKling4kT2vParams,
   toKling4kI2vParams,
+  toKlingMotionParams,
   toWanParams,
 } from "@/lib/form/to-api-params";
 import { ModeToggle } from "./mode-toggle";
@@ -34,6 +35,11 @@ import { BatchSettings } from "@/components/batch/batch-settings";
 import { CostPreview } from "./cost-preview";
 import { ModelPicker } from "./model-picker";
 import { ResolutionPicker } from "./resolution-picker";
+import { MotionTierPicker } from "./motion-tier-picker";
+import { MotionVideoPicker } from "./motion-video-picker";
+import { MotionCharacterImagePicker } from "./motion-character-image-picker";
+import { MotionOrientationToggle } from "./motion-orientation-toggle";
+import { MotionOutputDurationPicker } from "./motion-output-duration-picker";
 import type { GeneratePayload } from "@/hooks/use-generate-video";
 
 interface GeneratorFormProps {
@@ -92,6 +98,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const tier = watch("tier");
   const isWan = model === "wan-v27";
   const isKling3 = model === "kling-v3";
+  const isMotion = model === "kling-motion";
   /**
    * Kling 4K runs on different Magnific endpoints (kling-4k-t2v /
    * kling-4k-i2v) that don't accept multi_shot or elements arrays.
@@ -148,10 +155,19 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       onSubmitBatch(items, values);
     } else if (onSubmitSingle) {
       // Branch payload shape:
+      //   Kling Motion → kling-motion/[tier] with image+video+orientation
       //   WAN 2.7      → resolution-encoded WAN params
       //   Kling 3 + 4K → kling-4k-{t2v,i2v} endpoints (no multi-shot)
       //   Kling 3 + Pro/Std → kling-v3-{pro,std} endpoint
-      if (values.model === "wan-v27") {
+      if (values.model === "kling-motion") {
+        const built = toKlingMotionParams(values);
+        onSubmitSingle({
+          model: "kling-motion",
+          params: built.params,
+          tier: built.routeTier,
+          output_duration: built.output_duration,
+        });
+      } else if (values.model === "wan-v27") {
         onSubmitSingle({
           model: "wan-v27",
           params: toWanParams(values),
@@ -198,10 +214,24 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         <Card>
           <CardContent className="pt-4 space-y-4">
             <ModelPicker />
+            {/* Kling Motion: image+video pickers replace the i2v
+                source flow. No batch — motion is always single-task
+                (character + reference video). No mode toggle (always
+                image-anchored). */}
+            {isMotion && (
+              <>
+                <MotionTierPicker />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <MotionCharacterImagePicker />
+                  <MotionVideoPicker />
+                </div>
+                <PromptField improveButton={improveButton} />
+              </>
+            )}
             {/* WAN 2.7 is image-to-video only — hide the t2v/i2v
                 toggle and any t2v-specific UI when WAN is selected.
                 The form schema already locks mode to "i2v" on switch. */}
-            {!isWan && (
+            {!isWan && !isMotion && (
               <ModeToggle
                 onModeChange={() => {
                   // Switching mode invalidates the queued batch — different shape.
@@ -211,7 +241,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 }}
               />
             )}
-            {!isWan && mode === "t2v" && (
+            {!isWan && !isMotion && mode === "t2v" && (
               <>
                 {!t2vBatchOpen && (
                   <PromptField improveButton={improveButton} />
@@ -238,7 +268,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 )}
               </>
             )}
-            {(mode === "i2v" || isWan) && (
+            {!isMotion && (mode === "i2v" || isWan) && (
               <>
                 <PromptField improveButton={improveButton} />
                 <GeneratorI2VSource
@@ -260,7 +290,16 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isWan ? (
+            {isMotion ? (
+              // Kling Motion: orientation toggle + output duration. No
+              // aspect_ratio (output frames the character image / ref
+              // video), no audio (motion doesn't generate audio), no
+              // quality-tier (handled by MotionTierPicker above).
+              <>
+                <MotionOrientationToggle />
+                <MotionOutputDurationPicker />
+              </>
+            ) : isWan ? (
               // WAN 2.7: only resolution + duration. No tier, no
               // aspect-ratio (output ratio matches start_image_url),
               // no audio toggle (audio is upload-based — Phase 3).
@@ -295,7 +334,8 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         {/* Advanced (cfg_scale, negative prompt) is supported on all
             Kling V3 tiers including 4K. Multi-shot + elements arrays
             are Pro/Std-only — Magnific's kling-4k endpoints reject
-            those request shapes. */}
+            those request shapes. Motion has its own cfg_scale baked
+            into the form (no negative_prompt support upstream). */}
         {isKling3 && <GeneratorAdvancedSettings />}
         {isKling3 && !is4kTier && <GeneratorMultiShotSection />}
 

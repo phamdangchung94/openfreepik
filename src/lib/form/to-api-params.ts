@@ -7,6 +7,7 @@
 import type {
   Kling4kI2vGenerateParams,
   Kling4kT2vGenerateParams,
+  KlingMotionGenerateParams,
   KlingV3Duration,
   KlingV3GenerateParams,
   WanV27GenerateParams,
@@ -21,6 +22,35 @@ import type { GeneratorFormValues } from "./generator-schema";
  */
 function coerceKlingDuration(d: GeneratorFormValues["duration"]): KlingV3Duration {
   return (d === "2" ? "3" : d) as KlingV3Duration;
+}
+
+/**
+ * Build Kling Motion Control params + the route's output_duration
+ * sidecar (used for pricing — Magnific has no `duration` API field,
+ * length is controlled implicitly by character_orientation cap).
+ *
+ * Returns `{ params, output_duration, version, tier }` so the
+ * generate hook can route to `/api/freepik/kling-motion/[tier]` and
+ * include output_duration in the POST body.
+ */
+export function toKlingMotionParams(v: GeneratorFormValues): {
+  params: KlingMotionGenerateParams;
+  output_duration: number;
+  routeTier: GeneratorFormValues["motion_tier"];
+} {
+  const params: KlingMotionGenerateParams = {
+    image_url: v.start_image_url.trim(),
+    video_url: v.motion_video_url.trim(),
+    character_orientation: v.motion_orientation,
+    cfg_scale: v.cfg_scale,
+  };
+  const prompt = v.prompt?.trim();
+  if (prompt) params.prompt = prompt;
+  return {
+    params,
+    output_duration: Number(v.output_duration),
+    routeTier: v.motion_tier,
+  };
 }
 
 /**

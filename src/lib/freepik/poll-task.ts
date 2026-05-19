@@ -73,7 +73,14 @@ export type PollEndpoint =
   | "kling-4k-t2v"
   | "kling-4k-i2v"
   | "wan-v27"
-  | "improve-prompt";
+  | "improve-prompt"
+  // Kling Motion uses a 2-segment URL (kling-motion/<tier>/<taskId>);
+  // the tier segment is baked into the string here so the fetch path
+  // works without route-helper changes.
+  | "kling-motion/v2-6-std"
+  | "kling-motion/v2-6-pro"
+  | "kling-motion/v3-std"
+  | "kling-motion/v3-pro";
 
 export interface PollTaskOptions {
   apiTaskId: string;

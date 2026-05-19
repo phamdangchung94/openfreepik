@@ -20,4 +20,10 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   multi_prompt: [],
   elements: [],
   webhook_url: "",
+  // Kling Motion Control defaults — irrelevant when model="kling-v3"
+  // but the form schema requires them so RHF resets cleanly.
+  motion_tier: "v2-6-std",
+  motion_orientation: "video",
+  motion_video_url: "",
+  output_duration: "5",
 };

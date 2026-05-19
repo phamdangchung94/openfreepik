@@ -106,6 +106,10 @@ export default function HomePage() {
       } else if (payload.model === "wan-v27") {
         mode = "i2v"; // WAN is image-only
         imageUrl = payload.params.start_image_url;
+      } else if (payload.model === "kling-motion") {
+        // Motion is always image-anchored (character image).
+        mode = "i2v";
+        imageUrl = payload.params.image_url;
       } else {
         // kling-v3
         imageUrl = payload.params.start_image_url;

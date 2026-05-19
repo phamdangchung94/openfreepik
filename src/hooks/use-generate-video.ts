@@ -13,6 +13,7 @@ import { expiresFromNow } from "@/lib/video-url-ttl";
 import type {
   Kling4kI2vGenerateParams,
   Kling4kT2vGenerateParams,
+  KlingMotionGenerateParams,
   KlingV3GenerateParams,
   WanV27GenerateParams,
 } from "@/lib/freepik/types";
@@ -42,6 +43,14 @@ export type GeneratePayload =
   | {
       model: "wan-v27";
       params: WanV27GenerateParams;
+    }
+  | {
+      model: "kling-motion";
+      params: KlingMotionGenerateParams;
+      /** URL segment for the kling-motion/[tier] route. */
+      tier: "v2-6-std" | "v2-6-pro" | "v3-std" | "v3-pro";
+      /** Pricing-only — Magnific has no API duration field. */
+      output_duration: number;
     };
 
 interface GenerateOpts {
@@ -113,6 +122,22 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           cfgScale: payload.params.cfg_scale,
           negativePrompt: payload.params.negative_prompt,
         };
+      } else if (payload.model === "kling-motion") {
+        paramsSnapshot = {
+          // Motion duration comes from the customer-chosen output_duration
+          // (Magnific has no API field). Coerce to string for shared
+          // ParametersBlock display logic.
+          duration: String(payload.output_duration),
+          // Aspect slot doubles as orientation marker so admin can tell
+          // at a glance whether the customer used video- or image-
+          // anchored motion (caps differ).
+          aspectRatio:
+            payload.params.character_orientation === "image"
+              ? "image-orientation"
+              : "video-orientation",
+          audio: false,
+          cfgScale: payload.params.cfg_scale,
+        };
       } else {
         paramsSnapshot = {
           // WAN duration is integer; coerce to string to share the
@@ -133,15 +158,21 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         // Tier slot doubles as a pricing/display tag — for WAN the
         // pricing lookup encodes resolution into tier (1080P=pro,
         // 720P=std). Kling 4K stores tier='4k' so the preview card
-        // matches the 4K badge in admin usage logs.
+        // matches the 4K badge in admin usage logs. Motion stores
+        // 'std' or 'pro' (drops the version prefix — preview UI
+        // shows the full tier string via the task's endpoint).
         tier:
           payload.model === "kling-v3"
             ? payload.tier
             : payload.model === "kling-4k"
               ? "4k"
-              : payload.params.resolution === "720P"
-                ? "std"
-                : "pro",
+              : payload.model === "kling-motion"
+                ? payload.tier.endsWith("-pro")
+                  ? "pro"
+                  : "std"
+                : payload.params.resolution === "720P"
+                  ? "std"
+                  : "pro",
         createdAt: Date.now(),
         updatedAt: Date.now(),
         videoUrl: null,
@@ -155,7 +186,15 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
       activeCountRef.current++;
 
-      let endpointPath: "kling-v3" | "wan-v27" | "kling-4k-t2v" | "kling-4k-i2v";
+      let endpointPath:
+        | "kling-v3"
+        | "wan-v27"
+        | "kling-4k-t2v"
+        | "kling-4k-i2v"
+        | "kling-motion/v2-6-std"
+        | "kling-motion/v2-6-pro"
+        | "kling-motion/v3-std"
+        | "kling-motion/v3-pro";
       let requestBody: object;
       if (payload.model === "kling-v3") {
         endpointPath = "kling-v3";
@@ -163,6 +202,12 @@ export function useGenerateVideo(): UseGenerateVideoResult {
       } else if (payload.model === "kling-4k") {
         endpointPath = payload.variant === "t2v" ? "kling-4k-t2v" : "kling-4k-i2v";
         requestBody = { params: payload.params };
+      } else if (payload.model === "kling-motion") {
+        endpointPath = `kling-motion/${payload.tier}` as const;
+        requestBody = {
+          params: payload.params,
+          output_duration: payload.output_duration,
+        };
       } else {
         endpointPath = "wan-v27";
         requestBody = { params: payload.params };

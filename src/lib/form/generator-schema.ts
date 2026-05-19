@@ -16,14 +16,26 @@ const DURATION_ENUM = z.enum([
   "9", "10", "11", "12", "13", "14", "15",
 ]);
 
+/**
+ * Kling Motion Control allowed output durations (seconds). Magnific
+ * caps orientation=image at 10s; orientation=video at 30s. superRefine
+ * enforces the per-orientation cap.
+ */
+const MOTION_DURATION_ENUM = z.enum(["5", "10", "15", "30"]);
+
 export const generatorFormSchema = z
   .object({
     /**
-     * Which upstream video model to use. Kling 3 covers all three
-     * quality tiers (4K / 1080p Pro / 720p Std); WAN 2.7 is a
-     * separate image-only model with its own resolution picker.
+     * Which upstream video model to use.
+     *   - "kling-v3"     — text/image → video, 3 tiers (4K / 1080p Pro / 720p Std)
+     *   - "wan-v27"      — image → video, separate resolution picker
+     *                      (currently hidden from UI — model-picker
+     *                      doesn't list it; keep schema value so any
+     *                      stored form values stay valid for revert)
+     *   - "kling-motion" — character image + reference motion video,
+     *                      4 tier combos (2.6/3.0 × Std/Pro)
      */
-    model: z.enum(["kling-v3", "wan-v27"]).default("kling-v3"),
+    model: z.enum(["kling-v3", "wan-v27", "kling-motion"]).default("kling-v3"),
     mode: z.enum(["t2v", "i2v"]),
     prompt: z.string().default(""),
     negative_prompt: z.string().max(2500).default("blur, distort, and low quality"),
@@ -61,8 +73,54 @@ export const generatorFormSchema = z
       )
       .default([]),
     webhook_url: z.string().default(""),
+    // --- Kling Motion Control fields (only used when model="kling-motion") ---
+    /** Flat tier picker: 4 button options. */
+    motion_tier: z
+      .enum(["v2-6-std", "v2-6-pro", "v3-std", "v3-pro"])
+      .default("v2-6-std"),
+    /**
+     * "video" (default) caps output at 30s, follows reference motion
+     * fidelity. "image" caps at 10s, better for camera-following shots.
+     */
+    motion_orientation: z.enum(["video", "image"]).default("video"),
+    /** Public URL of the reference motion video (litterbox). */
+    motion_video_url: z.string().default(""),
+    /** Customer-chosen output duration. Drives pricing. */
+    output_duration: MOTION_DURATION_ENUM.default("5"),
   })
   .superRefine((data, ctx) => {
+    // Kling Motion — needs both character image + reference video,
+    // plus output_duration cap depends on orientation.
+    if (data.model === "kling-motion") {
+      if (!data.start_image_url.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cần ảnh nhân vật (character image).",
+          path: ["start_image_url"],
+        });
+      }
+      if (!data.motion_video_url.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cần video tham chiếu motion (3-30s).",
+          path: ["motion_video_url"],
+        });
+      }
+      // 15s + 30s only allowed for orientation=video.
+      if (
+        data.motion_orientation === "image" &&
+        (data.output_duration === "15" || data.output_duration === "30")
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "Orientation 'Ảnh' chỉ cho phép output tối đa 10s. Đổi sang 'Video' nếu muốn 15s/30s.",
+          path: ["output_duration"],
+        });
+      }
+      return;
+    }
+
     // WAN 2.7 is image-to-video only — no prompt-only path. Force i2v
     // and require a start image.
     if (data.model === "wan-v27") {
