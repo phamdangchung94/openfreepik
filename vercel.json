@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/sweep-orphan-charges",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sweep-expired-urls",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

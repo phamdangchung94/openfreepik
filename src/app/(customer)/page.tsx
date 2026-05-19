@@ -26,6 +26,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useOrphanRecovery } from "@/hooks/use-orphan-recovery";
 import { useAutoDownload } from "@/hooks/use-auto-download";
 import { useHistoryHydration } from "@/hooks/use-history-hydration";
+import { useExpiredUrlCleaner } from "@/hooks/use-expired-url-cleaner";
 import { useTaskStore } from "@/store/task-store";
 import { useAuthStore } from "@/store/auth-store";
 import { useRegenerateHandler } from "@/store/regenerate-handler-store";
@@ -44,6 +45,8 @@ export default function HomePage() {
   useOrphanRecovery(); // Resume polling for tasks orphaned by page reload
   useAutoDownload(); // Browser-download videos when their tasks complete
   useHistoryHydration(); // Pull completed videos from server on activation (cross-device)
+  useExpiredUrlCleaner(); // Clear dead R2 URLs (24h TTL) from local store so previews don't show broken <video>
+
   const setActiveTaskId = useTaskStore((s) => s.setActiveTaskId);
   const tasks = useTaskStore((s) => s.tasks);
   const activationCode = useAuthStore((s) => s.activationCode);

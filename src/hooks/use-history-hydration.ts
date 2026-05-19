@@ -48,13 +48,18 @@ async function hydrateOnce() {
 
   // Only hydrate rows that have a usable URL — failed/refunded/pending are
   // either irrelevant or already represented by the local task that's
-  // still polling.
+  // still polling. Skip rows whose URL has already expired (R2 deleted
+  // the object); sweep-expired-urls cron clears these to null in the DB
+  // but we double-check the timestamp in case the cron is behind.
+  const now = Date.now();
   const usable = recent.filter(
     (r) =>
       r.status === "succeeded" &&
       r.videoUrl &&
       r.endpoint === "kling-v3" &&
-      r.freepikTaskId,
+      r.freepikTaskId &&
+      (!r.videoUrlExpiresAt ||
+        new Date(r.videoUrlExpiresAt).getTime() > now),
   );
 
   const upsert = useTaskStore.getState().upsertTaskFromServer;

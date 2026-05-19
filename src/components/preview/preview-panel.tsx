@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Video, AlertCircle, Loader2, Download, RotateCcw } from "lucide-react";
+import { Video, AlertCircle, Loader2, Download, RotateCcw, Clock } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import { VideoPlayer } from "./video-player";
 import { UrlCountdown } from "./url-countdown";
@@ -206,18 +206,30 @@ function CompletedState({
     }
   }
 
+  // COMPLETED + no videoUrl = link expired (R2 deleted at 24h; the
+  // expired-url cleaner hook nulls the URL out of local state). Show
+  // an explanatory panel instead of a broken <video> tag.
+  const urlExpired = !task.videoUrl;
+
   return (
     <div className="space-y-4">
       {/* Edge-to-edge video on mobile (max-md:-mx-4) — phone preview
           deserves max real estate; the parent Card's overflow-hidden
           + rounded-3xl clips cleanly. Desktop unchanged. */}
       <div className="max-md:-mx-4">
-        <VideoPlayer
-          src={task.videoUrl ?? ""}
-          poster={task.thumbnailUrl ?? undefined}
-          aspectRatio={task.params?.aspectRatio}
-          className="max-md:rounded-none"
-        />
+        {urlExpired ? (
+          <ExpiredVideoPanel
+            aspectRatio={task.params?.aspectRatio}
+            expiredAt={task.videoUrlExpiresAt}
+          />
+        ) : (
+          <VideoPlayer
+            src={task.videoUrl ?? ""}
+            poster={task.thumbnailUrl ?? undefined}
+            aspectRatio={task.params?.aspectRatio}
+            className="max-md:rounded-none"
+          />
+        )}
       </div>
       <div className="space-y-3">
         {/* Prompt + meta-row condensed: badges instead of long Vietnamese
@@ -324,5 +336,53 @@ export function PreviewPanel({ onRegenerate }: PreviewPanelProps) {
           )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Placeholder rendered in place of the VideoPlayer when a COMPLETED
+ * task's R2 URL has been cleared by the expired-url cleaner. Matches
+ * the video's aspect ratio + edge-to-edge mobile look so the layout
+ * doesn't shift when transitioning into expired state.
+ *
+ * Why the explicit panel (vs hiding the player): customers were seeing
+ * broken `<video>` icons + browser-default error UI; the audit caller
+ * couldn't tell at a glance whether the system was broken or the URL
+ * just naturally expired. This makes the expiry obvious + actionable
+ * ("Tạo lại" is still wired up below).
+ */
+function ExpiredVideoPanel({
+  aspectRatio,
+  expiredAt,
+}: {
+  aspectRatio?: string;
+  expiredAt: number | null;
+}) {
+  const hoursAgo =
+    expiredAt && expiredAt < Date.now()
+      ? Math.floor((Date.now() - expiredAt) / 3_600_000)
+      : null;
+  return (
+    <div
+      className={cn(
+        "flex w-full flex-col items-center justify-center gap-2 rounded-xl bg-muted/40 px-6 text-center max-md:-mx-4 max-md:w-auto max-md:rounded-none",
+        aspectClass(aspectRatio),
+      )}
+    >
+      <Clock className="size-10 text-muted-foreground" />
+      <p className="text-sm font-medium text-foreground/80">
+        Video đã hết hạn
+      </p>
+      <p className="max-w-xs text-xs text-muted-foreground">
+        Link tự xoá sau 24h để tiết kiệm dung lượng. Nhấn{" "}
+        <span className="font-medium text-foreground/80">Tạo lại</span> nếu muốn
+        có video mới với cùng prompt.
+        {hoursAgo !== null && hoursAgo > 0 && (
+          <span className="block text-[10px] opacity-70">
+            (đã hết hạn {hoursAgo} giờ trước)
+          </span>
+        )}
+      </p>
+    </div>
   );
 }

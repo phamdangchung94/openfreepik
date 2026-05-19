@@ -108,6 +108,16 @@ interface TaskState {
   acknowledgeError: (id: string) => void;
   /** Bulk: mark every failed task as seen (used by "Mark all as read"). */
   acknowledgeAllErrors: () => void;
+  /**
+   * Clear videoUrl + thumbnailUrl for tasks whose videoUrlExpiresAt has
+   * passed. R2 has deleted the underlying object at the 24h lifecycle
+   * boundary; keeping the dead URL in state causes broken <video>
+   * tags and confusing "video gone" UX. After clearing, the task stays
+   * in history (status=COMPLETED) but the preview switches to an
+   * "expired" message via the UI layer. Returns the count of tasks
+   * mutated for diagnostic / logging.
+   */
+  clearExpiredUrls: () => number;
   setActiveTaskId: (id: string | null) => void;
   getActiveTasks: () => GenerationTask[];
 
@@ -280,6 +290,35 @@ export const useTaskStore = create<TaskState>()(
 
       clearAll: () =>
         set({ tasks: {}, activeTaskId: null, queue: [], isProcessing: false }),
+
+      clearExpiredUrls: () => {
+        const now = Date.now();
+        let cleared = 0;
+        set((state) => {
+          const next = { ...state.tasks };
+          for (const [id, t] of Object.entries(state.tasks)) {
+            // Only consider COMPLETED tasks with a URL + expiry timestamp.
+            // FAILED/CANCELLED rows have no URL; in-flight rows have
+            // expiry=null so they're skipped naturally.
+            if (
+              t.status === "COMPLETED" &&
+              t.videoUrl &&
+              t.videoUrlExpiresAt &&
+              t.videoUrlExpiresAt < now
+            ) {
+              next[id] = {
+                ...t,
+                videoUrl: null,
+                thumbnailUrl: null,
+                // Keep videoUrlExpiresAt so UI can show "expired N giờ trước"
+              };
+              cleared++;
+            }
+          }
+          return cleared > 0 ? { tasks: next } : state;
+        });
+        return cleared;
+      },
 
       setActiveTaskId: (id) => set({ activeTaskId: id }),
 
