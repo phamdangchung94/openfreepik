@@ -25,10 +25,10 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  * round in VND without losing precision: 0.059 EUR → 59 đ/s.
  */
 const OPTIONS = [
-  { id: "v2-6-std" as const, label: "2.6 Std", rateEurPerSec: 0.059 },
-  { id: "v2-6-pro" as const, label: "2.6 Pro", rateEurPerSec: 0.118 },
-  { id: "v3-std" as const, label: "3.0 Std", rateEurPerSec: 0.126 },
-  { id: "v3-pro" as const, label: "3.0 Pro", rateEurPerSec: 0.168 },
+  { id: "v2-6-std" as const, label: "2.6 Std", rateEurPerSec: 0.1386 },
+  { id: "v2-6-pro" as const, label: "2.6 Pro", rateEurPerSec: 0.2761 },
+  { id: "v3-std" as const, label: "3.0 Std", rateEurPerSec: 0.2948 },
+  { id: "v3-pro" as const, label: "3.0 Pro", rateEurPerSec: 0.3938 },
 ];
 
 export function MotionTierPicker() {

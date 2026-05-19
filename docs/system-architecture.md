@@ -278,10 +278,10 @@ the admin dashboard.
 | `kling-v3` Pro  | 0.224 / 0.392 EUR/s (no audio / audio) — calibrated 2026-05-06 |
 | `kling-4k-t2v`  | 1.12 EUR/s (silent — no audio variant)                 |
 | `kling-4k-i2v`  | 1.12 EUR/s (silent — no audio variant)                 |
-| `kling-motion-v2-6-std` | 0.059 EUR/s — calibrated 2026-05-19 (Magnific dashboard) |
-| `kling-motion-v2-6-pro` | 0.118 EUR/s — calibrated 2026-05-19 |
-| `kling-motion-v3-std`   | 0.126 EUR/s — calibrated 2026-05-19 |
-| `kling-motion-v3-pro`   | 0.168 EUR/s — calibrated 2026-05-19 |
+| `kling-motion-v2-6-std` | 0.1386 EUR/s — retail (base 126 đ/s + 10% markup, 2026-05-19) |
+| `kling-motion-v2-6-pro` | 0.2761 EUR/s — retail (base 251 đ/s + 10%, 2026-05-19) |
+| `kling-motion-v3-std`   | 0.2948 EUR/s — retail (base 268 đ/s + 10%, 2026-05-19) |
+| `kling-motion-v3-pro`   | 0.3938 EUR/s — retail (base 358 đ/s + 10%, 2026-05-19) |
 | `wan-v27` 720P  | 0.20 EUR/s — UI hidden 2026-05-19 (rows kept for revert) |
 | `wan-v27` 1080P | 0.30 EUR/s — UI hidden 2026-05-19                      |
 | `improve-prompt`| 0.00 (free)                                            |

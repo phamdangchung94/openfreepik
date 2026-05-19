@@ -559,12 +559,16 @@ Replaces WAN 2.7 in the customer-facing model picker (WAN routes/lib/
 pricing rows kept for revert — see `model-picker.tsx` commented option).
 4 endpoints, customer picks tier + reference video + output duration.
 
-| Tier         | Rate     | Endpoint slug              |
-|--------------|----------|----------------------------|
-| 2.6 Standard | 0.059€/s | `kling-motion-v2-6-std`    |
-| 2.6 Pro      | 0.118€/s | `kling-motion-v2-6-pro`    |
-| 3.0 Standard | 0.126€/s | `kling-motion-v3-std`      |
-| 3.0 Pro      | 0.168€/s | `kling-motion-v3-pro`      |
+| Tier         | Rate (retail) | Endpoint slug              |
+|--------------|---------------|----------------------------|
+| 2.6 Standard | 0.1386€/s (139 đ/s) | `kling-motion-v2-6-std`    |
+| 2.6 Pro      | 0.2761€/s (276 đ/s) | `kling-motion-v2-6-pro`    |
+| 3.0 Standard | 0.2948€/s (295 đ/s) | `kling-motion-v3-std`      |
+| 3.0 Pro      | 0.3938€/s (394 đ/s) | `kling-motion-v3-pro`      |
+
+Pricing model: base table provided by anh + 10% retail markup. To change
+the markup, update `scripts/seed-kling-motion-pricing.sql` and re-run
+on prod via Neon MCP (idempotent DELETE-then-INSERT).
 
 Routes: `/api/freepik/kling-motion/[tier]` (POST) + `/[taskId]` (GET poll).
 
