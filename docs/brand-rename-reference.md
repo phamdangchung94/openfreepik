@@ -98,6 +98,28 @@ neutral Vietnamese line.
 | Internal column id `magnific` (in `usage-table.tsx`) | Used as a Set key only — the visible column LABEL is `URL gốc` (already swapped above). |
 | Comments containing brand names | Source-only; not shipped to the browser. |
 
+## Public API surface (2026-05-19)
+
+Public `/api/v1/*` endpoints (commit `cc7966c`) target AI clients,
+LLM tool catalogs, and MCP servers — so brand neutrality matters more
+here than on the web UI (LLMs cache the spec; a "Freepik" leak there
+travels far).
+
+- **Route URLs are brand-neutral by design**: `/api/v1/video/kling-3`,
+  `/api/v1/video/kling-motion/{tier}`, etc. No `/freepik/` or
+  `/magnific/` segments.
+- **OpenAPI spec** (`/api/v1/openapi.json`) has zero `Freepik` /
+  `Magnific` strings — verified in the brand audit.
+- **`stripBrandNames` exported** from `src/lib/error-messages.ts` and
+  applied to the `error_message` field returned by
+  `/api/v1/tasks/[taskId]`. Layer 2 of defense (base-client's
+  `sanitizeUpstreamMessage` is layer 1).
+- **`error_message` upstream path**: Magnific FAILED → upstream
+  populates `error_message` field on task data → poll route persists
+  to `usage_logs.error_message` AND echoes back to client. The echo
+  is what `stripBrandNames` filters. Storage is unfiltered (admin
+  needs the raw text for debugging).
+
 ## How to extend in the future
 
 If you ever want to rename additional places (route paths, the cookie,

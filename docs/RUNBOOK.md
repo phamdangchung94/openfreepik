@@ -175,6 +175,24 @@ Dashboard → **Codes** → row → **Revoke**. Customer's next request gets HTT
 
 Dashboard → **Codes** → row → **Top-up** → enter EUR to add. Atomic SQL increment, race-safe under concurrent customer charges.
 
+### Mint a public API key for a customer (2026-05-19)
+
+Dashboard → **API tokens** → **+ Tạo key**.
+
+1. Chọn activation code làm billing source (key sẽ trừ vào số dư của code đó).
+2. Đặt **label** (vd: "ChatGPT integration — customer X") — chỉ hiển thị nội bộ.
+3. (Optional) **Rate limit/min** override — bỏ trống = mặc định endpoint (3 cho video, 30 cho improve).
+4. (Optional) **Hạn dùng** — datetime, để trống = vĩnh viễn.
+5. Submit → **plaintext `sk_*` hiển thị ĐÚNG 1 LẦN** trong dialog. Copy + gửi cho customer ngay (qua Telegram private message hoặc password manager).
+
+> ⚠️ Hệ thống chỉ lưu SHA-256 hash. Nếu customer mất key → không khôi phục, phải mint key mới.
+
+**Revoke key** (mất / nghi rò rỉ): Dashboard → **API tokens** → card → icon thùng rác → confirm. Customer's next request gets HTTP 401. Số dư activation code KHÔNG bị xoá — chỉ key bị huỷ.
+
+**Verify key hoạt động**: customer gửi anh `curl https://your-domain.com/api/v1/me -H "Authorization: Bearer sk_..."` → expect 200 với balance info.
+
+**Docs cho customer**: link `/docs/api` (page công khai, không cần login) — có cURL/JS/Python sample. OpenAPI spec ở `/api/v1/openapi.json` cho AI tool (ChatGPT Custom GPT, Cursor MCP, LangChain) auto-load.
+
 ### Manage Freepik keys (Phase 1.1)
 
 Dashboard → **Keys**. Default filter shows only keys with `is_active=true` AND `used_eur < assigned_eur` (i.e. actually usable). Hidden keys count appears in header; toggle **Hiện tất cả** to surface inactive/exhausted.

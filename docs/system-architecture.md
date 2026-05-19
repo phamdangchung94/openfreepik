@@ -44,10 +44,21 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 
 ## Authentication & Authorization
 
-- **Customers**: bearer token = activation code, sent via
+Three auth surfaces, distinct credentials, shared billing pipeline:
+
+- **Customers (web UI)** — bearer token = activation code, sent via
   `Authorization: Bearer <code>`. The code IS the credential; no JWT.
   Three modes — `unlimited`, `quota`, `topup` — recorded on
   `activation_codes`. Revoke = `is_active=false`.
+- **Public API (`/api/v1/*`, AI clients)** — bearer token = API key
+  in shape `sk_<32-byte url-safe random>`. Stored as SHA-256 hash in
+  `api_keys` (migration 0014, 2026-05-19). Plaintext shown ONCE at
+  creation in the admin dashboard. Each API key FK-links to an
+  `activation_codes` row — billing flows through that code's balance,
+  so revoke-on-leak = `DELETE FROM api_keys` (cascade-safe) without
+  affecting the underlying customer credits. Per-key
+  `rate_limit_per_min` override is null by default (inherits endpoint
+  default).
 - **Admin**: single-admin password model. Successful login mints a
   session token (SHA-256 in `admin_sessions`, 24h TTL) and sets a
   cookie. Per-IP brute-force lock at 5 failures / 15 min via
@@ -92,6 +103,49 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
    rate + days-until-exhaustion forecast.
 9. **R2 ops** — JSON endpoints (`/api/admin/r2-audit`,
    `/api/admin/r2-cleanup`); admin invokes via DevTools console.
+
+### Public API (`/api/v1/*`)
+Programmatic surface for AI clients (ChatGPT, Claude, Cursor, MCP
+servers, custom integrations). Brand-neutral — no `Freepik` /
+`Magnific` strings in URLs, error codes, or response bodies.
+
+| Endpoint                                  | Purpose                                  |
+|-------------------------------------------|------------------------------------------|
+| `GET  /api/v1/me`                         | Probe key + read balance                 |
+| `POST /api/v1/video/kling-3`              | Kling 3 T2V/I2V (std/pro)                |
+| `POST /api/v1/video/kling-3-4k-text`      | 4K text-to-video                         |
+| `POST /api/v1/video/kling-3-4k-image`     | 4K image-to-video                        |
+| `POST /api/v1/video/kling-motion/{tier}`  | Motion control (v2-6-std/pro, v3-std/pro) |
+| `POST /api/v1/prompt/improve`             | Expand short prompts (free)              |
+| `GET  /api/v1/tasks/{taskId}`             | Universal poll — dispatch by `usage_logs.endpoint` |
+| `GET  /api/v1/openapi.json`               | OpenAPI 3.1 spec (cacheable, CORS open)  |
+
+Auth gate: every route calls `requireApiKey()` from
+[`src/lib/auth/api-key-helpers.ts`](../src/lib/auth/api-key-helpers.ts).
+Resolves SHA-256 hash → `api_keys` row → JOIN `activation_codes` for
+balance metadata. Returns 401 NextResponse on failure; success wraps
+metadata in a `ValidationResult` so the orchestrator's `preValidated`
+path accepts it verbatim (no second DB roundtrip).
+
+Orchestrator dual-path: `orchestrateFreepikCall` and `authedFreepikCall`
+accept either `bearerCode` (web UI activation code) OR `preValidated`
+(API key path). Rate-limit scope is `apiKeyId` for API requests vs
+`codeId` for web UI — so two API keys on the same activation code
+don't share each other's bucket.
+
+Brand sanitization: poll response's `error_message` field passes
+through `stripBrandNames()` ([`src/lib/error-messages.ts`](../src/lib/error-messages.ts))
+before serialization, replacing `Magnific`/`Freepik` with `máy chủ AI`.
+Base-client's `sanitizeUpstreamMessage` is the primary scrubber;
+`stripBrandNames` is defense-in-depth at the response boundary.
+
+Customer-facing docs at [`/docs/api`](../src/app/docs/api/page.tsx)
+(tiếng Việt, 3-tab code samples with copy-to-clipboard). Admin
+[`/dashboard/api-keys`](../src/app/(admin)/dashboard/(authed)/api-keys/page.tsx)
+mints + revokes keys (plaintext shown once with copy button +
+warning that only the hash is stored). Integration guide for
+LLM/MCP/LangChain consumers lives at
+[`docs/ai-integration-guide.md`](ai-integration-guide.md).
 
 ### Background
 Four Vercel-managed crons, all bearer-protected by `CRON_SECRET`:
@@ -242,6 +296,10 @@ freepik_keys         pool of upstream Freepik API keys (AES-GCM encrypted)
                        + paused_until (migration 0013) for auto-pause
                        on 429 bursts (1h window, auto-resume)
 activation_codes     customer bearer codes (mode, quota_eur, used_eur)
+api_keys             public-API auth keys (migration 0014, 2026-05-19);
+                       sha256(plaintext) unique index, FK code_id →
+                       activation_codes (cascade), optional
+                       rate_limit_per_min override, last_used_at
 usage_logs           one row per request (status, cost, video URLs, TTL,
                        key_id, freepik_task_id — indexed via migration 0008
                        so poll routes look up the creator key in O(1));
@@ -262,7 +320,7 @@ announcements        broadcast messages shown to all customers as a
 ```
 
 Migrations live in [`drizzle/migrations/`](../drizzle/migrations) —
-files 0000-0012 currently. `scripts/db-migrate.ts` walks them
+files 0000-0014 currently. `scripts/db-migrate.ts` walks them
 alphabetically against a `__drizzle_migrations` tracking table; the
 journal in `meta/_journal.json` was used by older `drizzle-kit`
 versions but isn't consulted at apply time today.

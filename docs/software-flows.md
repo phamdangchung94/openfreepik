@@ -25,6 +25,7 @@ vốn theo góc nhìn kỹ thuật).
 | 10 | Cron purge + key healthcheck | Vercel cron → `/api/cron/purge` | dọn rate_limit/sessions, probe + auto-deactivate dead keys | `rate_limit_buckets`, `admin_sessions`, `failed_logins`, `freepik_keys` |
 | 11 | Magnific webhook receiver | `/api/freepik/webhook` | HMAC verify (Svix-style) → `finalizeUsageOnPoll` | `usage_logs`, `activation_codes` (refund), `freepik_keys` (secret lookup) |
 | 12 | Announcement broadcast | admin: `/api/admin/announcements` CRUD · customer: `/api/announcements` poll (60s) | `AnnouncementBanner` mount + per-device dismiss qua localStorage | `announcements` (migration 0012) |
+| 13 | Public API (`/api/v1/*`) | client gọi `/api/v1/{me,video/*,prompt/improve,tasks/{id}}` với `Authorization: Bearer sk_*` | `requireApiKey` → orchestrator (`preValidated` path) | `api_keys` (migration 0014), `activation_codes`, `usage_logs` |
 
 **Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
 Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).
@@ -187,6 +188,39 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │       → đọc qua /api/pricing/rates
 │
 ├── ┌──────────────────────────────────────────────────────────────────────────────┐
+│   │  🤖 LUỒNG PUBLIC API (`/api/v1/*` — AI clients, MCP, custom integrations)   │
+│   │  API key `sk_*` → REST JSON → orchestrator (cùng billing pipeline với web)  │
+│   └──────────────────────────────────────────────────────────────────────────────┘
+│
+├── src/app/api/v1/
+│   ├── me/route.ts ........................... GET probe key + balance
+│   ├── video/
+│   │   ├── kling-3/route.ts .................. POST kling-3 (tier std|pro)
+│   │   ├── kling-3-4k-text/route.ts .......... POST kling-3 4K T2V
+│   │   ├── kling-3-4k-image/route.ts ......... POST kling-3 4K I2V
+│   │   └── kling-motion/[tier]/route.ts ...... POST motion (v2-6-std/pro, v3-std/pro)
+│   ├── prompt/improve/route.ts ............... POST mở rộng prompt (free)
+│   ├── tasks/[taskId]/route.ts ............... GET universal poll (dispatch theo
+│   │                                              usage_logs.endpoint)
+│   └── openapi.json/route.ts ................. GET OpenAPI 3.1 spec (CORS open)
+│
+│   Auth: src/lib/auth/api-key-helpers.ts → requireApiKey()
+│     • Extract Bearer sk_* header → SHA-256 → JOIN api_keys + activation_codes
+│     • Wraps metadata trong ValidationResult cho orchestrator.preValidated path
+│     • Rate-limit scope = apiKeyId (không chia bucket với code khác)
+│
+│   Brand sanitize: poll response error_message qua stripBrandNames()
+│   (src/lib/error-messages.ts) — defense-in-depth ngoài sanitizeUpstreamMessage
+│   ở base-client. Đảm bảo không leak "Freepik" / "Magnific" cho AI client.
+│
+│   Docs công khai: src/app/docs/api/page.tsx (cURL/JS/Python tabs + copy)
+│   AI integration guide: docs/ai-integration-guide.md (MCP, LangChain, OpenAI)
+│
+│   Admin UI mint/revoke: src/app/(admin)/dashboard/(authed)/api-keys/page.tsx
+│   ├── CreateApiKeyDialog → POST /api/admin/api-keys → trả plaintext 1 lần
+│   └── DELETE /api/admin/api-keys?id=… → revoke
+│
+├── ┌──────────────────────────────────────────────────────────────────────────────┐
 │   │  👨‍💼 LUỒNG ADMIN (admin)                                                    │
 │   │  Login → quản lý codes, keys, pricing, xem usage                              │
 │   └──────────────────────────────────────────────────────────────────────────────┘
@@ -347,25 +381,31 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │  🗄️ DATA MODEL (Neon Postgres + Drizzle)                                    │
 │   └──────────────────────────────────────────────────────────────────────────────┘
 │
-├── drizzle/migrations/ .............. 0000 → 0008
+├── drizzle/migrations/ .............. 0000 → 0014
 │   Tracking: __drizzle_migrations table (filename PK); scripts/db-migrate.ts
 │   scan thư mục alphabetically, không dùng meta/_journal.json runtime.
 │   Bảng:
 │     • freepik_keys      — pool API keys (encrypted, used_eur, max_concurrent,
-│                           webhook_secret_encrypted nullable từ 0007)
+│                           webhook_secret_encrypted nullable từ 0007,
+│                           paused_until từ 0013)
 │     • activation_codes  — bearer code khách (mode, quota_eur, used_eur)
+│     • api_keys          — public API auth keys (sk_*, sha256 hash, FK code_id
+│                           → activation_codes cascade) — migration 0014
 │     • usage_logs        — mỗi request 1 row (status, cost, video URLs, TTL,
-│                           key_id, freepik_task_id — partial index từ 0008)
+│                           key_id, freepik_task_id — partial index từ 0008;
+│                           error_message từ 0009; prompt từ 0011)
 │     • pricing_rules     — ma trận giá (endpoint+tier+duration+audio)
-│                           tier enum: 'pro' | 'std' | '4k'
+│                           tier enum: 'pro' | 'std' | '4k' | null (motion)
 │     • admin_sessions    — SHA-256 token hash, TTL 24h
-│     • rate_limit_buckets — fixed-window counter (scope: per-(code,task) cho poll)
+│     • rate_limit_buckets — fixed-window counter (scope: per-(code,task) cho poll;
+│                           per-apiKeyId cho /api/v1/*)
 │     • failed_logins     — brute-force lock per IP
+│     • announcements     — broadcast banner (migration 0012)
 │
 │   Latest migrations:
-│     0007 — add freepik_keys.webhook_secret_encrypted (Magnific HMAC verify)
-│     0008 — partial index usage_logs.freepik_task_id WHERE NOT NULL
-│            (poll route lookup creator key in O(1))
+│     0012 — announcements table (broadcast banner)
+│     0013 — freepik_keys.paused_until + usage_logs key_id/code_id indexes
+│     0014 — api_keys table (public API auth, 2026-05-19)
 │
 ├── ┌──────────────────────────────────────────────────────────────────────────────┐
 │   │  🛠️ SCRIPTS VẬN HÀNH (chạy thủ công qua `pnpm tsx scripts/...`)             │
