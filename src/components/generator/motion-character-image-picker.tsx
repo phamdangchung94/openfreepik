@@ -26,6 +26,10 @@ export function MotionCharacterImagePicker() {
       required
       url={url}
       localPreview={localPreview}
+      // 16:9 to match the reference-video picker sitting next to it
+      // in the form (default FrameSlot is aspect-square for the
+      // start/end-frame I2V flow).
+      aspectClass="aspect-video"
       onUploaded={(publicUrl, dataUri) => {
         setValue("start_image_url", publicUrl, { shouldValidate: true });
         setLocalPreview(dataUri);

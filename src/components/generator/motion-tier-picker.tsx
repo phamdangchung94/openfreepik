@@ -3,6 +3,7 @@
 import { useFormContext } from "react-hook-form";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { formatVnd } from "@/lib/format-currency";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
 /**
@@ -16,13 +17,18 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  *
  * "Std" tier is roughly half the price of Pro per the seeded rates.
  * v3 is ~2× the v2-6 Std rate but only 1.33× of v3 Pro vs Std — the
- * cost-preview shows the actual EUR before submit.
+ * cost-preview shows the actual cost before submit.
+ *
+ * Per-second rate shown in VND (formatVnd handles the EUR→VND
+ * conversion at the fixed display rate) so customers see the same
+ * currency they're charged in. Rate per second is precise enough to
+ * round in VND without losing precision: 0.059 EUR → 59 đ/s.
  */
 const OPTIONS = [
-  { id: "v2-6-std" as const, label: "2.6 Std", sub: "€0.059/s" },
-  { id: "v2-6-pro" as const, label: "2.6 Pro", sub: "€0.118/s" },
-  { id: "v3-std" as const, label: "3.0 Std", sub: "€0.126/s" },
-  { id: "v3-pro" as const, label: "3.0 Pro", sub: "€0.168/s" },
+  { id: "v2-6-std" as const, label: "2.6 Std", rateEurPerSec: 0.059 },
+  { id: "v2-6-pro" as const, label: "2.6 Pro", rateEurPerSec: 0.118 },
+  { id: "v3-std" as const, label: "3.0 Std", rateEurPerSec: 0.126 },
+  { id: "v3-pro" as const, label: "3.0 Pro", rateEurPerSec: 0.168 },
 ];
 
 export function MotionTierPicker() {
@@ -45,7 +51,9 @@ export function MotionTierPicker() {
             className="h-auto flex-col py-1.5"
           >
             <span className="font-medium">{opt.label}</span>
-            <span className="text-[10px] opacity-70">{opt.sub}</span>
+            <span className="text-[10px] opacity-70">
+              {formatVnd(opt.rateEurPerSec)}/s
+            </span>
           </Button>
         ))}
       </div>

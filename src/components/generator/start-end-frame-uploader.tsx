@@ -17,6 +17,13 @@ interface FrameSlotProps {
   localPreview: string;
   onUploaded: (publicUrl: string, dataUri: string) => void;
   onClear: () => void;
+  /**
+   * Tailwind aspect class for the dropzone. Default `aspect-square`
+   * preserves start/end-frame UX; Kling Motion uses `aspect-video`
+   * so the character image dropzone matches the reference-video
+   * dropzone height when shown side-by-side.
+   */
+  aspectClass?: string;
 }
 
 export function FrameSlot({
@@ -26,6 +33,7 @@ export function FrameSlot({
   localPreview,
   onUploaded,
   onClear,
+  aspectClass = "aspect-square",
 }: FrameSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -66,7 +74,8 @@ export function FrameSlot({
       </Label>
       <div
         className={cn(
-          "relative aspect-square w-full overflow-hidden rounded-lg border-2 border-dashed transition-colors",
+          "relative w-full overflow-hidden rounded-lg border-2 border-dashed transition-colors",
+          aspectClass,
           isDragOver
             ? "border-primary bg-primary/5"
             : "border-muted-foreground/25 hover:border-muted-foreground/50",
