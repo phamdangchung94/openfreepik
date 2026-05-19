@@ -5,6 +5,7 @@ import {
   type ListObjectsV2CommandOutput,
   GetBucketLifecycleConfigurationCommand,
   type LifecycleRule,
+  ListMultipartUploadsCommand,
 } from "@aws-sdk/client-s3";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 
@@ -157,6 +158,73 @@ export async function GET() {
     if (totalObjects >= SCAN_CAP) break;
   } while (token);
 
+  // 2b. Whole-bucket scan (no prefix) so we catch objects with keys
+  //     outside `videos/` that explain a dashboard "Bucket Size" vs
+  //     prefix-scan discrepancy. Group by top-level prefix (everything
+  //     before the first `/`) so admin sees what else is there.
+  const wholeBucket: Record<string, { count: number; bytes: number }> = {};
+  let wholeBucketTotalObjects = 0;
+  let wholeBucketTotalBytes = 0;
+  let wholeToken: string | undefined = undefined;
+  let wholePages = 0;
+  do {
+    const res: ListObjectsV2CommandOutput = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        MaxKeys: 1000,
+        ContinuationToken: wholeToken,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      if (!obj.Key) continue;
+      const slashIdx = obj.Key.indexOf("/");
+      const topPrefix =
+        slashIdx >= 0 ? obj.Key.slice(0, slashIdx) + "/" : "(no-prefix)";
+      const slot = wholeBucket[topPrefix] ?? { count: 0, bytes: 0 };
+      slot.count++;
+      slot.bytes += obj.Size ?? 0;
+      wholeBucket[topPrefix] = slot;
+      wholeBucketTotalObjects++;
+      wholeBucketTotalBytes += obj.Size ?? 0;
+    }
+    wholeToken = res.NextContinuationToken;
+    wholePages++;
+    if (wholeBucketTotalObjects >= SCAN_CAP) break;
+  } while (wholeToken);
+
+  // 3. Multipart uploads — orphaned parts hold space invisibly. R2
+  //    dashboard's "Bucket Size" includes these but ListObjectsV2
+  //    does NOT, so a fat multipart backlog can explain a huge gap
+  //    between our audit count and dashboard size. The "Default
+  //    Multipart Abort Rule" cleans them after 7 days but interim
+  //    backlog can be many GB.
+  let multipartUploads: Array<{
+    key: string;
+    initiated: string;
+    ageHours: number;
+  }> = [];
+  let multipartError: string | null = null;
+  try {
+    const mp = await s3.send(
+      new ListMultipartUploadsCommand({ Bucket: bucket, MaxUploads: 1000 }),
+    );
+    multipartUploads = (mp.Uploads ?? []).map((u) => {
+      const initiated = u.Initiated ?? new Date(0);
+      return {
+        key: u.Key ?? "(unknown)",
+        initiated: initiated.toISOString(),
+        ageHours: Number(
+          (
+            (Date.now() - new Date(initiated).getTime()) /
+            3_600_000
+          ).toFixed(2),
+        ),
+      };
+    });
+  } catch (err) {
+    multipartError = err instanceof Error ? err.message : String(err);
+  }
+
   // 3. Verdict — surface the obvious answer so admin doesn't have to
   //    interpret the numbers.
   let verdict:
@@ -168,6 +236,21 @@ export async function GET() {
   else if (buckets[">48h"] > 0) verdict = "broken_>48h";
   else if (buckets["24-48h"] > 0) verdict = "stragglers_24-48h";
   else verdict = "ok";
+
+  // Pretty-print whole bucket breakdown by prefix.
+  const wholeBucketByPrefix = Object.entries(wholeBucket)
+    .map(([prefix, v]) => ({
+      prefix,
+      count: v.count,
+      sizeGB: Number((v.bytes / 1_073_741_824).toFixed(2)),
+      sizeMB: Number((v.bytes / 1_048_576).toFixed(2)),
+    }))
+    .sort((a, b) => b.sizeMB - a.sizeMB);
+
+  const multipartTotalAgeHours = multipartUploads.reduce(
+    (s, m) => s + m.ageHours,
+    0,
+  );
 
   return NextResponse.json({
     ok: true,
@@ -182,6 +265,31 @@ export async function GET() {
     oldest,
     lifecycleRules,
     lifecycleError,
+    // Full bucket scan (all prefixes) — if this number differs from
+    // dashboard "Bucket Size", check `multipartUploads` for hidden
+    // space-holders, OR wait for R2's metric polling to catch up
+    // (dashboard Bucket Size is cached, not real-time).
+    wholeBucket: {
+      totalObjects: wholeBucketTotalObjects,
+      totalSizeGB: Number(
+        (wholeBucketTotalBytes / 1_073_741_824).toFixed(2),
+      ),
+      pagesScanned: wholePages,
+      cappedAt: wholeBucketTotalObjects >= SCAN_CAP ? SCAN_CAP : null,
+      byPrefix: wholeBucketByPrefix,
+    },
+    multipart: {
+      pendingUploads: multipartUploads.length,
+      // We can't get part-size totals without listing parts per upload
+      // (N+1 API calls). Surface count + oldest age — admin can decide
+      // whether to call AbortMultipartUpload manually.
+      oldestAgeHours: multipartUploads.length
+        ? Math.max(...multipartUploads.map((m) => m.ageHours))
+        : 0,
+      sumAgeHours: Number(multipartTotalAgeHours.toFixed(2)),
+      samples: multipartUploads.slice(0, 10),
+      error: multipartError,
+    },
     verdict,
     verdictMeaning: {
       ok: "Tất cả objects <= 24h — lifecycle rule chạy đúng",
