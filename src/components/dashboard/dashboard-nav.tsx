@@ -10,6 +10,7 @@ import {
   Activity,
   Megaphone,
   Wallet,
+  Code2,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/dashboard/usage", label: "Usage logs", shortLabel: "Log", icon: Activity, exact: false },
   { href: "/dashboard/costs", label: "Costs", shortLabel: "Chi phí", icon: Wallet, exact: false },
   { href: "/dashboard/announcements", label: "Announcements", shortLabel: "Tin", icon: Megaphone, exact: false },
+  { href: "/dashboard/api-keys", label: "API tokens", shortLabel: "Token", icon: Code2, exact: false },
 ] as const;
 
 /**

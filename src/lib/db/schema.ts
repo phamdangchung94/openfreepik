@@ -101,6 +101,52 @@ export const activationCodes = pgTable(
 );
 
 /**
+ * Programmatic API keys — separate auth path from activation codes.
+ * Activation codes serve the web UI (one per customer, bearer-style);
+ * API keys are for headless callers (third-party integrations,
+ * AI agents calling /api/v1/*).
+ *
+ * Key shape: `sk_<32-byte url-safe random>`. We store only a SHA-256
+ * digest (`key_hash`); the plaintext is shown ONCE at creation time
+ * via the admin dashboard. Lookup is by hash so a leaked DB doesn't
+ * expose live keys.
+ *
+ * Quota model: each API key links to an activation code (`code_id`)
+ * so billing flows through the existing balance + refund pipeline
+ * unchanged. Per-key rate-limit overrides via `rate_limit_per_min`
+ * (null = inherit from default for endpoint).
+ *
+ * Migration 0014.
+ */
+export const apiKeys = pgTable(
+  "api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** SHA-256(plaintext_key). Lookup index. Plaintext never stored. */
+    keyHash: text("key_hash").notNull(),
+    /** Customer-readable name. Admin sees this in the dashboard. */
+    label: text("label").notNull(),
+    /** Links the key to an activation code that owns billing. */
+    codeId: uuid("code_id")
+      .notNull()
+      .references(() => activationCodes.id, { onDelete: "cascade" }),
+    /** null = inherit endpoint default; otherwise override req/min. */
+    rateLimitPerMin: integer("rate_limit_per_min"),
+    isActive: boolean("is_active").notNull().default(true),
+    /** Stamped on every successful auth — drives "Last used" admin column. */
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("api_keys_key_hash_uniq").on(t.keyHash),
+    index("api_keys_code_id_idx").on(t.codeId),
+  ],
+);
+
+/**
  * Per-request usage log. status="refunded" when Freepik call failed
  * after charging the code (balance restored). Video URL is the Freepik
  * URL returned at completion — we don't host the file.
@@ -304,3 +350,5 @@ export type PricingRule = typeof pricingRules.$inferSelect;
 export type NewPricingRule = typeof pricingRules.$inferInsert;
 export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
