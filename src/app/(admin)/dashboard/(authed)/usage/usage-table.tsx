@@ -539,6 +539,14 @@ function renderEndpoint(endpoint: string): string {
       return "Kling 4K I2V";
     case "wan-v27":
       return "WAN 2.7";
+    case "kling-motion-v2-6-std":
+      return "Motion 2.6 Std";
+    case "kling-motion-v2-6-pro":
+      return "Motion 2.6 Pro";
+    case "kling-motion-v3-std":
+      return "Motion 3.0 Std";
+    case "kling-motion-v3-pro":
+      return "Motion 3.0 Pro";
     case "improve-prompt":
       return "Improve";
     default:

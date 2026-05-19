@@ -230,9 +230,9 @@ customer outcome is identical whether the task finalized via push
 or pull. Keys without a configured secret stay on pure polling.
 
 Outbound: every POST creator route (`kling-v3`, `kling-4k-*`,
-`wan-v27`) injects `params.webhook_url = getWebhookUrl()` when
-`VERCEL_ENV=production` (or when the explicit `WEBHOOK_BASE_URL`
-env is set), so Magnific knows where to call back.
+`wan-v27`, `kling-motion/<tier>`) injects `params.webhook_url =
+getWebhookUrl()` when `VERCEL_ENV=production` (or when the explicit
+`WEBHOOK_BASE_URL` env is set), so Magnific knows where to call back.
 
 ## Data Model
 
@@ -278,13 +278,23 @@ the admin dashboard.
 | `kling-v3` Pro  | 0.224 / 0.392 EUR/s (no audio / audio) — calibrated 2026-05-06 |
 | `kling-4k-t2v`  | 1.12 EUR/s (silent — no audio variant)                 |
 | `kling-4k-i2v`  | 1.12 EUR/s (silent — no audio variant)                 |
-| `wan-v27` 720P  | 0.20 EUR/s — uncalibrated placeholder                  |
-| `wan-v27` 1080P | 0.30 EUR/s — uncalibrated placeholder                  |
+| `kling-motion-v2-6-std` | 0.059 EUR/s — calibrated 2026-05-19 (Magnific dashboard) |
+| `kling-motion-v2-6-pro` | 0.118 EUR/s — calibrated 2026-05-19 |
+| `kling-motion-v3-std`   | 0.126 EUR/s — calibrated 2026-05-19 |
+| `kling-motion-v3-pro`   | 0.168 EUR/s — calibrated 2026-05-19 |
+| `wan-v27` 720P  | 0.20 EUR/s — UI hidden 2026-05-19 (rows kept for revert) |
+| `wan-v27` 1080P | 0.30 EUR/s — UI hidden 2026-05-19                      |
 | `improve-prompt`| 0.00 (free)                                            |
 
 Kling 4K rate derivation: business rule pegs 4K at 2.857142857×
 (=20/7) of the Kling V3 Pro 1080p with-audio rate. `0.392 × 20/7 = 1.12`
 exactly.
+
+Kling Motion durations: 5 / 10 / 15 / 30 seconds. The Magnific API
+has no explicit `duration` request field — output length is implied
+by `character_orientation` (`video`=30s max, `image`=10s max). The
+customer-chosen output_duration flows through the route as a sidecar
+field used only for pricing lookup.
 
 ## Storage
 

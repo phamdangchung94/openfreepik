@@ -9,6 +9,7 @@ import {
   VolumeX,
   ArrowLeft,
   Gem,
+  Move3d,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +78,10 @@ export default function CustomerPricingPage() {
       ) : (
         <div className="space-y-6">
           <KlingSection rules={rules} />
-          <WanSection rules={rules} />
+          <KlingMotionSection rules={rules} />
+          {/* WAN 2.7 tạm ẩn UI (per anh 2026-05-19). Pricing rows vẫn
+              trong DB cho revert; uncomment dưới để hiện lại bảng giá. */}
+          {/* <WanSection rules={rules} /> */}
 
           <Card className="bg-muted/30">
             <CardContent className="space-y-2 p-4 text-xs text-muted-foreground">
@@ -260,6 +264,110 @@ function WanSection({ rules }: { rules: PricingRule[] }) {
             </tbody>
           </table>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Kling Motion Control pricing — 4 tier columns × 4 duration rows.
+ * No audio dimension (motion control doesn't generate audio); no
+ * resolution split (handled by the tier choice). 15s/30s rows show
+ * "—" if not seeded (admin can enable later); current seed covers
+ * all 4 durations.
+ */
+function KlingMotionSection({ rules }: { rules: PricingRule[] }) {
+  const motionRules = rules.filter((r) =>
+    r.endpoint.startsWith("kling-motion-"),
+  );
+
+  function costFor(tier: string, duration: number): number | null {
+    const row = motionRules.find(
+      (r) => r.endpoint === `kling-motion-${tier}` && r.durationSeconds === duration,
+    );
+    return row ? row.costEur : null;
+  }
+
+  // Hardcoded durations + columns — these match the seed SQL. Pulling
+  // from `rules` would risk admin reordering display when a future row
+  // changes order in the DB.
+  const durations = [5, 10, 15, 30];
+  const columns = [
+    { id: "v2-6-std", label: "2.6 Std" },
+    { id: "v2-6-pro", label: "2.6 Pro" },
+    { id: "v3-std", label: "3.0 Std" },
+    { id: "v3-pro", label: "3.0 Pro", highlight: true },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="space-y-1">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Move3d className="size-4 text-primary" />
+          Kling Motion Control — Animate ảnh theo motion mẫu
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Upload ảnh nhân vật + video tham chiếu motion → AI tạo video
+          nhân vật làm theo motion đó. 4 phiên bản: 2.6 (cũ, rẻ) và
+          3.0 (mới, chi tiết hơn) — mỗi phiên bản có Std (chuẩn) +
+          Pro (chất lượng cao).
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium">
+                  Thời lượng
+                </th>
+                {columns.map((c) => (
+                  <ColHeader
+                    key={c.id}
+                    label={c.label}
+                    sub=""
+                    highlight={c.highlight}
+                  />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {durations.map((d) => (
+                <tr
+                  key={d}
+                  className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                >
+                  <td className="py-2 pr-3 font-mono text-sm font-medium">
+                    {d}s
+                  </td>
+                  {columns.map((c) => (
+                    <Cell
+                      key={c.id}
+                      value={costFor(c.id, d)}
+                      highlight={c.highlight}
+                    />
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ul className="mt-4 space-y-1 text-[11px] text-muted-foreground">
+          <li>
+            🎬 Output 15s/30s chỉ khả dụng khi chọn{" "}
+            <span className="font-medium text-foreground/80">
+              Khung hình theo Video
+            </span>{" "}
+            (mặc định). Chế độ &ldquo;Theo Ảnh&rdquo; giới hạn 10s.
+          </li>
+          <li>
+            🎯 Pro chi tiết hơn Std nhưng đắt gấp đôi (2.6) hoặc gấp
+            ~1.33× (3.0). 3.0 chậm hơn 2.6 ~30s nhưng motion mượt hơn.
+          </li>
+          <li>
+            📹 Video tham chiếu: 3-30 giây, MP4/MOV/WEBM, tối đa 50MB.
+          </li>
+        </ul>
       </CardContent>
     </Card>
   );

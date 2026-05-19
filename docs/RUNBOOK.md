@@ -553,6 +553,39 @@ Find your IP at https://api.ipify.org or via Vercel logs.
 
 ---
 
+## Kling Motion Control (added 2026-05-19)
+
+Replaces WAN 2.7 in the customer-facing model picker (WAN routes/lib/
+pricing rows kept for revert — see `model-picker.tsx` commented option).
+4 endpoints, customer picks tier + reference video + output duration.
+
+| Tier         | Rate     | Endpoint slug              |
+|--------------|----------|----------------------------|
+| 2.6 Standard | 0.059€/s | `kling-motion-v2-6-std`    |
+| 2.6 Pro      | 0.118€/s | `kling-motion-v2-6-pro`    |
+| 3.0 Standard | 0.126€/s | `kling-motion-v3-std`      |
+| 3.0 Pro      | 0.168€/s | `kling-motion-v3-pro`      |
+
+Routes: `/api/freepik/kling-motion/[tier]` (POST) + `/[taskId]` (GET poll).
+
+**Output duration model**: Magnific has no `duration` API field — output
+length is implied by `character_orientation` (`video`=30s cap,
+`image`=10s cap). The customer's chosen `output_duration` (5/10/15/30s)
+flows through the route body for pricing lookup only.
+
+**Reference video upload**: 3-30s, MP4/MOV/WEBM/M4V, ≤50MB. Uploaded
+via `uploadVideoToHost` (litterbox.catbox.moe; 24h TTL is fine since
+Magnific consumes the URL within seconds of POST).
+
+**To revert WAN visibility**: uncomment the `wan-v27` option in
+`src/components/generator/model-picker.tsx` + the `<WanSection />` in
+`src/app/(customer)/pricing/page.tsx`. Backend routes are intact.
+
+**Pricing seed**: `scripts/seed-kling-motion-pricing.sql` — 16 rows,
+idempotent (DELETE-then-INSERT). Applied to prod 2026-05-19.
+
+---
+
 ## Audit-driven backlog (as of 2026-05-19)
 
 See [`plans/audits/`](../plans/audits/) for full reports.
