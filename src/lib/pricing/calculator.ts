@@ -4,7 +4,7 @@
  * dashboard (Phase 10) so admins can adjust as Freepik prices change.
  */
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, isNotNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { pricingRules } from "@/lib/db/schema";
@@ -19,12 +19,17 @@ export interface PricingLookup {
 }
 
 export class PricingNotFoundError extends Error {
-  readonly lookup: PricingLookup;
-  constructor(lookup: PricingLookup) {
-    super(
-      `No pricing rule found for endpoint=${lookup.endpoint} tier=${lookup.tier} duration=${lookup.durationSeconds}s audio=${lookup.withAudio}`,
-    );
-    this.lookup = lookup;
+  readonly lookup: PricingLookup | null;
+  constructor(lookup: PricingLookup | string) {
+    if (typeof lookup === "string") {
+      super(lookup);
+      this.lookup = null;
+    } else {
+      super(
+        `No pricing rule found for endpoint=${lookup.endpoint} tier=${lookup.tier} duration=${lookup.durationSeconds}s audio=${lookup.withAudio}`,
+      );
+      this.lookup = lookup;
+    }
     this.name = "PricingNotFoundError";
   }
 }
@@ -161,4 +166,40 @@ export function lookupForKlingMotion(
     durationSeconds,
     withAudio: false,
   };
+}
+
+/**
+ * Per-second motion pricing — bills `ceil(exactSeconds)` × rate where
+ * the rate is derived from any existing pricing row for the endpoint.
+ * Replaces the old tier-snap behaviour (5/10/15/30 brackets) — customers
+ * now pay strictly for the seconds they consume, ceiling-rounded.
+ *
+ * Throws PricingNotFoundError if no row exists for the endpoint (admin
+ * needs to seed). Same error shape as calculateCost so callers can
+ * reuse a single 503 branch.
+ */
+export async function calculateMotionCost(
+  endpoint: string,
+  exactSeconds: number,
+): Promise<number> {
+  const rows = await db
+    .select()
+    .from(pricingRules)
+    .where(
+      and(
+        eq(pricingRules.endpoint, endpoint),
+        isNotNull(pricingRules.durationSeconds),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.durationSeconds == null || row.durationSeconds <= 0) {
+    throw new PricingNotFoundError(
+      `No pricing rule found for motion endpoint=${endpoint}`,
+    );
+  }
+  const ratePerSec = Number(row.costEur) / row.durationSeconds;
+  const billed = Math.max(1, Math.ceil(exactSeconds));
+  return billed * ratePerSec;
 }

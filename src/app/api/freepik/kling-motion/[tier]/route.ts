@@ -9,7 +9,7 @@ import { endpointSlug } from "@/lib/freepik/kling-motion";
 import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
 import {
   PricingNotFoundError,
-  calculateCost,
+  calculateMotionCost,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -114,16 +114,12 @@ export async function POST(
     }
   }
 
-  // Pricing — `tier` slot carries motion tier directly; endpoint slug
-  // is what's stored in pricing_rules.endpoint. No audio.
+  // Pricing — per-second billing with ceiling rounding (2026-05-20).
+  // calculateMotionCost reads any one row for the endpoint, derives
+  // per-second rate, and multiplies by ceil(durationSeconds).
   let cost: number;
   try {
-    cost = await calculateCost({
-      endpoint: slug,
-      tier: null,
-      durationSeconds,
-      withAudio: false,
-    });
+    cost = await calculateMotionCost(slug, durationSeconds);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", {

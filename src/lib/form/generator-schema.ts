@@ -21,7 +21,10 @@ const DURATION_ENUM = z.enum([
  * caps orientation=image at 10s; orientation=video at 30s. superRefine
  * enforces the per-orientation cap.
  */
-const MOTION_DURATION_ENUM = z.enum(["5", "10", "15", "30"]);
+// Per-second billing with ceiling rounding — output_duration is an
+// integer 1..30, no longer a tier-snap enum. Auto-derived from
+// motion_video_duration by motion-output-duration-picker.
+const MOTION_DURATION = z.number().int().min(1).max(30);
 
 export const generatorFormSchema = z
   .object({
@@ -99,7 +102,7 @@ export const generatorFormSchema = z
      * any more; the form just shows it as a readonly badge after
      * video upload.
      */
-    output_duration: MOTION_DURATION_ENUM.default("5"),
+    output_duration: MOTION_DURATION.default(5),
   })
   .superRefine((data, ctx) => {
     // Kling Motion — needs both character image + reference video,

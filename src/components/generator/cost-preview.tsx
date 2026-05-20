@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useFormContext } from "react-hook-form";
 import { Coins, AlertCircle } from "lucide-react";
-import { lookupCost, usePricingRates } from "@/hooks/use-pricing-rates";
+import { lookupCost, usePricingRates, lookupMotionCostPerSec } from "@/hooks/use-pricing-rates";
 import { useAuthStore } from "@/store/auth-store";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 import { formatVnd } from "@/lib/format-currency";
@@ -50,12 +50,14 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   const perItem = useMemo(() => {
     if (!rates) return null;
     if (model === "kling-motion") {
-      return lookupCost(rates, {
-        endpoint: `kling-motion-${motionTier}`,
-        tier: null,
-        durationSeconds: Number(outputDuration),
-        withAudio: false,
-      });
+      // Per-second billing with ceiling — derive rate from any one
+      // pricing row, multiply by ceil(outputDuration). Matches server
+      // calculateMotionCost.
+      return lookupMotionCostPerSec(
+        rates,
+        `kling-motion-${motionTier}`,
+        Number(outputDuration),
+      );
     }
     if (model === "wan-v27") {
       return lookupCost(rates, {

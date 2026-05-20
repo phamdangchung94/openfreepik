@@ -9,7 +9,7 @@ import { endpointSlug } from "@/lib/freepik/kling-motion";
 import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
 import {
   PricingNotFoundError,
-  calculateCost,
+  calculateMotionCost,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
@@ -116,12 +116,7 @@ export async function POST(
 
   let cost: number;
   try {
-    cost = await calculateCost({
-      endpoint: slug,
-      tier: null,
-      durationSeconds,
-      withAudio: false,
-    });
+    cost = await calculateMotionCost(slug, durationSeconds);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", {

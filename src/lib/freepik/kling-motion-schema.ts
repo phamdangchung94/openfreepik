@@ -34,11 +34,12 @@ export const klingMotionGenerateParamsSchema = z.object({
 export const klingMotionRouteInputSchema = z.object({
   params: klingMotionGenerateParamsSchema,
   /**
-   * Customer-chosen output duration. Drives pricing lookup. Cannot
-   * exceed 30s (orientation=video) or 10s (orientation=image); the
-   * route handler enforces this against `character_orientation`.
+   * Billed output duration in seconds (integer). Customer is charged
+   * `ceil(reference_video_duration)` × per-second rate, clamped by
+   * orientation cap (30s video / 10s image). The route handler
+   * enforces the cap against `character_orientation`.
    */
-  output_duration: z.number().int().min(5).max(30),
+  output_duration: z.number().int().min(1).max(30),
 });
 
 export type KlingMotionRouteInput = z.infer<typeof klingMotionRouteInputSchema>;
@@ -66,8 +67,8 @@ export function parseTierParam(
 
 /**
  * Validate output_duration against character_orientation.
- *   - "video" allows 5-30s
- *   - "image" allows 5-10s
+ *   - "video" allows 1-30s
+ *   - "image" allows 1-10s
  * Returns null if valid, error message if not.
  */
 export function validateOutputDuration(
@@ -75,8 +76,8 @@ export function validateOutputDuration(
   orientation: "video" | "image" | undefined,
 ): string | null {
   const max = orientation === "image" ? 10 : 30;
-  if (durationSeconds < 5 || durationSeconds > max) {
-    return `output_duration must be 5-${max}s for character_orientation=${orientation ?? "video"}`;
+  if (durationSeconds < 1 || durationSeconds > max) {
+    return `output_duration must be 1-${max}s for character_orientation=${orientation ?? "video"}`;
   }
   return null;
 }

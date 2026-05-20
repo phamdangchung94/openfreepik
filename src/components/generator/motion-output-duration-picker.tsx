@@ -27,23 +27,20 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  * discrete price ladder, not pro-rating per-second.
  */
 
-const TIERS = [5, 10, 15, 30] as const;
-type TierString = "5" | "10" | "15" | "30";
-
-/** Map a continuous duration in seconds → the nearest pricing tier ceiling. */
-function tierForDuration(
+/**
+ * Map a continuous reference-video duration to the billed integer
+ * second count. Per-second pricing with ceiling rounding (2026-05-20)
+ * — a 13.7s video bills as 14s, NOT 15s like the old tier-snap did.
+ *
+ * Orientation cap clamps the maximum (image=10s, video=30s).
+ */
+function billedSecondsFor(
   seconds: number,
   orientation: "video" | "image",
-): TierString {
-  // Orientation=image caps the upstream output at 10s, so even if
-  // someone uploads a 25s reference video, we charge at most 10s.
+): number {
   const cap = orientation === "image" ? 10 : 30;
   const effective = Math.min(Math.max(seconds, 0), cap);
-  for (const t of TIERS) {
-    if (t > cap) break; // skip tiers above orientation cap
-    if (effective <= t) return String(t) as TierString;
-  }
-  return String(cap) as TierString;
+  return Math.max(1, Math.ceil(effective));
 }
 
 export function MotionOutputDurationPicker() {
@@ -57,7 +54,7 @@ export function MotionOutputDurationPicker() {
   // no video uploaded yet (detectedSeconds=0).
   useEffect(() => {
     if (!detectedSeconds || detectedSeconds <= 0) return;
-    const next = tierForDuration(detectedSeconds, orientation);
+    const next = billedSecondsFor(detectedSeconds, orientation);
     if (next !== current) {
       setValue("output_duration", next, { shouldDirty: true });
     }

@@ -84,3 +84,29 @@ export function lookupCost(
   );
   return found ? found.costEur : null;
 }
+
+/**
+ * Motion control bills per-second with ceiling rounding (different from
+ * other models which charge by discrete duration tier). Derive the
+ * per-second rate from any pricing row for this endpoint — every row's
+ * `costEur / durationSeconds` is the same rate by construction (the
+ * seed SQL multiplies a single rate × the duration).
+ *
+ * Returns null if no rule exists for the endpoint (admin needs to seed).
+ */
+export function lookupMotionCostPerSec(
+  rules: PricingRule[],
+  endpoint: string,
+  exactSeconds: number,
+): number | null {
+  const row = rules.find(
+    (r) =>
+      r.endpoint === endpoint &&
+      r.durationSeconds !== null &&
+      r.durationSeconds > 0,
+  );
+  if (!row || !row.durationSeconds) return null;
+  const ratePerSec = row.costEur / row.durationSeconds;
+  const billed = Math.max(1, Math.ceil(exactSeconds));
+  return billed * ratePerSec;
+}

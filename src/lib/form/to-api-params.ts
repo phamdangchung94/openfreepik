@@ -48,7 +48,10 @@ export function toKlingMotionParams(v: GeneratorFormValues): {
   if (prompt) params.prompt = prompt;
   return {
     params,
-    output_duration: Number(v.output_duration),
+    // output_duration is already a number from the form schema (per-
+    // second billing with ceiling, computed by motion-output-duration-
+    // picker). Pass through verbatim.
+    output_duration: v.output_duration,
     routeTier: v.motion_tier,
   };
 }
