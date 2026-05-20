@@ -51,9 +51,26 @@ export async function uploadFileToHost(file: File): Promise<UploadResult> {
   return uploadImageToHost(file);
 }
 
+/**
+ * Image upload — R2 presigned PUT first (matches video flow). Free
+ * hosts kept as fallback for envs without R2 (local dev).
+ *
+ * Why R2 first: tmpfiles.org / litterbox.catbox.moe URLs expire/get
+ * blocked from VN sporadically, and tmpfiles doesn't return
+ * Access-Control-Allow-Origin so images sometimes fail to load in
+ * the `<img>` tag (browser CORS check on subsequent fetches). R2
+ * with bucket CORS configured for our domain serves images cleanly.
+ */
 export async function uploadImageToHost(file: File): Promise<UploadResult> {
   const dataUri = await fileToDataUri(file);
   const errors: string[] = [];
+
+  try {
+    const publicUrl = await uploadToR2ViaPresign(file);
+    return { publicUrl, dataUri, filename: file.name };
+  } catch (err) {
+    errors.push(`r2: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   for (const uploader of [uploadToTmpfiles, uploadToLitterbox]) {
     try {
@@ -64,11 +81,8 @@ export async function uploadImageToHost(file: File): Promise<UploadResult> {
     }
   }
 
-  // Both hosts rejected — surface a Vietnamese top-line message and
-  // include the underlying host errors so the customer can show
-  // support what went wrong.
   throw new Error(
-    `Tải ảnh thất bại — cả 2 dịch vụ tải ảnh đều từ chối. Vui lòng thử lại sau. (${errors.join(" | ")})`,
+    `Tải ảnh thất bại — cả R2 và dịch vụ dự phòng đều không hoạt động. Vui lòng thử lại sau. (${errors.join(" | ")})`,
   );
 }
 
