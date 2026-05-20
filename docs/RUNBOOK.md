@@ -448,6 +448,43 @@ curl -H "Authorization: Bearer $CRON_SECRET" https://your-domain/api/cron/sweep-
   match zero objects → bucket grows unbounded. Cloudflare UI does not
   validate this.
 
+### CORS rule — required for browser-direct uploads (2026-05-20)
+
+The motion reference video flow (`/api/upload/presign` → browser
+PUTs directly to R2) needs CORS allowed on the bucket. Without this,
+browser sees `Failed to fetch` on the PUT step.
+
+**Set via Cloudflare dashboard** → R2 → bucket → **Settings** → **CORS Policy** → paste:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "https://openfreepik.com",
+      "https://www.openfreepik.com",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Replace `openfreepik.com` with the actual customer-facing domain.
+Adding extra origins (preview deploys, staging) is fine — CORS is
+additive. Verify with: open `/` in browser, run
+
+```js
+await fetch('https://<R2_PUBLIC_URL_BASE>/uploads/video/test', {
+  method: 'PUT', body: new Blob(['x']), headers: { 'content-type': 'text/plain' }
+}).then(r => r.status)
+```
+
+Expected: `403` (signature missing — but CORS passed). If you see
+"Failed to fetch" → CORS not applied yet (rule takes ~1 min to propagate).
+
 ### Verify lifecycle is actually deleting — `/api/admin/r2-audit`
 
 Admin-only GET. Returns age distribution + lifecycle rule list + a

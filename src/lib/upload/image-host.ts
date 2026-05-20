@@ -24,6 +24,7 @@
 
 const TMPFILES_API = "https://tmpfiles.org/api/v1/upload";
 const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
+const PRESIGN_API = "/api/upload/presign";
 const UPLOAD_TIMEOUT_MS = 30_000;
 
 export interface UploadResult {
@@ -70,21 +71,96 @@ export async function uploadImageToHost(file: File): Promise<UploadResult> {
 }
 
 /**
- * Video upload — Litterbox only. Skip tmpfiles since it's image-only
- * in practice (would waste the 30s timeout on every call). No dataUri
- * (50MB base64 would slow down the React tree); preview should use
+ * Video upload — primary path is presigned PUT to our own R2 bucket
+ * (`/api/upload/presign` issues the URL, browser PUTs directly to R2
+ * to bypass Vercel's 4.5MB serverless body limit). Litterbox stays as
+ * a fallback for envs where R2 isn't configured.
+ *
+ * Why not third-party fallback chain? catbox.moe and 0x0.st don't
+ * return `Access-Control-Allow-Origin` so browser POST fails with
+ * "Failed to fetch" before the response is readable (verified via
+ * the dev preview on 2026-05-20). Litterbox is the only free host
+ * with proper CORS — and the only one that goes dark periodically.
+ * R2 + presigned URL is the only reliable browser-direct option.
+ *
+ * No dataUri (50MB base64 would bloat the React tree); preview uses
  * URL.createObjectURL() on the File directly.
  */
 export async function uploadVideoToHost(file: File): Promise<UploadResult> {
+  const errors: string[] = [];
+
+  try {
+    const publicUrl = await uploadToR2ViaPresign(file);
+    return { publicUrl, dataUri: "", filename: file.name };
+  } catch (err) {
+    errors.push(`r2: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   try {
     const publicUrl = await uploadToLitterbox(file);
     return { publicUrl, dataUri: "", filename: file.name };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`litterbox: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  throw new Error(
+    `Tải video thất bại — cả R2 và dịch vụ dự phòng đều không hoạt động. Vui lòng thử lại sau. (${errors.join(" | ")})`,
+  );
+}
+
+/**
+ * Upload to our own R2 bucket via a presigned PUT URL. Two-step:
+ *   1. POST {filename, contentType, size} to /api/upload/presign
+ *      → server issues a short-lived (5min) presigned PUT URL + key
+ *      → server returns the public URL too (R2 publicUrlBase + key)
+ *   2. Browser PUTs the raw file bytes to the presigned URL
+ *      → R2 stores it; bucket lifecycle expires after 24h
+ *
+ * Bypasses Vercel's 4.5MB serverless body limit because the PUT
+ * goes browser → R2 directly, not through our function.
+ */
+async function uploadToR2ViaPresign(file: File): Promise<string> {
+  const presignRes = await fetch(PRESIGN_API, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      filename: file.name,
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+      kind: file.type.startsWith("video/") ? "video" : "image",
+    }),
+  });
+
+  if (!presignRes.ok) {
+    const body = await readResponseText(presignRes);
+    throw new Error(`presign HTTP ${presignRes.status}: ${body}`);
+  }
+
+  const presign = (await presignRes.json()) as {
+    uploadUrl?: string;
+    publicUrl?: string;
+    error?: string;
+    message?: string;
+  };
+  if (!presign.uploadUrl || !presign.publicUrl) {
     throw new Error(
-      `Tải video thất bại — dịch vụ tải video đang không hoạt động. Vui lòng thử lại sau. (${msg})`,
+      `presign rejected: ${presign.message ?? presign.error ?? "no upload URL"}`,
     );
   }
+
+  const putRes = await fetchWithTimeout(presign.uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "content-type": file.type || "application/octet-stream" },
+  });
+
+  if (!putRes.ok) {
+    throw new Error(
+      `r2 PUT HTTP ${putRes.status}: ${await readResponseText(putRes)}`,
+    );
+  }
+
+  return presign.publicUrl;
 }
 
 async function uploadToTmpfiles(file: File): Promise<string> {
@@ -141,6 +217,7 @@ async function uploadToLitterbox(file: File): Promise<string> {
 
   return url;
 }
+
 
 /**
  * Wraps fetch with a per-call timeout that maps to a friendly error

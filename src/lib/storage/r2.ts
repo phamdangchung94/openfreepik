@@ -23,7 +23,9 @@
  */
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { errFields, log } from "@/lib/logger";
+import { randomUUID } from "crypto";
 
 interface R2Config {
   accountId: string;
@@ -168,4 +170,92 @@ export async function mirrorRemoteToR2(opts: {
  */
 export function r2KeyForVideo(taskId: string): string {
   return `videos/${taskId}.mp4`;
+}
+
+export interface PresignedUpload {
+  /** Short-lived PUT URL the browser uploads to directly. */
+  uploadUrl: string;
+  /** Permanent public R2 URL once the PUT succeeds (subject to lifecycle TTL). */
+  publicUrl: string;
+  /** Object key used. */
+  key: string;
+  /** ISO timestamp the upload URL expires. */
+  expiresAt: string;
+}
+
+/**
+ * Issue a short-lived presigned PUT URL so the browser can upload
+ * directly to R2 without going through Vercel's 4.5MB serverless
+ * body limit. Used by `/api/upload/presign`.
+ *
+ * Returns null when R2 isn't configured (local dev without env vars);
+ * caller falls back to a free public host.
+ *
+ * `kind` selects the bucket prefix: `video/` for motion reference
+ * videos (24h lifecycle), `image/` for character images (24h
+ * lifecycle). Both share the existing R2 bucket; the prefix lets us
+ * apply different lifecycle rules later without migration.
+ */
+export async function presignUpload(opts: {
+  contentType: string;
+  kind: "video" | "image";
+  extension?: string;
+}): Promise<PresignedUpload | null> {
+  const cfg = readConfig();
+  if (!cfg) {
+    log.warn("R2_NOT_CONFIGURED", { presign: true });
+    return null;
+  }
+
+  const ext = sanitizeExtension(opts.extension, opts.contentType, opts.kind);
+  const prefix = opts.kind === "video" ? "uploads/video" : "uploads/image";
+  const key = `${prefix}/${randomUUID()}.${ext}`;
+
+  const client = getClient(cfg);
+  const ttlSeconds = 300; // 5min — enough for a 50MB upload over slow VN mobile
+
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      ContentType: opts.contentType,
+    }),
+    { expiresIn: ttlSeconds },
+  );
+
+  return {
+    uploadUrl,
+    publicUrl: `${cfg.publicUrlBase}/${key}`,
+    key,
+    expiresAt: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+  };
+}
+
+function sanitizeExtension(
+  extension: string | undefined,
+  contentType: string,
+  kind: "video" | "image",
+): string {
+  // Allowlist: only extensions we expect — avoids path traversal via
+  // the `extension` param.
+  const allowed = kind === "video"
+    ? ["mp4", "mov", "webm", "m4v"]
+    : ["jpg", "jpeg", "png", "webp", "gif"];
+
+  const cleaned = (extension ?? "").replace(/^\.+/, "").toLowerCase();
+  if (cleaned && allowed.includes(cleaned)) return cleaned;
+
+  // Derive from contentType if extension was missing/unsafe.
+  const ctMap: Record<string, string> = {
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/webm": "webm",
+    "video/x-m4v": "m4v",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  return ctMap[contentType.toLowerCase()] ?? (kind === "video" ? "mp4" : "jpg");
 }
