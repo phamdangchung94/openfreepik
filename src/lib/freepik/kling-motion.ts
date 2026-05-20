@@ -26,23 +26,43 @@ import type {
 
 type EndpointKey = `${KlingMotionVersion}:${KlingMotionTier}`;
 
-const ENDPOINT_MAP: Record<EndpointKey, string> = {
+/**
+ * POST endpoint includes tier (Magnific routes per-tier). GET endpoint
+ * drops the tier — same pattern as kling-v3 where POST is per-tier
+ * (`kling-v3-{pro|std}`) but GET is on the shared base
+ * (`kling-v3/{taskId}`). Tested 2026-05-20: GET với tier suffix trả 404,
+ * GET không tier suffix mới đúng.
+ */
+const POST_ENDPOINT_MAP: Record<EndpointKey, string> = {
   "v2-6:std": "/v1/ai/video/kling-v2-6-motion-control-std",
   "v2-6:pro": "/v1/ai/video/kling-v2-6-motion-control-pro",
   "v3:std": "/v1/ai/video/kling-v3-motion-control-std",
   "v3:pro": "/v1/ai/video/kling-v3-motion-control-pro",
 };
 
+const GET_BASE_MAP: Record<KlingMotionVersion, string> = {
+  "v2-6": "/v1/ai/video/kling-v2-6-motion-control",
+  "v3": "/v1/ai/video/kling-v3-motion-control",
+};
+
 /**
- * Resolve the Magnific endpoint URL for a (version, tier) tuple. Throws
- * if the combination is unknown — that's a programmer error, not a
- * runtime one, so don't bother coercing into a typed Result.
+ * Resolve the Magnific POST endpoint URL for a (version, tier) tuple.
+ * Throws if the combination is unknown — that's a programmer error,
+ * not a runtime one, so don't bother coercing into a typed Result.
  */
-function endpointFor(version: KlingMotionVersion, tier: KlingMotionTier): string {
+function postEndpointFor(version: KlingMotionVersion, tier: KlingMotionTier): string {
   const key: EndpointKey = `${version}:${tier}`;
-  const url = ENDPOINT_MAP[key];
+  const url = POST_ENDPOINT_MAP[key];
   if (!url) {
     throw new Error(`Unknown kling-motion endpoint: ${key}`);
+  }
+  return url;
+}
+
+function getEndpointBase(version: KlingMotionVersion): string {
+  const url = GET_BASE_MAP[version];
+  if (!url) {
+    throw new Error(`Unknown kling-motion version: ${version}`);
   }
   return url;
 }
@@ -59,7 +79,7 @@ export async function generate(
 ): Promise<TaskData> {
   const res = await request<FreepikResponse<TaskData>>({
     method: "POST",
-    path: endpointFor(opts.version, opts.tier),
+    path: postEndpointFor(opts.version, opts.tier),
     body: params,
     apiKey: opts.apiKey,
   });
@@ -72,7 +92,7 @@ export async function getTask(
 ): Promise<TaskData> {
   const res = await request<FreepikResponse<TaskData>>({
     method: "GET",
-    path: `${endpointFor(opts.version, opts.tier)}/${taskId}`,
+    path: `${getEndpointBase(opts.version)}/${taskId}`,
     apiKey: opts.apiKey,
   });
   return res.data;
