@@ -9,16 +9,19 @@ const isDev = process.env.NODE_ENV === "development";
  * Hosts:
  *   - *.freepik.com / *.magnific.com — Magnific-issued media URLs
  *   - litterbox.catbox.moe / tmpfiles.org — image upload fallbacks
- *   - *.r2.dev — Cloudflare R2 mirror (video preview + download)
+ *   - *.r2.dev — Cloudflare R2 public read URL (video playback + download)
+ *   - *.r2.cloudflarestorage.com — Cloudflare R2 S3 API endpoint
+ *     (presigned PUT target for browser → R2 direct upload)
  */
 const FREEPIK_ORIGIN = "https://*.freepik.com";
 const MAGNIFIC_ORIGIN = "https://*.magnific.com";
 const LITTERBOX_ORIGIN = "https://litterbox.catbox.moe";
 const TMPFILES_ORIGIN = "https://tmpfiles.org";
-const R2_ORIGIN = "https://*.r2.dev";
+const R2_PUBLIC_ORIGIN = "https://*.r2.dev";
+const R2_S3_ORIGIN = "https://*.r2.cloudflarestorage.com";
 
-const MEDIA_ORIGINS = `${FREEPIK_ORIGIN} ${MAGNIFIC_ORIGIN} ${R2_ORIGIN}`;
-const UPLOAD_ORIGINS = `${LITTERBOX_ORIGIN} ${TMPFILES_ORIGIN}`;
+const MEDIA_ORIGINS = `${FREEPIK_ORIGIN} ${MAGNIFIC_ORIGIN} ${R2_PUBLIC_ORIGIN}`;
+const UPLOAD_ORIGINS = `${LITTERBOX_ORIGIN} ${TMPFILES_ORIGIN} ${R2_S3_ORIGIN}`;
 
 /**
  * Static CSP. `'unsafe-inline'` and `'unsafe-eval'` are concessions to
@@ -30,7 +33,9 @@ const csp = [
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' data: blob: ${MEDIA_ORIGINS} ${UPLOAD_ORIGINS}`,
-  `media-src 'self' ${MEDIA_ORIGINS}`,
+  // blob: needed for <video> local preview of the motion reference
+  // file before upload (URL.createObjectURL).
+  `media-src 'self' blob: ${MEDIA_ORIGINS}`,
   `font-src 'self' data:`,
   `connect-src 'self' ${MEDIA_ORIGINS} ${UPLOAD_ORIGINS}`,
   `frame-ancestors 'none'`,
