@@ -27,11 +27,17 @@ import type {
 type EndpointKey = `${KlingMotionVersion}:${KlingMotionTier}`;
 
 /**
- * POST endpoint includes tier (Magnific routes per-tier). GET endpoint
- * drops the tier — same pattern as kling-v3 where POST is per-tier
- * (`kling-v3-{pro|std}`) but GET is on the shared base
- * (`kling-v3/{taskId}`). Tested 2026-05-20: GET với tier suffix trả 404,
- * GET không tier suffix mới đúng.
+ * Magnific routes POST per-tier. GET path is inconsistent between
+ * versions (confirmed via docs.magnific.com 2026-05-20):
+ *
+ *   v2-6 GET: /v1/ai/image-to-video/kling-v2-6/{taskId}
+ *             (single shared endpoint for both std/pro, different
+ *             namespace than POST — image-to-video vs video)
+ *   v3   GET: /v1/ai/video/kling-v3-motion-control-{tier}/{taskId}
+ *             (per-tier, same shape as POST minus the {taskId})
+ *
+ * If Magnific unifies this in the future, simplify GET_PATH_MAP to
+ * one helper. For now the per-key table makes the divergence explicit.
  */
 const POST_ENDPOINT_MAP: Record<EndpointKey, string> = {
   "v2-6:std": "/v1/ai/video/kling-v2-6-motion-control-std",
@@ -40,9 +46,11 @@ const POST_ENDPOINT_MAP: Record<EndpointKey, string> = {
   "v3:pro": "/v1/ai/video/kling-v3-motion-control-pro",
 };
 
-const GET_BASE_MAP: Record<KlingMotionVersion, string> = {
-  "v2-6": "/v1/ai/video/kling-v2-6-motion-control",
-  "v3": "/v1/ai/video/kling-v3-motion-control",
+const GET_BASE_MAP: Record<EndpointKey, string> = {
+  "v2-6:std": "/v1/ai/image-to-video/kling-v2-6",
+  "v2-6:pro": "/v1/ai/image-to-video/kling-v2-6",
+  "v3:std": "/v1/ai/video/kling-v3-motion-control-std",
+  "v3:pro": "/v1/ai/video/kling-v3-motion-control-pro",
 };
 
 /**
@@ -59,10 +67,11 @@ function postEndpointFor(version: KlingMotionVersion, tier: KlingMotionTier): st
   return url;
 }
 
-function getEndpointBase(version: KlingMotionVersion): string {
-  const url = GET_BASE_MAP[version];
+function getEndpointBase(version: KlingMotionVersion, tier: KlingMotionTier): string {
+  const key: EndpointKey = `${version}:${tier}`;
+  const url = GET_BASE_MAP[key];
   if (!url) {
-    throw new Error(`Unknown kling-motion version: ${version}`);
+    throw new Error(`Unknown kling-motion endpoint: ${key}`);
   }
   return url;
 }
@@ -92,7 +101,7 @@ export async function getTask(
 ): Promise<TaskData> {
   const res = await request<FreepikResponse<TaskData>>({
     method: "GET",
-    path: `${getEndpointBase(opts.version)}/${taskId}`,
+    path: `${getEndpointBase(opts.version, opts.tier)}/${taskId}`,
     apiKey: opts.apiKey,
   });
   return res.data;
