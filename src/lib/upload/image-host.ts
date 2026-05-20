@@ -161,15 +161,28 @@ async function uploadToR2ViaPresign(file: File): Promise<string> {
     );
   }
 
-  const putRes = await fetchWithTimeout(presign.uploadUrl, {
-    method: "PUT",
-    body: file,
-    headers: { "content-type": file.type || "application/octet-stream" },
-  });
+  // Distinguish PUT-step failures from presign failures so the customer
+  // and devs can see exactly where the chain broke. CORS-blocked PUTs
+  // surface as "Failed to fetch" with no further detail — surface the
+  // R2 host so the operator can verify CORS rule on that exact endpoint.
+  const uploadHost = (() => {
+    try { return new URL(presign.uploadUrl).host; } catch { return "?"; }
+  })();
+  let putRes: Response;
+  try {
+    putRes = await fetchWithTimeout(presign.uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: { "content-type": file.type || "application/octet-stream" },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`PUT to ${uploadHost} failed: ${msg}`);
+  }
 
   if (!putRes.ok) {
     throw new Error(
-      `r2 PUT HTTP ${putRes.status}: ${await readResponseText(putRes)}`,
+      `PUT to ${uploadHost} HTTP ${putRes.status}: ${await readResponseText(putRes)}`,
     );
   }
 
