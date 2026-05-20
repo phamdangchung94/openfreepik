@@ -40,6 +40,22 @@ export interface TaskParams {
   multiShot?: boolean;
   /** Number of shots when multi-shot. */
   shotCount?: number;
+  /**
+   * Source model — drives preview badge rendering. Optional for back-compat;
+   * older tasks created before this field shipped fall back to legacy
+   * mode/tier inference.
+   */
+  model?: "kling-v3" | "kling-4k" | "kling-motion" | "wan-v27";
+  /** Kling Motion only — character vs video orientation cap (10s vs 30s). */
+  orientation?: "video" | "image";
+  /** Kling Motion only — full tier label like "v2-6-std". */
+  motionTier?: "v2-6-std" | "v2-6-pro" | "v3-std" | "v3-pro";
+  /**
+   * Kling Motion only — public R2 URL of the reference motion video,
+   * preserved so the "Tạo lại" flow can replay the same upload without
+   * re-uploading. Lives at most 120 minutes (separate sweep cron).
+   */
+  motionVideoUrl?: string;
 }
 
 export interface GenerationTask {

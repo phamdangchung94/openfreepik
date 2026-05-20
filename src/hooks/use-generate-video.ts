@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useTaskStore } from "@/store/task-store";
+import { useTaskStore, type TaskParams } from "@/store/task-store";
 import {
   getApiHeaders,
   extractErrorBody,
@@ -92,17 +92,10 @@ export function useGenerateVideo(): UseGenerateVideoResult {
 
       // Build the param snapshot for preview/replay. Each model has a
       // different shape — branch once and pull the relevant fields.
-      let paramsSnapshot: {
-        duration?: string;
-        aspectRatio?: string;
-        audio?: boolean;
-        cfgScale?: number;
-        negativePrompt?: string;
-        multiShot?: boolean;
-        shotCount?: number;
-      };
+      let paramsSnapshot: TaskParams;
       if (payload.model === "kling-v3") {
         paramsSnapshot = {
+          model: "kling-v3",
           duration: payload.params.duration,
           aspectRatio: payload.params.aspect_ratio,
           audio: payload.params.generate_audio,
@@ -113,6 +106,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         };
       } else if (payload.model === "kling-4k") {
         paramsSnapshot = {
+          model: "kling-4k",
           duration: payload.params.duration,
           aspectRatio:
             payload.variant === "t2v" ? payload.params.aspect_ratio : undefined,
@@ -124,22 +118,22 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         };
       } else if (payload.model === "kling-motion") {
         paramsSnapshot = {
+          model: "kling-motion",
           // Motion duration comes from the customer-chosen output_duration
           // (Magnific has no API field). Coerce to string for shared
           // ParametersBlock display logic.
           duration: String(payload.output_duration),
-          // Aspect slot doubles as orientation marker so admin can tell
-          // at a glance whether the customer used video- or image-
-          // anchored motion (caps differ).
-          aspectRatio:
+          orientation:
             payload.params.character_orientation === "image"
-              ? "image-orientation"
-              : "video-orientation",
-          audio: false,
+              ? "image"
+              : "video",
+          motionTier: payload.tier,
+          motionVideoUrl: payload.params.video_url,
           cfgScale: payload.params.cfg_scale,
         };
       } else {
         paramsSnapshot = {
+          model: "wan-v27",
           // WAN duration is integer; coerce to string to share the
           // ParametersBlock display logic (already string-aware).
           duration: payload.params.duration?.toString(),

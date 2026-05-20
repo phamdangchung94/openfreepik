@@ -32,6 +32,8 @@ export function ParametersBlock({ task }: { task: GenerationTask }) {
   const p = task.params;
   const hasParams = !!p;
 
+  const isMotion = p?.model === "kling-motion";
+
   // Inline summary chips for the collapsed row.
   const summary = hasParams ? (
     <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-foreground/80">
@@ -41,13 +43,23 @@ export function ParametersBlock({ task }: { task: GenerationTask }) {
           {p.duration}s
         </span>
       )}
-      {p.aspectRatio && (
+      {/* Motion-only: orientation chip in place of aspect ratio (motion
+          control has no aspect_ratio param — orientation drives the cap). */}
+      {isMotion && p.orientation && (
+        <span className="inline-flex items-center gap-1">
+          <Maximize2 className="size-3 text-muted-foreground" />
+          {p.orientation === "image" ? "Theo ảnh" : "Theo video"}
+        </span>
+      )}
+      {!isMotion && p.aspectRatio && (
         <span className="inline-flex items-center gap-1">
           <Maximize2 className="size-3 text-muted-foreground" />
           {p.aspectRatio}
         </span>
       )}
-      {p.audio !== undefined && (
+      {/* Audio not applicable to motion control — Magnific doesn't
+          generate audio for motion endpoints. Hide instead of "Không audio". */}
+      {!isMotion && p.audio !== undefined && (
         <span className="inline-flex items-center gap-1">
           {p.audio ? (
             <Volume2 className="size-3 text-muted-foreground" />

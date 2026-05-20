@@ -238,12 +238,30 @@ function CompletedState({
           {task.prompt}
         </p>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
-            {task.mode === "t2v" ? "T2V" : "I2V"}
-          </span>
-          <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
-            {task.tier === "4k" ? "4K" : task.tier === "pro" ? "1080p" : "720p"}
-          </span>
+          {task.params?.model === "kling-motion" ? (
+            <>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                Motion {motionTierLabel(task.params.motionTier)}
+              </span>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                {task.params.orientation === "image" ? "Theo ảnh" : "Theo video"}
+              </span>
+              {task.params.duration && (
+                <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                  {task.params.duration}s
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                {task.mode === "t2v" ? "T2V" : "I2V"}
+              </span>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                {task.tier === "4k" ? "4K" : task.tier === "pro" ? "1080p" : "720p"}
+              </span>
+            </>
+          )}
           <span className="ml-auto">
             <UrlCountdown expiresAt={task.videoUrlExpiresAt} />
           </span>
@@ -385,4 +403,20 @@ function ExpiredVideoPanel({
       </p>
     </div>
   );
+}
+
+
+function motionTierLabel(tier: string | undefined): string {
+  switch (tier) {
+    case 'v2-6-std':
+      return '2.6 Std';
+    case 'v2-6-pro':
+      return '2.6 Pro';
+    case 'v3-std':
+      return '3.0 Std';
+    case 'v3-pro':
+      return '3.0 Pro';
+    default:
+      return '';
+  }
 }
