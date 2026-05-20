@@ -22,6 +22,8 @@
  * become unreliable — deferred until traffic justifies it.
  */
 
+import { useAuthStore } from "@/store/auth-store";
+
 const TMPFILES_API = "https://tmpfiles.org/api/v1/upload";
 const LITTERBOX_API = "https://litterbox.catbox.moe/resources/internals/api.php";
 const PRESIGN_API = "/api/upload/presign";
@@ -120,9 +122,20 @@ export async function uploadVideoToHost(file: File): Promise<UploadResult> {
  * goes browser → R2 directly, not through our function.
  */
 async function uploadToR2ViaPresign(file: File): Promise<string> {
+  // Read activation code from the auth store directly — uploadVideoToHost
+  // runs in the browser so .getState() is safe outside React. If empty
+  // (not activated), the route returns 401 and we fall back to litterbox.
+  const bearer = useAuthStore.getState().activationCode;
+  if (!bearer) {
+    throw new Error("not activated — activation code required for R2 upload");
+  }
+
   const presignRes = await fetch(PRESIGN_API, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${bearer}`,
+    },
     body: JSON.stringify({
       filename: file.name,
       contentType: file.type || "application/octet-stream",
