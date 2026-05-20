@@ -188,15 +188,32 @@ export default function HomePage() {
 
   const handleRegenerate = useCallback(
     (task: GenerationTask) => {
+      const motionSnapshot =
+        task.params?.model === "kling-motion"
+          ? {
+              tier: task.params.motionTier,
+              orientation: task.params.orientation,
+              videoUrl: task.params.motionVideoUrl,
+              videoDurationSeconds: task.params.duration
+                ? Number(task.params.duration)
+                : undefined,
+              cfgScale: task.params.cfgScale,
+            }
+          : undefined;
       formRef.current?.loadTask({
         prompt: task.prompt,
         mode: task.mode,
         imageUrl: task.imageUrl,
+        motion: motionSnapshot,
       });
       // Mobile: regenerate populates the form, so jump back to the
       // Form tab so the customer can see/edit before re-submitting.
       setMobileTab("form");
-      toast.info("Đã tải lại — chỉnh prompt và tạo lại");
+      toast.info(
+        motionSnapshot?.videoUrl
+          ? "Đã tải lại — video tham chiếu giữ nguyên, chỉ cần bấm tạo"
+          : "Đã tải lại — chỉnh prompt và tạo lại",
+      );
     },
     [],
   );

@@ -65,6 +65,19 @@ export interface GeneratorFormHandle {
     prompt: string;
     mode: "t2v" | "i2v";
     imageUrl?: string | null;
+    /**
+     * Optional motion-specific state to repopulate. Lets the customer
+     * regenerate a Kling Motion result without re-uploading the
+     * character image + reference video. Source: task.params snapshot
+     * stored at submission time.
+     */
+    motion?: {
+      tier?: "v2-6-std" | "v2-6-pro" | "v3-std" | "v3-pro";
+      orientation?: "video" | "image";
+      videoUrl?: string;
+      videoDurationSeconds?: number;
+      cfgScale?: number;
+    };
   }) => void;
 }
 
@@ -87,6 +100,33 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
       methods.setValue("prompt", task.prompt);
       if (task.mode === "i2v" && task.imageUrl) {
         methods.setValue("start_image_url", task.imageUrl);
+      }
+      // Motion regenerate path: skip the re-upload by reusing the
+      // R2 URL of the previous reference video. Customer can still
+      // swap it out manually via the picker.
+      if (task.motion) {
+        methods.setValue("model", "kling-motion");
+        if (task.motion.tier) {
+          methods.setValue("motion_tier", task.motion.tier);
+        }
+        if (task.motion.orientation) {
+          methods.setValue("motion_orientation", task.motion.orientation);
+        }
+        if (task.motion.videoUrl) {
+          methods.setValue("motion_video_url", task.motion.videoUrl);
+        }
+        if (typeof task.motion.videoDurationSeconds === "number") {
+          methods.setValue(
+            "motion_video_duration",
+            task.motion.videoDurationSeconds,
+          );
+        }
+        if (typeof task.motion.cfgScale === "number") {
+          methods.setValue("cfg_scale", task.motion.cfgScale);
+        }
+        if (task.imageUrl) {
+          methods.setValue("start_image_url", task.imageUrl);
+        }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     },
