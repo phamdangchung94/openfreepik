@@ -63,6 +63,13 @@ function getClient(cfg: R2Config): S3Client {
   cachedClient = new S3Client({
     region: "auto",
     endpoint: `https://${cfg.accountId}.r2.cloudflarestorage.com`,
+    // Path-style addressing: <account>.r2.cloudflarestorage.com/<bucket>/<key>
+    // Virtual-hosted-style (the SDK default) generates URLs like
+    // <bucket>.<account>.r2.cloudflarestorage.com which R2 routes via
+    // wildcard DNS — but presigned URLs from that style fail in some
+    // browsers because the subdomain DNS lookup/TLS cert handling
+    // varies. Forcing path-style avoids the subdomain dance entirely.
+    forcePathStyle: true,
     credentials: {
       accessKeyId: cfg.accessKeyId,
       secretAccessKey: cfg.secretAccessKey,
