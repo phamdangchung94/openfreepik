@@ -26,6 +26,8 @@ vốn theo góc nhìn kỹ thuật).
 | 11 | Magnific webhook receiver | `/api/freepik/webhook` | HMAC verify (Svix-style) → `finalizeUsageOnPoll` | `usage_logs`, `activation_codes` (refund), `freepik_keys` (secret lookup) |
 | 12 | Announcement broadcast | admin: `/api/admin/announcements` CRUD · customer: `/api/announcements` poll (60s) | `AnnouncementBanner` mount + per-device dismiss qua localStorage | `announcements` (migration 0012) |
 | 13 | Public API (`/api/v1/*`) | client gọi `/api/v1/{me,video/*,prompt/improve,tasks/{id}}` với `Authorization: Bearer sk_*` | `requireApiKey` → orchestrator (`preValidated` path) | `api_keys` (migration 0014), `activation_codes`, `usage_logs` |
+| 14 | Customer file upload | form picker → `/api/upload/presign` → browser PUT → R2 `uploads/{image\|video}/` | `lib/upload/image-host.ts` + `lib/storage/r2.ts` (presigned PUT) | — (R2 only, no DB) |
+| 15 | Upload TTL sweep | Vercel cron 15min → `/api/cron/sweep-uploads` | R2 ListObjectsV2 + DeleteObjects prefix `uploads/` age > 120 min | — (R2 only) |
 
 **Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
 Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).

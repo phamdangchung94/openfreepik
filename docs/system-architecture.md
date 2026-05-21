@@ -165,6 +165,14 @@ Four Vercel-managed crons, all bearer-protected by `CRON_SECRET`:
   SET video_url=NULL WHERE video_url_expires_at < now()`. Keeps
   `magnific_video_url` (permanent record). Prevents history hydration
   from re-pushing dead R2 URLs into customers' local stores.
+- **`/api/cron/sweep-uploads`** (every 15min, added 2026-05-21) —
+  deletes objects under R2 prefix `uploads/` with `LastModified`
+  older than 120min (2 hours). Customer-uploaded reference videos +
+  character images live here; Magnific downloads them within seconds
+  of POST so 120min is a generous safety margin for retry/regenerate
+  flows. R2 lifecycle minimum is 1 day so this cron is the only way
+  to enforce a sub-day TTL. Cap 1000 deletes/run (R2 API limit);
+  next run picks up backlog. Logs `UPLOAD_SWEEP_DONE`.
 - **Webhook receiver** (`/api/freepik/webhook`) — Magnific push
   delivery; see the dedicated section below.
 - **Reconcile** (`pnpm admin:reconcile`) — manual sweep, same finalize
@@ -348,17 +356,41 @@ Kling 4K rate derivation: business rule pegs 4K at 2.857142857×
 (=20/7) of the Kling V3 Pro 1080p with-audio rate. `0.392 × 20/7 = 1.12`
 exactly.
 
-Kling Motion durations: 5 / 10 / 15 / 30 seconds. The Magnific API
-has no explicit `duration` request field — output length is implied
-by `character_orientation` (`video`=30s max, `image`=10s max). The
-customer-chosen output_duration flows through the route as a sidecar
-field used only for pricing lookup.
+Kling Motion: **per-second billing với ceiling rounding** (changed
+2026-05-21 from tier-snap). Customer uploads a reference video of
+arbitrary length (1-30s); system bills `ceil(video_duration) × rate`
+clamped by orientation cap (30s video / 10s image). E.g., 13.7s
+reference → 14s billed, not 15s.
+
+Magnific API has no explicit `duration` request field — output length
+is implied by `character_orientation`. Pricing helper
+`calculateMotionCost(endpoint, seconds)` reads any one
+`pricing_rules` row for the endpoint, derives per-second rate as
+`costEur / durationSeconds`, multiplies by `ceil(seconds)`. The
+existing 16 motion rows (4 endpoints × 4 durations) all encode the
+same rate; helper is invariant to which row it picks.
 
 ## Storage
 
-- **Source images (I2V)** — uploaded via `lib/upload/image-host.ts` →
-  Cloudflare R2 → public URL passed to Magnific. Bucket lifecycle
-  expires uploads after 24h.
+- **Customer inputs (images + motion videos)** — uploaded via
+  `lib/upload/image-host.ts` → R2 presigned PUT (browser → R2 direct,
+  bypasses Vercel 4.5MB body limit). Key prefix `uploads/image/{uuid}.{ext}`
+  for images, `uploads/video/{uuid}.{ext}` for videos.
+  - **TTL: 120 min** via cron `/api/cron/sweep-uploads` (15-min
+    interval, deletes objects with `LastModified` > 120 min). Lifecycle
+    rule `uploads-1d-backstop` is a fallback (R2 lifecycle min is 1 day).
+  - **Fallback hosts**: if R2 presign fails (rare — local dev w/o
+    R2 env, R2 outage), falls back to litterbox.catbox.moe → tmpfiles.org.
+    Production rarely hits these.
+  - **CORS**: bucket configured with allowed origins
+    `https://video.chugax.io.vn`, `https://www.video.chugax.io.vn`,
+    `http://localhost:3000`. CSP `connect-src` includes
+    `https://*.r2.cloudflarestorage.com` (S3 API endpoint where
+    presigned PUTs land).
+  - **Reuse on regenerate**: client preserves the uploaded R2 URL on
+    `task.params.motionVideoUrl` + `task.imageUrl`. "Tạo lại" in the
+    preview panel repopulates these into the form — customer doesn't
+    re-upload as long as the URL is still alive (≤120 min).
 - **Generated videos** — first `COMPLETED` poll downloads from
   Magnific and mirrors to R2 (`mirrorRemoteToR2` in `lib/storage/r2.ts`).
   Mirror URL is preferred (`usage_logs.video_url`); original Magnific
@@ -373,13 +405,35 @@ field used only for pricing lookup.
   3. UI `ExpiredVideoPanel` (preview-panel.tsx) renders Clock icon +
      "Video đã hết hạn" message when `status=COMPLETED && !videoUrl`
      — prevents broken `<video>` tag, keeps Tạo lại button enabled
-- **R2 ops endpoints**:
+- **R2 ops endpoints** (admin-auth, admin invokes via DevTools console):
   - `GET /api/admin/r2-audit` — age distribution, lifecycle rule list,
     whole-bucket scan, multipart upload list, verdict (`ok` /
     `stragglers_24-48h` / `broken_>48h`)
   - `POST /api/admin/r2-cleanup?maxAgeHours=N&dryRun=true|false` —
     one-shot delete when lifecycle is broken or admin wants stale
     data gone now. Cap 1000/call, dry-run default.
+- **R2 CLI scripts** (require `CLOUDFLARE_API_TOKEN` +
+  `CLOUDFLARE_ACCOUNT_ID` in `.env.local`, token scoped to Workers
+  R2 Storage:Edit):
+  - `pnpm tsx --env-file=.env.local scripts/r2-quick-audit.ts` — list
+    CORS + lifecycle rules + per-prefix object count / size / age
+    distribution. Doesn't require R2 S3 secrets (uses Cloudflare API).
+  - `pnpm tsx --env-file=.env.local scripts/r2-fix-lifecycle.ts` —
+    PUT lifecycle rules (2 scoped: `videos/` 24h, `uploads/` 1d
+    backstop) + keeps default multipart abort.
+  - `pnpm tsx --env-file=.env.local scripts/r2-cleanup-stale.ts
+    [--live] [--maxAgeHours=N]` — one-off backlog cleanup when
+    lifecycle was misconfigured. Dry-run by default.
+- **Known R2 gotchas** (logged for future debugging):
+  - Lifecycle rule `prefix` field is literal substring match — a
+    leading slash (`/videos`) or space (`" "`) silently breaks the
+    rule (matches 0 objects). Bug hit twice: 2026-05-09 prefix
+    `/videos`, 2026-05-21 prefix `" "`. Both detected via audit
+    showing all objects in `>48h` age bucket.
+  - R2 object list API returns `last_modified` field name (NOT
+    `uploaded` despite what some docs imply). Wrong field name →
+    `Date(undefined) = NaN` → all ages bucket into `else` branch,
+    looks like everything is stale.
 
 ## Security Notes
 

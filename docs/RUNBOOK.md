@@ -31,7 +31,7 @@ All of these are set in Vercel production AND mirrored in `.env.local` for devel
 | `KEY_ENCRYPTION_SECRET` | AES-GCM key for Freepik keys at rest | **All existing Freepik keys decrypt fail** — must re-encrypt every row before swap |
 | `ADMIN_PASSWORD` | Login to `/dashboard` | Active admin sessions still valid until cookie expires (24h) |
 | `ADMIN_SESSION_SECRET` | Cookie session validation | All admin sessions invalidated immediately on rotation |
-| `CRON_SECRET` | Bearer for all `/api/cron/*` routes: `purge` (daily), `sweep-orphan-charges` (15min), `sweep-expired-urls` (6h) | Vercel Cron auto-uses the new value on next scheduled run |
+| `CRON_SECRET` | Bearer for all `/api/cron/*` routes: `purge` (daily), `sweep-orphan-charges` (15min), `sweep-expired-urls` (6h), `sweep-uploads` (15min) | Vercel Cron auto-uses the new value on next scheduled run |
 | `WEBHOOK_BASE_URL` | Optional override for Magnific webhook callback (e.g. custom domain). Falls back to `https://${VERCEL_PROJECT_PRODUCTION_URL}` when `VERCEL_ENV=production`. | None — read fresh on every POST to `/api/freepik/*` |
 | `TELEGRAM_BOT_TOKEN` | Optional. Bot token from @BotFather. When set together with `TELEGRAM_CHAT_ID`, critical events (`ALL_KEYS_EXHAUSTED`, `KEY_AUTO_DEACTIVATED`, `ORPHAN_CHARGE_REFUNDED`, etc.) send a Telegram DM to admin. When unset, alerts are silently no-op (still logged). | None — read fresh on every alert |
 | `TELEGRAM_CHAT_ID` | Optional. Numeric chat id for the bot to message. Get from `https://api.telegram.org/bot<TOKEN>/getUpdates` after `/start`-ing the bot. | None |
@@ -350,6 +350,7 @@ configured (see Setup Telegram alerts below).
 | `CRON_MISCONFIGURED` | HIGH | any cron route | `CRON_SECRET` not set on Vercel — re-add env var + redeploy |
 | `CRON_PARTIAL` | LOW | purge cron | Tomorrow's run will retry; escalate if 3+ days |
 | `EXPIRED_URLS_SWEPT` | INFO | sweep-expired-urls cron | Healthy clean-up; `cleared: N` = dead R2 URLs nulled |
+| `UPLOAD_SWEEP_DONE` | INFO | sweep-uploads cron | Customer uploads (R2 `uploads/*`) cleaned past 120-min TTL; `deleted: N` healthy if matches your traffic |
 | `ORPHAN_SWEEP_STARTED` / `ORPHAN_SWEEP_DONE` / `ORPHAN_SWEEP_CLEAN` | INFO | sweep-orphan-charges cron | Heartbeat; if absent for 1h+, cron stopped running |
 | `ADMIN_IMPERSONATE_CODE` | INFO | impersonate endpoint | Audit; admin took a customer's bearer code |
 | `ADMIN_R2_CLEANUP` | INFO | r2-cleanup endpoint | Audit; admin manually deleted R2 objects |
@@ -505,6 +506,33 @@ Response highlights:
 Dashboard "Bucket Size" metric is **cached and lags** (4-24h after
 bulk changes) — trust this endpoint, not the dashboard.
 
+### Local CLI alternative (no admin login needed)
+
+Three scripts use Cloudflare API directly — handy when admin dashboard
+is down or you want bulk fixes from terminal. Require env:
+
+```bash
+# Add to .env.local (DO NOT commit; .env.local already gitignored)
+CLOUDFLARE_API_TOKEN=<scoped Workers R2 Storage:Edit, 7-day TTL>
+CLOUDFLARE_ACCOUNT_ID=<32-char hex from Cloudflare dashboard sidebar>
+```
+
+Create token at https://dash.cloudflare.com/profile/api-tokens —
+**Custom token** with permission `Account → Workers R2 Storage → Edit`,
+scoped to one account, 7-day TTL.
+
+```bash
+# Audit (read-only): CORS + lifecycle + per-prefix object age distribution
+pnpm tsx --env-file=.env.local scripts/r2-quick-audit.ts
+
+# Fix lifecycle (PUT 3 rules: multipart abort 7d, videos/ 24h, uploads/ 1d)
+pnpm tsx --env-file=.env.local scripts/r2-fix-lifecycle.ts
+
+# Backlog cleanup — dry-run by default; --live to delete
+pnpm tsx --env-file=.env.local scripts/r2-cleanup-stale.ts
+pnpm tsx --env-file=.env.local scripts/r2-cleanup-stale.ts --live --maxAgeHours=24
+```
+
 ### Manual cleanup — `/api/admin/r2-cleanup`
 
 Backstop for when lifecycle is broken or you want stale data gone NOW
@@ -629,12 +657,27 @@ Routes: `/api/freepik/kling-motion/[tier]` (POST) + `/[taskId]` (GET poll).
 
 **Output duration model**: Magnific has no `duration` API field — output
 length is implied by `character_orientation` (`video`=30s cap,
-`image`=10s cap). The customer's chosen `output_duration` (5/10/15/30s)
-flows through the route body for pricing lookup only.
+`image`=10s cap). System auto-detects reference video duration on
+upload (via `<video>.loadedmetadata`), stores in
+`motion_video_duration`, then bills per-second with ceiling rounding
+(updated 2026-05-21). E.g., 13.7s reference → 14s billed × tier rate.
+`calculateMotionCost(endpoint, seconds)` derives per-second rate from
+any pricing row for the endpoint.
 
 **Reference video upload**: 3-30s, MP4/MOV/WEBM/M4V, ≤50MB. Uploaded
-via `uploadVideoToHost` (litterbox.catbox.moe; 24h TTL is fine since
-Magnific consumes the URL within seconds of POST).
+via `uploadVideoToHost` → R2 presigned PUT (`uploads/video/`), 120-min
+TTL via cron `sweep-uploads`. Litterbox is fallback when R2 is down.
+
+**Character image upload**: ≤10MB, JPG/PNG/WebP. Uploaded via
+`uploadImageToHost` → R2 presigned PUT (`uploads/image/`), same TTL.
+Migrated from tmpfiles.org primary 2026-05-21 (tmpfiles CORS blocked
+browser image loading + frequent VN outages).
+
+**Regenerate UX**: clicking "Tạo lại" on a motion task preserves
+`task.params.motionVideoUrl` + `task.imageUrl` (both R2 URLs) → form
+auto-populates → customer hits Tạo without re-uploading, as long as
+the URLs are still alive (≤120 min). Toast message differentiates
+motion regenerate ("video tham chiếu giữ nguyên") vs T2V/I2V.
 
 **To revert WAN visibility**: uncomment the `wan-v27` option in
 `src/components/generator/model-picker.tsx` + the `<WanSection />` in
