@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { freepikKeys, usageLogs } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
+import { encrypt } from "@/lib/crypto/aes-gcm";
 import { log } from "@/lib/logger";
 
 const patchSchema = z.object({
@@ -23,6 +24,14 @@ const patchSchema = z.object({
   usedEur: z.number().min(0).optional(),
   /** Per-key cap on simultaneous in-flight generations. Default 8. */
   maxConcurrent: z.number().int().min(1).max(64).optional(),
+  /**
+   * Magnific webhook secret for this key. Set to a non-empty string to
+   * configure (server encrypts AES-256-GCM before storing) — webhook
+   * route then HMAC-verifies inbound deliveries against this secret.
+   * Set to null to remove (key falls back to polling-only finalization).
+   * Set to undefined (omit) to leave unchanged.
+   */
+  webhookSecret: z.union([z.string().min(8).max(256), z.null()]).optional(),
 });
 
 /** PATCH /api/admin/keys/[id] — toggle active, edit label/notes, adjust budget + spend + concurrency. */
@@ -53,6 +62,20 @@ export async function PATCH(
     updates.usedEur = parsed.data.usedEur.toFixed(2);
   if (parsed.data.maxConcurrent !== undefined)
     updates.maxConcurrent = parsed.data.maxConcurrent;
+  // Webhook secret — encrypt on write, never echo plaintext back.
+  // null clears it (key falls back to polling-only finalization).
+  if (parsed.data.webhookSecret !== undefined) {
+    updates.webhookSecretEncrypted =
+      parsed.data.webhookSecret === null
+        ? null
+        : await encrypt(parsed.data.webhookSecret);
+    log.info(
+      parsed.data.webhookSecret === null
+        ? "KEY_WEBHOOK_SECRET_CLEARED"
+        : "KEY_WEBHOOK_SECRET_SET",
+      { id },
+    );
+  }
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json(

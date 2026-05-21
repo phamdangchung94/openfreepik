@@ -568,6 +568,8 @@ function EditKeyDialog({
   const [maxConcurrent, setMaxConcurrent] = useState(
     String(row.maxConcurrent ?? 8),
   );
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Reset form ONLY at the open->close->open transition. The earlier
@@ -584,6 +586,8 @@ function EditKeyDialog({
       setAssignedEur(row.assignedEur);
       setUsedEur(row.usedEur);
       setMaxConcurrent(String(row.maxConcurrent ?? 8));
+      setWebhookSecret("");
+      setClearWebhookSecret(false);
     }
     setOpen(next);
   }
@@ -604,6 +608,13 @@ function EditKeyDialog({
       // racing with the orchestrator's recordKeyCost increments.
       if (Number(usedEur) !== Number(row.usedEur)) {
         body.usedEur = Number(usedEur);
+      }
+      // Webhook secret: only patch if admin explicitly set or cleared.
+      // Empty input + clear flag unset = leave existing secret alone.
+      if (clearWebhookSecret) {
+        body.webhookSecret = null;
+      } else if (webhookSecret.trim().length >= 8) {
+        body.webhookSecret = webhookSecret.trim();
       }
       const res = await fetch(`/api/admin/keys/${row.id}`, {
         method: "PATCH",
@@ -715,6 +726,57 @@ function EditKeyDialog({
             <p className="text-[10px] text-muted-foreground">
               Cap song song trên key này — khi đạt cap, request mới sẽ vào
               hàng đợi cho tới khi có slot trống.
+            </p>
+          </div>
+
+          <div className="space-y-1.5 rounded-md border bg-muted/20 p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-semibold">
+                Webhook secret (Magnific)
+              </Label>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  row.hasWebhookSecret
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                {row.hasWebhookSecret ? "Đã có" : "Chưa có"}
+              </span>
+            </div>
+            <Input
+              type="password"
+              placeholder={
+                row.hasWebhookSecret
+                  ? "Để trống = giữ nguyên · Nhập mới = thay thế"
+                  : "Paste webhook secret từ Magnific dashboard"
+              }
+              value={webhookSecret}
+              onChange={(e) => {
+                setWebhookSecret(e.target.value);
+                setClearWebhookSecret(false);
+              }}
+              autoComplete="off"
+              disabled={clearWebhookSecret}
+            />
+            {row.hasWebhookSecret && (
+              <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={clearWebhookSecret}
+                  onChange={(e) => {
+                    setClearWebhookSecret(e.target.checked);
+                    if (e.target.checked) setWebhookSecret("");
+                  }}
+                />
+                Xoá secret hiện có (key sẽ fallback sang polling)
+              </label>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              Server encrypt AES-256-GCM trước khi lưu. Webhook đến từ
+              Magnific được HMAC-verify với secret này. Thiếu secret
+              không ảnh hưởng customer (polling cover) nhưng tốn quota
+              poll.
             </p>
           </div>
 
