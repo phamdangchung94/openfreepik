@@ -14,6 +14,8 @@
  *   pnpm tsx --env-file=.env.local scripts/r2-cleanup-stale.ts --live --maxAgeHours=24
  */
 
+export {}; // ensure ES module — avoids global-scope const collisions with sibling scripts
+
 const cfToken = process.env.CLOUDFLARE_API_TOKEN;
 const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
 const BUCKET = "openfreepik";
@@ -102,7 +104,7 @@ async function main() {
     const sizeMB = matches.reduce((s, o) => s + o.size, 0) / 1_048_576;
     totalSizeMB += sizeMB;
     console.log(`  scanned: ${objects.length}, stale: ${matches.length}, sizeMB: ${sizeMB.toFixed(2)}`);
-    if (matches[0]) console.log(`  oldest: ${matches[0].key} (${matches[0].uploaded})`);
+    if (matches[0]) console.log(`  oldest: ${matches[0].key} (${matches[0].last_modified})`);
 
     if (!isLive) continue;
 

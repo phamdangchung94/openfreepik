@@ -12,6 +12,8 @@
  * Run: pnpm tsx --env-file=.env.local scripts/r2-fix-lifecycle.ts
  */
 
+export {}; // ensure ES module — avoids global-scope const collisions with sibling scripts
+
 const cfToken = process.env.CLOUDFLARE_API_TOKEN;
 const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
 const BUCKET = "openfreepik";

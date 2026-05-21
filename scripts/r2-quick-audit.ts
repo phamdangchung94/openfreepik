@@ -7,6 +7,8 @@
  *   CLOUDFLARE_ACCOUNT_ID    — 32-char hex account id
  */
 
+export {}; // ensure ES module — avoids global-scope const collisions with sibling scripts
+
 const cfToken = process.env.CLOUDFLARE_API_TOKEN;
 const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
 
@@ -116,8 +118,8 @@ function summarize(objects: R2Object[]): {
     else if (ageH <= 24) ageBuckets["2-24h"]!++;
     else if (ageH <= 48) ageBuckets["24-48h"]!++;
     else ageBuckets[">48h"]!++;
-    if (!oldest || ts < new Date(oldest.uploaded).getTime()) oldest = o;
-    if (!newest || ts > new Date(newest.uploaded).getTime()) newest = o;
+    if (!oldest || ts < new Date(oldest.last_modified).getTime()) oldest = o;
+    if (!newest || ts > new Date(newest.last_modified).getTime()) newest = o;
     const top = o.key.split("/")[0] + "/";
     samplesByPrefix[top] = (samplesByPrefix[top] ?? 0) + 1;
   }
