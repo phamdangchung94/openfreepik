@@ -11,16 +11,21 @@ import { logAndAlert } from "@/lib/alerts/telegram";
  * Header: Authorization: Bearer <CRON_SECRET>
  *
  * Detects `usage_logs` rows that have been stuck in `status='pending'`
- * for over 10 minutes — these are charges that the orchestrator
+ * for over 15 minutes — these are charges that the orchestrator
  * committed (`CHARGE_COMMITTED`) but never observed a terminal poll or
  * webhook response. The customer was charged; the work either never
  * happened or completed without our knowing. Refund + alert.
  *
- * Why 10 minutes:
+ * Why 15 minutes (bumped 2026-05-22 from 10):
  *   - Normal Kling 3 task: 20-60s end-to-end (POST → COMPLETED).
  *   - Slow 4K / multi-shot: 2-5min worst case.
  *   - Webhook delivery + retry budget: ~3min.
- *   So 10min is safely beyond the legitimate completion window.
+ *   - Magnific webhook delay observed up to 10min in burst conditions
+ *     (when their queue is hot). Old 10-min cutoff fired the refund
+ *     before the legitimate webhook arrived → 1+ task/day got
+ *     double-finalized (refund issued, then COMPLETED video arrived).
+ *     Bumping to 15min adds slack and aligns with the 15-min cron
+ *     cadence (1 chance to catch tasks within 15-30min window).
  *
  * Why every 15min (not realtime):
  *   - Orphans are rare; we don't need sub-minute detection.
@@ -40,7 +45,7 @@ import { logAndAlert } from "@/lib/alerts/telegram";
  * `CHARGE_INITIATED` / `CHARGE_COMMITTED` events.
  */
 
-const ORPHAN_AGE_MINUTES = 10;
+const ORPHAN_AGE_MINUTES = 15;
 // Don't refund more than this in a single sweep — protects against
 // runaway logic if the DB clock is off or status flag misses. If a
 // sweep ever hits this cap admin gets a critical alert.
