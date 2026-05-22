@@ -16,6 +16,14 @@ const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per Magnific docs
 
 /**
+ * Named slots cho identity lock. Magnific docs khuyến nghị 4-angle
+ * workflow (front + 3/4 trái + 3/4 phải + back) — em đặt label
+ * tương ứng cho slot ref 1-3. Customer vẫn upload free-form ảnh nào
+ * cũng được, label chỉ là gợi ý UX.
+ */
+const REFERENCE_SLOT_LABELS = ["3/4 Trái", "3/4 Phải", "Sau (Back)"];
+
+/**
  * Omni Elements — character/object identity lock. Customer uploads
  * 1-6 elements, each with a frontal image (required) + optional 3
  * extra reference angles. References as `@Element1` … `@Element6`
@@ -97,8 +105,21 @@ export function OmniElementsPicker() {
       </div>
       <p className="text-[10px] text-muted-foreground">
         Tham chiếu trong prompt bằng <Code>@Element1</Code> ...{" "}
-        <Code>@Element{fields.length}</Code>. Mỗi element cần ít nhất 1 ảnh
-        (frontal hoặc reference angles).
+        <Code>@Element{fields.length}</Code>.
+      </p>
+      <p className="text-[10px] text-amber-600 dark:text-amber-400">
+        ⚠️ <strong>Quan trọng</strong>: Magnific yêu cầu <strong>đủ 4 góc</strong>{" "}
+        cho mỗi element để identity-lock hoạt động (frontal + 3/4 trái +
+        3/4 phải + sau). Thiếu góc → nhân vật sẽ &ldquo;drift&rdquo;
+        (đổi quần áo/tóc/mặt giữa các frame). Source:{" "}
+        <a
+          href="https://invideo.io/blog/kling-omni-elements/"
+          target="_blank"
+          rel="noopener"
+          className="underline"
+        >
+          Kling Omni Elements guide
+        </a>.
       </p>
       <div className="space-y-2">
         {fields.map((f, i) => (
@@ -141,12 +162,31 @@ function ElementCard({
     setRefs(refs.filter((_, i) => i !== at));
   }
 
+  const totalImages = (frontal ? 1 : 0) + refs.filter(Boolean).length;
+  // Magnific recommends 4 angles for identity lock; warn if under.
+  const progressColor =
+    totalImages >= 4
+      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+      : totalImages >= 2
+        ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+        : "bg-destructive/15 text-destructive";
+
   return (
     <div className="rounded-md border bg-background p-2">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-          @Element{index + 1}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            @Element{index + 1}
+          </span>
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              progressColor,
+            )}
+          >
+            {totalImages}/4 góc{totalImages >= 4 ? " ✓" : ""}
+          </span>
+        </div>
         <Button
           type="button"
           variant="ghost"
@@ -171,32 +211,38 @@ function ElementCard({
           </p>
         </div>
         <div className="flex flex-1 flex-wrap gap-1.5">
-          {refs.map((url, i) => (
-            <ImageSlot
-              key={i}
-              label={`Ref ${i + 1}`}
-              url={url}
-              onChange={(next) => {
-                if (next) {
-                  // Replace existing URL at index i
-                  const newRefs = [...refs];
-                  newRefs[i] = next;
-                  setRefs(newRefs);
-                } else {
-                  removeRef(i);
-                }
-              }}
-            />
-          ))}
-          {refs.length < MAX_REFERENCE_IMAGES_PER_ELEMENT && (
-            <ImageSlot
-              label={`+ Ref ${refs.length + 1}`}
-              url=""
-              onChange={(next) => next && addRefUrl(next)}
-            />
-          )}
+          {REFERENCE_SLOT_LABELS.map((label, i) => {
+            const url = refs[i] ?? "";
+            return (
+              <div key={i} className="space-y-0.5">
+                <ImageSlot
+                  label={label}
+                  url={url}
+                  onChange={(next) => {
+                    if (next) {
+                      const newRefs = [...refs];
+                      newRefs[i] = next;
+                      setRefs(newRefs);
+                    } else {
+                      removeRef(i);
+                    }
+                  }}
+                />
+                <p className="text-center text-[8px] text-muted-foreground/70">
+                  {label}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
+      {totalImages > 0 && totalImages < 4 && (
+        <p className="mt-2 text-[10px] text-amber-600 dark:text-amber-400">
+          ⚠️ Cần đủ <strong>4 góc</strong> (frontal + 3/4 trái + 3/4 phải + sau) để
+          Magnific lock identity. Thiếu góc → nhân vật &ldquo;drift&rdquo;
+          (đổi quần áo/tóc giữa frame).
+        </p>
+      )}
     </div>
   );
 }
