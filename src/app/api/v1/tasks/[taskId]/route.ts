@@ -4,6 +4,7 @@ import { freepik } from "@/lib/freepik";
 import { authedFreepikCall } from "@/lib/freepik/orchestrator";
 import { finalizeUsageOnPoll } from "@/lib/freepik/orchestrator-helpers";
 import { parseEndpointSlug } from "@/lib/freepik/kling-motion";
+import { parseEndpointSlug as parseOmniSlug } from "@/lib/freepik/kling-omni";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
 import { db } from "@/lib/db/client";
@@ -228,6 +229,14 @@ function upstreamGetterFor(
           freepik.klingMotion.getTask(taskId, {
             version: motion.version,
             tier: motion.tier,
+            apiKey,
+          });
+      }
+      const omni = parseOmniSlug(endpoint);
+      if (omni) {
+        return (apiKey) =>
+          freepik.klingOmni.getTask(taskId, {
+            mode: omni.mode,
             apiKey,
           });
       }

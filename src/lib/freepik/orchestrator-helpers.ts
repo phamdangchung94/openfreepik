@@ -23,6 +23,10 @@ export interface LogUsageOpts {
     | "kling-motion-v2-6-pro"
     | "kling-motion-v3-std"
     | "kling-motion-v3-pro"
+    | "kling-omni-std-video"
+    | "kling-omni-pro-video"
+    | "kling-omni-std-reference"
+    | "kling-omni-pro-reference"
     | "improve-prompt";
   tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;

@@ -10,6 +10,7 @@ import * as klingV3 from "./kling-v3";
 import * as kling4k from "./kling-4k";
 import * as wanV27 from "./wan-v27";
 import * as klingMotion from "./kling-motion";
+import * as klingOmni from "./kling-omni";
 import * as improvePrompt from "./improve-prompt";
 
 export const freepik = {
@@ -17,6 +18,7 @@ export const freepik = {
   kling4k,
   wanV27,
   klingMotion,
+  klingOmni,
   improvePrompt,
 } as const;
 
@@ -46,6 +48,12 @@ export type {
   KlingMotionTier,
   KlingMotionOrientation,
   KlingMotionGenerateParams,
+  KlingOmniTier,
+  KlingOmniMode,
+  KlingOmniAspectRatio,
+  KlingOmniDuration,
+  KlingOmniElement,
+  KlingOmniGenerateParams,
   ImprovePromptType,
   ImprovePromptParams,
 } from "./types";

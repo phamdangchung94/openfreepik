@@ -203,3 +203,43 @@ export async function calculateMotionCost(
   const billed = Math.max(1, Math.ceil(exactSeconds));
   return billed * ratePerSec;
 }
+
+/**
+ * Kling 3 Omni per-second pricing — same shape as motion but audio
+ * matters (Magnific charges audio variant ~1.5x base). Reads a single
+ * pricing row matching (endpoint, with_audio) to derive per-second
+ * rate, then multiplies by `ceil(exactSeconds)`.
+ *
+ * Endpoint slug format: `kling-omni-{tier}-{mode}` (e.g.
+ * `kling-omni-std-video`, `kling-omni-pro-reference`).
+ *
+ * Throws PricingNotFoundError if no row exists for the (endpoint,
+ * audio) pair — admin needs to seed both audio + no-audio rows.
+ */
+export async function calculateOmniCost(
+  endpoint: string,
+  exactSeconds: number,
+  withAudio: boolean,
+): Promise<number> {
+  const rows = await db
+    .select()
+    .from(pricingRules)
+    .where(
+      and(
+        eq(pricingRules.endpoint, endpoint),
+        eq(pricingRules.withAudio, withAudio),
+        isNotNull(pricingRules.durationSeconds),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row || row.durationSeconds == null || row.durationSeconds <= 0) {
+    throw new PricingNotFoundError(
+      `No pricing rule found for omni endpoint=${endpoint} withAudio=${withAudio}`,
+    );
+  }
+  const ratePerSec = Number(row.costEur) / row.durationSeconds;
+  const billed = Math.max(1, Math.ceil(exactSeconds));
+  return billed * ratePerSec;
+}

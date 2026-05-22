@@ -182,6 +182,63 @@ export interface KlingMotionGenerateParams {
   webhook_url?: string;
 }
 
+// --------------- Kling 3 Omni ---------------
+//
+// Multi-modal Kling V3 with 3 input modes sharing the same model:
+//   - T2V: prompt only
+//   - I2V: start_image_url (+ optional end_image_url)
+//   - V2V: video_url (reference-to-video, ref in prompt as @Video1)
+//
+// 4 POST endpoints (2 tiers × 2 namespaces):
+//   POST /v1/ai/video/kling-v3-omni-{std|pro}            T2V + I2V
+//   POST /v1/ai/reference-to-video/kling-v3-omni-{std|pro} V2V
+//
+// 2 GET endpoints (1 per namespace, no tier):
+//   GET /v1/ai/video/kling-v3-omni/{taskId}
+//   GET /v1/ai/reference-to-video/kling-v3-omni/{taskId}
+//
+// Same body shape across modes; absent fields = mode signal:
+//   - video_url present → V2V (must POST to reference-to-video namespace)
+//   - image_url/start_image_url present → I2V
+//   - else → T2V
+
+export type KlingOmniTier = "std" | "pro";
+export type KlingOmniMode = "video" | "reference";
+export type KlingOmniAspectRatio = "auto" | "16:9" | "9:16" | "1:1";
+export type KlingOmniDuration =
+  | "3" | "4" | "5" | "6" | "7" | "8"
+  | "9" | "10" | "11" | "12" | "13" | "14" | "15";
+
+export interface KlingOmniElement {
+  /** Front-facing reference image (preferred for identity lock). */
+  frontal_image_url?: string;
+  /** Additional angles for character/object consistency. */
+  reference_image_urls?: string[];
+}
+
+export interface KlingOmniGenerateParams {
+  prompt?: string;
+  /** Multi-shot — up to 6 sequential shot prompts. */
+  multi_prompt?: string[];
+  shot_type?: "customize";
+  /** I2V start frame. */
+  image_url?: string;
+  start_image_url?: string;
+  end_image_url?: string;
+  /** Style guidance images — reference as @Image1..@Image4 in prompt. */
+  image_urls?: string[];
+  /** Character/object lock — reference as @Element1..@Element6 in prompt. */
+  elements?: KlingOmniElement[];
+  /** V2V reference video (only used by reference-to-video namespace). */
+  video_url?: string;
+  generate_audio?: boolean;
+  aspect_ratio?: KlingOmniAspectRatio;
+  duration?: KlingOmniDuration;
+  cfg_scale?: number;
+  negative_prompt?: string;
+  webhook_url?: string;
+}
+
 // --------------- Improve Prompt ---------------
 
 export type ImprovePromptType = "image" | "video";

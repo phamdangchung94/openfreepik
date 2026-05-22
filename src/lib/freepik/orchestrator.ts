@@ -62,6 +62,10 @@ export interface OrchestrateOptions<T> {
     | "kling-motion-v2-6-pro"
     | "kling-motion-v3-std"
     | "kling-motion-v3-pro"
+    | "kling-omni-std-video"
+    | "kling-omni-pro-video"
+    | "kling-omni-std-reference"
+    | "kling-omni-pro-reference"
     | "improve-prompt";
   costEur: number;
   /** Persisted to usage_logs for filtering — e.g. "pro"/"std" */
