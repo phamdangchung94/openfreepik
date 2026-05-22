@@ -16,7 +16,7 @@ import {
 import { getWebhookUrl } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
-const WAN_V27_RATE_LIMIT = 3;
+const WAN_V27_RATE_LIMIT = 10;
 const WAN_V27_RATE_WINDOW_SEC = 60;
 
 /**

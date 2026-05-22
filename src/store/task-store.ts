@@ -170,7 +170,9 @@ export const useTaskStore = create<TaskState>()(
       activeTaskId: null,
 
       queue: [],
-      concurrency: 3,
+      // 2026-05-22 raised 3 → 6 cùng đợt với POST rate 3→10/min +
+      // poll semaphore 5→10. Customer batch dispatch nhanh hơn ~2×.
+      concurrency: 6,
       isProcessing: false,
       autoEnhance: false,
 

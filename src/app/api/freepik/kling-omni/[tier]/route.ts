@@ -35,7 +35,7 @@ import { errFields, log } from "@/lib/logger";
  * Customer-chosen `duration` (3-15s string enum) drives billing.
  */
 
-const RATE_LIMIT = 3;
+const RATE_LIMIT = 10;
 const RATE_WINDOW_SEC = 60;
 
 export async function POST(

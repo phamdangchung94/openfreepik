@@ -16,7 +16,7 @@ import {
 import { getWebhookUrl } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
-const RATE_LIMIT = 3;
+const RATE_LIMIT = 10;
 const RATE_WINDOW_SEC = 60;
 
 /**
