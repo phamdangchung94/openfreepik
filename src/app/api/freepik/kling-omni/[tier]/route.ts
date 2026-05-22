@@ -134,6 +134,23 @@ export async function POST(
     ? { ...omniParams, webhook_url: webhookUrl }
     : omniParams;
 
+  // TEMP DIAG (2026-05-22): capture outbound body to debug Elements
+  // not being applied. Show element count + sample frontal URL host.
+  log.info("OMNI_POST_DEBUG_ELEMENTS", {
+    slug,
+    hasElements: !!omniParams.elements,
+    elementCount: omniParams.elements?.length ?? 0,
+    firstElement: omniParams.elements?.[0]
+      ? {
+          frontal: omniParams.elements[0].frontal_image_url
+            ? new URL(omniParams.elements[0].frontal_image_url).host
+            : null,
+          refCount: omniParams.elements[0].reference_image_urls?.length ?? 0,
+        }
+      : null,
+    prompt: omniParams.prompt?.slice(0, 100),
+  });
+
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
     preValidated: validation,
