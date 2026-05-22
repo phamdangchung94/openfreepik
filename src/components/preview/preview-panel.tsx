@@ -267,6 +267,11 @@ function CompletedState({
                   Audio
                 </span>
               )}
+              {task.params.omniElements && task.params.omniElements.length > 0 && (
+                <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                  {task.params.omniElements.length} element{task.params.omniElements.length > 1 ? "s" : ""}
+                </span>
+              )}
             </>
           ) : (
             <>

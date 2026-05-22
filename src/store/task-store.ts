@@ -65,6 +65,15 @@ export interface TaskParams {
   omniTier?: "omni-std" | "omni-pro" | "omni-ref-std" | "omni-ref-pro";
   /** Kling Omni V2V only — reference video R2 URL for regenerate. */
   omniVideoUrl?: string;
+  /**
+   * Kling Omni elements preserved for "Tạo lại". Each element gets
+   * frontal + optional reference images. URLs live ≤120 min — after
+   * that regenerate falls back to empty.
+   */
+  omniElements?: Array<{
+    frontal_image_url?: string;
+    reference_image_urls?: string[];
+  }>;
 }
 
 export interface GenerationTask {

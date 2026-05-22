@@ -107,6 +107,31 @@ export function toKlingOmniParams(v: GeneratorFormValues): {
     params.start_image_url = v.start_image_url.trim();
   }
 
+  // Elements: prune empty cards + clean each element to drop empty
+  // URLs. Backend Zod schema would accept either way but Magnific is
+  // stricter — empty strings in elements[*].frontal_image_url cause
+  // silent failures (similar to Std SKU issue).
+  if (v.omni_elements.length > 0) {
+    const cleaned = v.omni_elements
+      .map((el) => {
+        const frontal = el.frontal_image_url.trim();
+        const refs = el.reference_image_urls
+          .map((u) => u.trim())
+          .filter((u) => u.length > 0);
+        return {
+          ...(frontal ? { frontal_image_url: frontal } : {}),
+          ...(refs.length > 0 ? { reference_image_urls: refs } : {}),
+        };
+      })
+      .filter(
+        (el) =>
+          "frontal_image_url" in el || "reference_image_urls" in el,
+      );
+    if (cleaned.length > 0) {
+      params.elements = cleaned;
+    }
+  }
+
   const routeTier =
     v.omni_mode === "reference"
       ? v.omni_tier === "pro"

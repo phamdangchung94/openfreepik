@@ -46,6 +46,7 @@ import { OmniMultiShot } from "./omni-multi-shot";
 import { OmniAspectRatioPicker } from "./omni-aspect-ratio-picker";
 import { OmniDurationPicker } from "./omni-duration-picker";
 import { OmniAudioSwitch } from "./omni-audio-switch";
+import { OmniElementsPicker } from "./omni-elements-picker";
 import { MotionOrientationToggle } from "./motion-orientation-toggle";
 import { MotionOutputDurationPicker } from "./motion-output-duration-picker";
 import type { GeneratePayload } from "@/hooks/use-generate-video";
@@ -85,6 +86,22 @@ export interface GeneratorFormHandle {
       videoUrl?: string;
       videoDurationSeconds?: number;
       cfgScale?: number;
+    };
+    /**
+     * Optional omni-specific state to repopulate. Lets the customer
+     * regenerate a Kling Omni result without re-uploading the video
+     * reference + character elements.
+     */
+    omni?: {
+      tier?: "omni-std" | "omni-pro" | "omni-ref-std" | "omni-ref-pro";
+      videoUrl?: string;
+      audio?: boolean;
+      duration?: string;
+      aspectRatio?: string;
+      elements?: Array<{
+        frontal_image_url?: string;
+        reference_image_urls?: string[];
+      }>;
     };
   }) => void;
 }
@@ -131,6 +148,49 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
         }
         if (typeof task.motion.cfgScale === "number") {
           methods.setValue("cfg_scale", task.motion.cfgScale);
+        }
+        if (task.imageUrl) {
+          methods.setValue("start_image_url", task.imageUrl);
+        }
+      }
+      // Omni regenerate path: reuse video URL + elements (R2 URLs live
+      // ≤120 min). Customer can swap or add new elements via picker.
+      if (task.omni) {
+        methods.setValue("model", "kling-omni");
+        if (task.omni.tier) {
+          // Map full route slug back to (mode, tier) form fields.
+          const t = task.omni.tier;
+          const mode = t.startsWith("omni-ref-") ? "reference" : "video";
+          const tierShort = t.endsWith("-pro") ? "pro" : "std";
+          methods.setValue("omni_mode", mode);
+          methods.setValue("omni_tier", tierShort);
+        }
+        if (task.omni.videoUrl) {
+          methods.setValue("omni_video_url", task.omni.videoUrl);
+        }
+        if (typeof task.omni.audio === "boolean") {
+          methods.setValue("omni_audio", task.omni.audio);
+        }
+        if (task.omni.duration) {
+          methods.setValue(
+            "omni_duration",
+            task.omni.duration as "5",
+          );
+        }
+        if (task.omni.aspectRatio) {
+          methods.setValue(
+            "omni_aspect_ratio",
+            task.omni.aspectRatio as "16:9",
+          );
+        }
+        if (task.omni.elements && task.omni.elements.length > 0) {
+          methods.setValue(
+            "omni_elements",
+            task.omni.elements.map((el) => ({
+              frontal_image_url: el.frontal_image_url ?? "",
+              reference_image_urls: el.reference_image_urls ?? [],
+            })),
+          );
         }
         if (task.imageUrl) {
           methods.setValue("start_image_url", task.imageUrl);
@@ -306,6 +366,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                   />
                 )}
                 {omniInputIsV2v && <OmniVideoPicker />}
+                <OmniElementsPicker />
                 <PromptField improveButton={improveButton} />
                 {omniInputIsT2v && <OmniMultiShot />}
               </>

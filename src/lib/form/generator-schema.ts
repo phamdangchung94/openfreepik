@@ -138,6 +138,22 @@ export const generatorFormSchema = z
       .array(z.object({ prompt: z.string().max(2500).default("") }))
       .max(6)
       .default([]),
+    /**
+     * Omni Elements — character/object identity lock. Each element gets
+     * a frontal image (primary identity ref) + optional additional
+     * angle images (up to 3). Customer references in prompt as
+     * `@Element1`, `@Element2`, ... `@Element6`. Magnific applies the
+     * identity across all generated frames.
+     */
+    omni_elements: z
+      .array(
+        z.object({
+          frontal_image_url: z.string().default(""),
+          reference_image_urls: z.array(z.string()).default([]),
+        }),
+      )
+      .max(6)
+      .default([]),
   })
   .superRefine((data, ctx) => {
     // Kling Motion — needs both character image + reference video,
@@ -167,6 +183,20 @@ export const generatorFormSchema = z
     // Kling Omni — mode-aware required fields. Server route validates
     // again via validateModeFields() but client checks save a roundtrip.
     if (data.model === "kling-omni") {
+      // Validate elements — each must have at least 1 image. Empty
+      // elements are pruned at payload-build time, but flag user-visible
+      // half-filled cards so the customer knows they did partial work.
+      data.omni_elements.forEach((el, i) => {
+        const hasFrontal = el.frontal_image_url.trim().length > 0;
+        const hasRef = el.reference_image_urls.some((u) => u.trim().length > 0);
+        if (!hasFrontal && !hasRef) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Element ${i + 1}: cần ít nhất 1 ảnh (frontal hoặc reference).`,
+            path: ["omni_elements", i, "frontal_image_url"],
+          });
+        }
+      });
       if (data.omni_mode === "reference") {
         if (!data.omni_video_url.trim()) {
           ctx.addIssue({

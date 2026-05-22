@@ -150,6 +150,7 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           shotCount: payload.params.multi_prompt?.length,
           omniTier: payload.tier,
           omniVideoUrl: payload.params.video_url,
+          omniElements: payload.params.elements,
         };
       } else {
         paramsSnapshot = {

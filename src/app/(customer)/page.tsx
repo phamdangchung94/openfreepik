@@ -200,19 +200,36 @@ export default function HomePage() {
               cfgScale: task.params.cfgScale,
             }
           : undefined;
+      const omniSnapshot =
+        task.params?.model === "kling-omni"
+          ? {
+              tier: task.params.omniTier,
+              videoUrl: task.params.omniVideoUrl,
+              audio: task.params.audio,
+              duration: task.params.duration,
+              aspectRatio: task.params.aspectRatio,
+              elements: task.params.omniElements,
+            }
+          : undefined;
       formRef.current?.loadTask({
         prompt: task.prompt,
         mode: task.mode,
         imageUrl: task.imageUrl,
         motion: motionSnapshot,
+        omni: omniSnapshot,
       });
       // Mobile: regenerate populates the form, so jump back to the
       // Form tab so the customer can see/edit before re-submitting.
       setMobileTab("form");
+      const elementCount = omniSnapshot?.elements?.length ?? 0;
       toast.info(
         motionSnapshot?.videoUrl
           ? "Đã tải lại — video tham chiếu giữ nguyên, chỉ cần bấm tạo"
-          : "Đã tải lại — chỉnh prompt và tạo lại",
+          : omniSnapshot
+            ? elementCount > 0
+              ? `Đã tải lại — ${elementCount} element giữ nguyên, chỉ cần bấm tạo`
+              : "Đã tải lại — chỉnh prompt và tạo lại"
+            : "Đã tải lại — chỉnh prompt và tạo lại",
       );
     },
     [],

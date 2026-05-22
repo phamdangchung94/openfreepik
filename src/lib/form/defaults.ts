@@ -39,4 +39,5 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   omni_aspect_ratio: "16:9",
   omni_multi_shot: false,
   omni_multi_prompt: [],
+  omni_elements: [],
 };
