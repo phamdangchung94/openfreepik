@@ -31,7 +31,7 @@ import { errFields, log } from "@/lib/logger";
  * Poll the task via GET /api/v1/tasks/{task_id}.
  */
 
-const RATE_LIMIT_DEFAULT = 10;
+const RATE_LIMIT_DEFAULT = 30;
 const RATE_WINDOW_SEC = 60;
 
 export async function POST(request: Request) {

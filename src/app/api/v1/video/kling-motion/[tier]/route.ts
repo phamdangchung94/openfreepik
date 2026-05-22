@@ -42,7 +42,7 @@ import { errFields, log } from "@/lib/logger";
  * Response: { ok: true, task_id, balance }
  */
 
-const RATE_LIMIT_DEFAULT = 10;
+const RATE_LIMIT_DEFAULT = 30;
 const RATE_WINDOW_SEC = 60;
 
 export async function POST(

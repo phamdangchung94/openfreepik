@@ -13,10 +13,11 @@ import type { TaskStatus } from "./types";
  * Implementation: simple semaphore. acquire() waits in a queue;
  * release() pops the next waiter.
  */
-// Raised 5 → 10 (2026-05-22) cùng đợt với POST rate 3→10/min và
-// task-store concurrency 3→6 — đáp ứng customer batch lớn nhanh hơn.
-// Magnific per-IP cap 10 hits/s avg = 600/min, vẫn còn nhiều headroom.
-const MAX_CONCURRENT_POLLS = 10;
+// Raised 10 → 15 (2026-05-23) đợt aggressive. Magnific per-IP cap
+// 10/s avg = 600/min. Với 15 polls/tab × 1 poll/2s = 7.5 req/s
+// just from polling per tab. 5 tabs đồng thời max → 37.5 req/s peak,
+// dưới 50/s burst cap. Combined POST 30/min + concurrency 10.
+const MAX_CONCURRENT_POLLS = 15;
 let activePolls = 0;
 const pollWaiters: Array<() => void> = [];
 

@@ -16,7 +16,7 @@ import {
 import { getWebhookUrl } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
-const KLING_V3_RATE_LIMIT = 10;
+const KLING_V3_RATE_LIMIT = 30;
 const KLING_V3_RATE_WINDOW_SEC = 60;
 
 /**

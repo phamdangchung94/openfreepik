@@ -37,7 +37,7 @@ import { errFields, log } from "@/lib/logger";
  * — it's controlled implicitly by character_orientation.
  */
 
-const KLING_MOTION_RATE_LIMIT = 10;
+const KLING_MOTION_RATE_LIMIT = 30;
 const KLING_MOTION_RATE_WINDOW_SEC = 60;
 
 export async function POST(

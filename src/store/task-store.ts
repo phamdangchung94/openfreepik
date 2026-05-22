@@ -170,9 +170,10 @@ export const useTaskStore = create<TaskState>()(
       activeTaskId: null,
 
       queue: [],
-      // 2026-05-22 raised 3 → 6 cùng đợt với POST rate 3→10/min +
-      // poll semaphore 5→10. Customer batch dispatch nhanh hơn ~2×.
-      concurrency: 6,
+      // 2026-05-23 raised lên 10 — push customer throughput tới ~80%
+      // Magnific per-IP cap (600/min avg). Combined với POST rate
+      // 30/min + poll semaphore 15. Batch 50 video dispatch ~2 phút.
+      concurrency: 10,
       isProcessing: false,
       autoEnhance: false,
 
