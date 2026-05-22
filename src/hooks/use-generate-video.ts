@@ -297,11 +297,24 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           });
 
           if (result.status === "COMPLETED") {
-            useTaskStore.getState().updateTask(localId, {
-              status: "COMPLETED",
-              videoUrl: result.generated[0] ?? null,
-              videoUrlExpiresAt: expiresFromNow(),
-            });
+            const videoUrl = result.generated[0];
+            if (videoUrl) {
+              useTaskStore.getState().updateTask(localId, {
+                status: "COMPLETED",
+                videoUrl,
+                videoUrlExpiresAt: expiresFromNow(),
+              });
+            } else {
+              // Magnific said COMPLETED but generated[] was empty — same
+              // signal the server uses to auto-refund (COMPLETED_WITHOUT_URL).
+              // Surface as FAILED with the code so friendlyError() can show
+              // the content-policy hint instead of a broken "succeeded"
+              // task with no video.
+              useTaskStore.getState().updateTask(localId, {
+                status: "FAILED",
+                error: "COMPLETED_WITHOUT_URL",
+              });
+            }
           } else {
             useTaskStore.getState().updateTask(localId, {
               status: result.status === "TIMEOUT" ? "TIMEOUT" : "FAILED",

@@ -35,6 +35,29 @@ const CODE_MAP: Record<string, string> = {
   RATE_LIMITED: "Quá nhiều yêu cầu — vui lòng chờ một chút.",
   TIMEOUT: "Tạo video quá thời gian — vui lòng thử lại.",
   UNKNOWN: "Có lỗi không xác định — vui lòng thử lại.",
+  // Upstream returned status=COMPLETED but generated[] was empty —
+  // typically Magnific's safety filter silently rejected the prompt
+  // (political figures, violence, NSFW…). Hệ thống đã auto-refund.
+  COMPLETED_WITHOUT_URL:
+    "Nội dung có thể vi phạm chính sách AI — vui lòng đổi ngữ cảnh/từ ngữ trong prompt (tránh nhân vật chính trị, bạo lực, NSFW) rồi tạo lại. Đã hoàn tiền.",
+  // Upstream returned status=FAILED explicitly. Could be model error,
+  // bad image input, or temporary outage. Đã auto-refund.
+  MAGNIFIC_FAILED:
+    "Máy chủ AI báo lỗi xử lý — thử đổi prompt hoặc ảnh nguồn rồi tạo lại. Đã hoàn tiền.",
+  UPSTREAM_FAILED:
+    "Máy chủ AI báo lỗi xử lý — thử đổi prompt hoặc ảnh nguồn rồi tạo lại. Đã hoàn tiền.",
+  MISSING_URL:
+    "Máy chủ AI hoàn tất nhưng không trả về video — vui lòng tạo lại. Đã hoàn tiền.",
+  // Cron orphan sweeper detected a stuck `pending` row >cutoff and
+  // refunded. Webhook may have been lost or upstream still working.
+  ORPHAN_CHARGE_AUTO_REFUNDED:
+    "Hệ thống không nhận được phản hồi từ máy chủ AI trong thời gian chờ — đã tự hoàn tiền. Vui lòng tạo lại.",
+  // Webhook-path variants (same root cause as above but discovered via
+  // Magnific's push callback instead of our polling loop).
+  COMPLETED_WITHOUT_URL_VIA_WEBHOOK:
+    "Nội dung có thể vi phạm chính sách AI — vui lòng đổi ngữ cảnh/từ ngữ trong prompt (tránh nhân vật chính trị, bạo lực, NSFW) rồi tạo lại. Đã hoàn tiền.",
+  MAGNIFIC_FAILED_VIA_WEBHOOK:
+    "Máy chủ AI báo lỗi xử lý — thử đổi prompt hoặc ảnh nguồn rồi tạo lại. Đã hoàn tiền.",
 };
 
 const PHRASE_MAP: Array<[RegExp, string]> = [

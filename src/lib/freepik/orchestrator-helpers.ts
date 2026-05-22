@@ -212,7 +212,15 @@ export async function finalizeUsageOnPoll(
     .update(usageLogs)
     .set({
       status: "refunded",
-      errorMessage: opts.upstreamErrorMessage ?? null,
+      // Prefer upstream's verbatim message; fall back to our internal
+      // failure reason (e.g. COMPLETED_WITHOUT_URL, MAGNIFIC_FAILED) so
+      // friendlyError() can translate it even when Magnific stayed
+      // silent. Same code maps to a Vietnamese policy hint for the
+      // customer — without this fallback the row's error_message
+      // stays null and history hydration shows generic "Tạo video
+      // thất bại" instead.
+      errorMessage:
+        opts.upstreamErrorMessage ?? opts.failureReason ?? null,
     })
     .where(
       and(
