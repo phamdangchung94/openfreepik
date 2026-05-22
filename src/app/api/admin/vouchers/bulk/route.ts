@@ -9,7 +9,7 @@ import {
   TIER_CONFIG,
   type VoucherTier,
 } from "@/lib/vouchers/format";
-import { log } from "@/lib/logger";
+import { errFields, log } from "@/lib/logger";
 
 /**
  * POST /api/admin/vouchers/bulk — mint N vouchers of one tier in one
@@ -57,17 +57,38 @@ export async function POST(request: Request) {
 
   const rows = buildRows(tier as VoucherTier, count, batchLabel ?? null, cfg);
 
-  // Retry once on rare unique-code collision. After that, surface 500 —
-  // the same collision pattern recurring twice indicates a CSPRNG
-  // problem worth investigating, not silently absorbing.
+  // Retry once on rare unique-code collision. After that, surface 500
+  // WITH the actual error reason — the same collision pattern recurring
+  // twice indicates a CSPRNG problem or a deeper bug worth investigating,
+  // not silently absorbing.
   let inserted: Awaited<ReturnType<typeof insertBatch>>;
   try {
     inserted = await insertBatch(rows);
-  } catch (err) {
-    log.warn("VOUCHERS_BULK_RETRY", { tier, count, err: String(err) });
-    inserted = await insertBatch(
-      buildRows(tier as VoucherTier, count, batchLabel ?? null, cfg),
-    );
+  } catch (firstErr) {
+    log.warn("VOUCHERS_BULK_RETRY", {
+      tier,
+      count,
+      ...errFields(firstErr),
+    });
+    try {
+      inserted = await insertBatch(
+        buildRows(tier as VoucherTier, count, batchLabel ?? null, cfg),
+      );
+    } catch (secondErr) {
+      log.error("VOUCHERS_BULK_FAILED", {
+        tier,
+        count,
+        ...errFields(secondErr),
+      });
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "INTERNAL",
+          message: `Mint thất bại: ${secondErr instanceof Error ? secondErr.message : String(secondErr)}`,
+        },
+        { status: 500 },
+      );
+    }
   }
 
   log.info("VOUCHERS_BULK_CREATED", {
@@ -99,17 +120,21 @@ function buildRows(
 }
 
 async function insertBatch(rows: NewVoucher[]) {
-  return await db.transaction(async (tx) => {
-    return tx
-      .insert(vouchers)
-      .values(rows)
-      .returning({
-        id: vouchers.id,
-        code: vouchers.code,
-        tier: vouchers.tier,
-        vndValue: vouchers.vndValue,
-        eurValue: vouchers.eurValue,
-        batchLabel: vouchers.batchLabel,
-      });
-  });
+  // No transaction wrapper — neon-http doesn't support real multi-
+  // statement transactions over HTTP anyway, and the single INSERT is
+  // already atomic at the DB level. Removing the wrapper also surfaces
+  // any Drizzle/driver errors directly instead of through the
+  // transaction proxy (which was masking the original error message
+  // during the 2026-05-23 debug).
+  return await db
+    .insert(vouchers)
+    .values(rows)
+    .returning({
+      id: vouchers.id,
+      code: vouchers.code,
+      tier: vouchers.tier,
+      vndValue: vouchers.vndValue,
+      eurValue: vouchers.eurValue,
+      batchLabel: vouchers.batchLabel,
+    });
 }
