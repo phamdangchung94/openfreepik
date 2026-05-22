@@ -175,6 +175,34 @@ Dashboard → **Codes** → row → **Revoke**. Customer's next request gets HTT
 
 Dashboard → **Codes** → row → **Top-up** → enter EUR to add. Atomic SQL increment, race-safe under concurrent customer charges.
 
+### Mint top-up vouchers (mã nạp tiền) — bulk (2026-05-23)
+
+Dashboard → **Vouchers** → **Mint vouchers**.
+
+1. Chọn **mệnh giá** (100k → +100 €, 200k → +200 €, 500k → +500 €) — tỉ lệ 1k VND ≈ 1 EUR đã bake sẵn
+2. **Số lượng** 1-200 (1 transaction; lớn hơn phải chia batch)
+3. (Optional) **Batch label** (vd `T11-2026-AnhA`) để filter sau
+
+Dialog hiển thị table codes **ĐÚNG 1 LẦN** sau khi mint — bấm **Copy all** hoặc **Download .txt** trước khi đóng. Codes sau đó chỉ còn xem masked trong list (`CODE-100-***MPQR`).
+
+Gửi cho khách qua Zalo. Khách nhập trên trang chủ → button **Claim Code** (chỉ hiện sau khi activate, mode ≠ unlimited).
+
+**Format code**: `CODE-{100|200|500}-XXXXXXXX` (8 chars alphanumeric, exclude O/0/I/1/L). 31^8 ≈ 10^12 combinations. Lookup case-insensitive (normalize uppercase + strip whitespace).
+
+### Revoke / Refund voucher
+
+Dashboard → **Vouchers** → row.
+
+| Voucher status | Action | Behavior |
+|---|---|---|
+| **Còn dùng được** (chưa redeem) | **Revoke** | Set `revoked_at` — redeem endpoint reject. Dùng khi mất thẻ in / in nhầm |
+| **Đã nạp** (redeemed) | **Refund** | Tx atomic: deduct EUR khỏi quota_eur (floored 0) + set `refunded_at`. Voucher KHÔNG re-redeem được |
+| **Đã huỷ / Đã hoàn** | — | Terminal state, no action |
+
+Mỗi lần revoke/refund cần nhập **lý do** (audit log).
+
+**Anti-bruteforce**: customer redeem endpoint giới hạn 10 attempts / hour / activation code, generic error "Mã không hợp lệ hoặc đã dùng" (không leak whether code tồn tại / đã used / đã revoke). Shape pre-check trước khi DB roundtrip nên brute force chỉ tốn budget cho input đúng format.
+
 ### Mint a public API key for a customer (2026-05-19)
 
 Dashboard → **API tokens** → **+ Tạo key**.
