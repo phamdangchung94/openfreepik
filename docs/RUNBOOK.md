@@ -741,6 +741,26 @@ trong `pricing_rules` (4 endpoint × 2 audio). Reference (V2V) priced
 same as video — admin có thể split sau qua admin pricing matrix nếu
 upstream charge khác.
 
+**🚫 Toàn bộ Kling Omni tạm ẩn UI 2026-05-22 (Elements không stable)**
+
+Lý do: Elements identity-lock không nhất quán dù gửi đủ 4 góc theo
+Magnific docs. Customer test thực tế nhân vật vẫn drift giữa frames.
+Pro tier (T2V/I2V/V2V không elements) vẫn hoạt động OK nhưng UX kém
+khi customer kỳ vọng Elements work theo docs.
+
+Backend giữ nguyên 100%:
+- 4 route POST + 2 GET (web + /api/v1/*) — vẫn callable nếu admin trigger
+- 8 pricing rows trong DB
+- Universal poll dispatch
+- Schema enum vẫn có "kling-omni"
+
+Để re-enable (sau khi Magnific cải thiện Elements OR anh quyết định
+chấp nhận "drift" risk):
+1. `src/components/generator/model-picker.tsx`: uncomment Kling Omni
+   option + add `Wand2` import back + change grid-cols-2 → grid-cols-3
+2. `src/app/(customer)/pricing/page.tsx`: uncomment
+   `<KlingOmniSection rules={rules} />`
+
 **⚠️ Std tier hidden từ UI 2026-05-22** — e2e test (3 lần × 3 account
 khác nhau) confirm Magnific upstream silently fails mọi Std task: POST
 trả task_id OK, GET status=FAILED + generated=[] trong ~3-5s, không

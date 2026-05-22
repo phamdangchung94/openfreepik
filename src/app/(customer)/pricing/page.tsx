@@ -80,7 +80,9 @@ export default function CustomerPricingPage() {
         <div className="space-y-6">
           <KlingSection rules={rules} />
           <KlingMotionSection rules={rules} />
-          <KlingOmniSection rules={rules} />
+          {/* Kling Omni tạm ẩn 2026-05-22 — Elements identity-lock
+              chưa ổn dù gửi đủ 4 góc. Uncomment khi Magnific cải thiện. */}
+          {/* <KlingOmniSection rules={rules} /> */}
           {/* WAN 2.7 tạm ẩn UI (per anh 2026-05-19). Pricing rows vẫn
               trong DB cho revert; uncomment dưới để hiện lại bảng giá. */}
           {/* <WanSection rules={rules} /> */}

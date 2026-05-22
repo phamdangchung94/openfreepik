@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { Sparkles, Move3d, Wand2 } from "lucide-react";
+import { Sparkles, Move3d } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
@@ -11,12 +11,12 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  * Currently visible:
  *   - Kling 3        — text/image → video, 3 tiers (4K / 1080p Pro / 720p Std)
  *   - Kling Motion   — character image + reference video → motion-transferred output
- *   - Kling Omni     — multi-modal (T2V / I2V / V2V) với multi-shot + audio
  *
- * WAN 2.7 is temporarily hidden from the picker (per anh 2026-05-19).
- * The schema enum still includes "wan-v27" so any historical form
- * state stays valid for revert; uncomment the option below to bring
- * it back. Routes + lib + pricing rows are all intact.
+ * Hidden temporarily (schema + routes + pricing intact for revert):
+ *   - WAN 2.7  — hidden 2026-05-19, anh muốn ẩn UI-only
+ *   - Kling Omni — hidden 2026-05-22, Elements identity-lock không ổn
+ *     dù gửi đủ 4 góc. Đợi Magnific cải thiện. Uncomment option dưới
+ *     để re-enable (kèm chỉnh grid-cols-2 → grid-cols-3).
  */
 export function ModelPicker() {
   const { watch, setValue } = useFormContext<GeneratorFormValues>();
@@ -55,12 +55,12 @@ export function ModelPicker() {
       sub: "Ảnh + video motion → video",
       icon: <Move3d className="size-4" />,
     },
-    {
-      id: "kling-omni" as const,
-      label: "Kling Omni",
-      sub: "T2V/I2V/V2V · multi-shot · audio",
-      icon: <Wand2 className="size-4" />,
-    },
+    // {
+    //   id: "kling-omni" as const,
+    //   label: "Kling Omni",
+    //   sub: "T2V/I2V/V2V · multi-shot · audio",
+    //   icon: <Wand2 className="size-4" />,
+    // },
     // {
     //   id: "wan-v27" as const,
     //   label: "WAN 2.7",
@@ -70,7 +70,7 @@ export function ModelPicker() {
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2">
       {options.map((opt) => (
         <button
           key={opt.id}
