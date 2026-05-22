@@ -340,6 +340,56 @@ export const announcements = pgTable(
   (t) => [index("announcements_active_idx").on(t.active, t.createdAt)],
 );
 
+/**
+ * Top-up vouchers (Mã nạp tiền) — single-use codes that add EUR balance
+ * to an activation code's `quota_eur` when redeemed. Migration 0015.
+ *
+ * Three denominations: 100k/200k/500k VND → +100/200/500 EUR. Admin
+ * bulk-mints, sends codes to customer via Zalo, customer redeems via
+ * homepage Claim Code form.
+ *
+ * Lifecycle: created → (revoked | redeemed → (refunded)). Atomic
+ * redeem via `UPDATE ... WHERE redeemed_at IS NULL AND revoked_at IS NULL`
+ * guarantees single-use even under concurrent redemption attempts.
+ */
+export const vouchers = pgTable(
+  "vouchers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Customer-typed code, e.g. "CODE-100-X4K9MPQR". Unique. */
+    code: text("code").notNull(),
+    /** Denomination label — "100k" | "200k" | "500k". */
+    tier: text("tier", { enum: ["100k", "200k", "500k"] }).notNull(),
+    /** VND retail price (100000 / 200000 / 500000). Audit + display. */
+    vndValue: integer("vnd_value").notNull(),
+    /** EUR credit added to activation code's `quota_eur` on redemption. */
+    eurValue: numeric("eur_value", { precision: 10, scale: 2 }).notNull(),
+    /** Optional admin grouping ("T11-2026-AnhA") for batch filtering. */
+    batchLabel: text("batch_label"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Set by admin to block redemption (lost/mis-minted). Soft-delete. */
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokeReason: text("revoke_reason"),
+    /** Set atomically on successful redeem. Null = still claimable. */
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    redeemedByCodeId: uuid("redeemed_by_code_id").references(
+      () => activationCodes.id,
+      { onDelete: "set null" },
+    ),
+    /** Set when admin refunds a redeemed voucher; eur_value deducted back. */
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
+    refundReason: text("refund_reason"),
+  },
+  (t) => [
+    uniqueIndex("vouchers_code_uniq").on(t.code),
+    index("vouchers_redeemed_by_code_id_idx").on(t.redeemedByCodeId),
+    index("vouchers_batch_label_idx").on(t.batchLabel),
+    index("vouchers_created_at_idx").on(t.createdAt),
+  ],
+);
+
 export type FreepikKey = typeof freepikKeys.$inferSelect;
 export type NewFreepikKey = typeof freepikKeys.$inferInsert;
 export type ActivationCode = typeof activationCodes.$inferSelect;
@@ -352,3 +402,5 @@ export type Announcement = typeof announcements.$inferSelect;
 export type NewAnnouncement = typeof announcements.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+export type Voucher = typeof vouchers.$inferSelect;
+export type NewVoucher = typeof vouchers.$inferInsert;
