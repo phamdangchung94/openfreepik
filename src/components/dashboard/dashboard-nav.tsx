@@ -11,6 +11,7 @@ import {
   Megaphone,
   Wallet,
   Code2,
+  Ticket,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", shortLabel: "Tổng", icon: Home, exact: true },
   { href: "/dashboard/codes", label: "Codes", shortLabel: "Codes", icon: KeyRound, exact: false },
+  { href: "/dashboard/vouchers", label: "Vouchers", shortLabel: "Nạp", icon: Ticket, exact: false },
   { href: "/dashboard/keys", label: "API keys", shortLabel: "Keys", icon: Server, exact: false },
   { href: "/dashboard/pricing", label: "Pricing", shortLabel: "Giá", icon: Tag, exact: false },
   { href: "/dashboard/usage", label: "Usage logs", shortLabel: "Log", icon: Activity, exact: false },
