@@ -6,6 +6,11 @@ vốn theo góc nhìn kỹ thuật).
 
 > Cập nhật khi codebase thay đổi đáng kể (thêm endpoint mới, đổi orchestrator,
 > đổi data model, v.v.).
+>
+> Muốn mở rộng catalog model (Kling 3 Omni, Nano Banana Pro/Flash, video
+> upscaler, audio, lip-sync…) hoặc dùng tính năng nền tảng mới của Magnific
+> (MCP, x402, credit-based)? Xem [`magnific-api-2026-update.md`](magnific-api-2026-update.md)
+> — có sơ đồ khác biệt, đặc tả endpoint, và checklist "thêm 1 model mới".
 
 ---
 
@@ -28,6 +33,7 @@ vốn theo góc nhìn kỹ thuật).
 | 13 | Public API (`/api/v1/*`) | client gọi `/api/v1/{me,video/*,prompt/improve,tasks/{id}}` với `Authorization: Bearer sk_*` | `requireApiKey` → orchestrator (`preValidated` path) | `api_keys` (migration 0014), `activation_codes`, `usage_logs` |
 | 14 | Customer file upload | form picker → `/api/upload/presign` → browser PUT → R2 `uploads/{image\|video}/` | `lib/upload/image-host.ts` + `lib/storage/r2.ts` (presigned PUT) | — (R2 only, no DB) |
 | 15 | Upload TTL sweep | Vercel cron 15min → `/api/cron/sweep-uploads` | R2 ListObjectsV2 + DeleteObjects prefix `uploads/` age > 120 min | — (R2 only) |
+| 16 | Kling 3 Omni (T2V/I2V/V2V) | form → `/api/freepik/kling-omni/[tier]` (`omni-std\|omni-pro\|omni-ref-std\|omni-ref-pro`) | `freepik/kling-omni.ts` (4 POST endpoints, 2 GET namespaces) → orchestrator | `usage_logs`, `pricing_rules` (8 rows: 4 endpoint × 2 audio) |
 
 **Trung tâm hệ thống:** `src/lib/freepik/orchestrator.ts` — mọi gọi API tới
 Magnific đều đi qua đây (validate code → charge → pick key → call → record → log).

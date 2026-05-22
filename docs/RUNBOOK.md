@@ -714,3 +714,44 @@ See [`plans/audits/`](../plans/audits/) for full reports.
 | Email notifications + scheduled maintenance toggle | P2 | DEFERRED Phase 4 — Telegram alerts already cover admin-side; customer-side email pending demand |
 
 Every closed audit fix has its commit linked in the git log.
+
+---
+
+## Kling 3 Omni (added 2026-05-22)
+
+Multi-modal video model — 3 input modes (T2V/I2V/V2V) trong 1 SKU
+với multi-shot tới 6 cảnh và native audio. Tab thứ 3 trong model
+picker bên cạnh Kling 3 + Kling Motion.
+
+| Mode | Endpoint slug | URL slug | Customer input |
+|---|---|---|---|
+| T2V | `kling-omni-{std\|pro}-video` | `omni-std` / `omni-pro` | prompt only |
+| I2V | `kling-omni-{std\|pro}-video` | `omni-std` / `omni-pro` | start_image_url + prompt |
+| V2V | `kling-omni-{std\|pro}-reference` | `omni-ref-std` / `omni-ref-pro` | video_url (reference, 3-10s) |
+
+**Pricing** (retail, 2026-05-22 — 1:1 với Kling V3 regular per Magnific list):
+
+| Tier | No audio | With audio |
+|---|---|---|
+| Standard | €0.168/s (168 đ/s) | €0.308/s (308 đ/s) |
+| Pro | €0.224/s (224 đ/s) | €0.392/s (392 đ/s) |
+
+Per-second billing với ceiling rounding (giống Motion). 8 rows seeded
+trong `pricing_rules` (4 endpoint × 2 audio). Reference (V2V) priced
+same as video — admin có thể split sau qua admin pricing matrix nếu
+upstream charge khác.
+
+**Multi-shot**: tách riêng UI khỏi Kling V3 (`omni-multi-shot.tsx`).
+Field `omni_multi_prompt[N].prompt`, max 6 shots. Magnific tự ghép
+khi `shot_type="customize"`. Anh muốn iterate UI multi-shot V3 riêng
+sau, Omni không bị ảnh hưởng.
+
+**Elements + reference images** (Magnific Omni advanced features):
+schema accept nhưng UI chưa expose. Defer to next phase.
+
+**To change pricing**: update `scripts/seed-kling-omni-pricing.sql`
+và re-run qua Neon MCP. Idempotent DELETE-then-INSERT.
+
+**To revert**: remove `kling-omni` từ `model-picker.tsx` options.
+Backend routes (`/api/freepik/kling-omni/[tier]`, `/api/v1/video/kling-omni/[tier]`)
++ pricing rows intact cho re-enable.

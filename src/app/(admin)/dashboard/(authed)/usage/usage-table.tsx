@@ -547,6 +547,14 @@ function renderEndpoint(endpoint: string): string {
       return "Motion 3.0 Std";
     case "kling-motion-v3-pro":
       return "Motion 3.0 Pro";
+    case "kling-omni-std-video":
+      return "Omni Std (T2V/I2V)";
+    case "kling-omni-pro-video":
+      return "Omni Pro (T2V/I2V)";
+    case "kling-omni-std-reference":
+      return "Omni Std (V2V)";
+    case "kling-omni-pro-reference":
+      return "Omni Pro (V2V)";
     case "improve-prompt":
       return "Improve";
     default:

@@ -28,6 +28,13 @@ endpoints carry `tier='4k'` so the calculator can look them up.
 
 Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 
+> **Upstream now offers far more than this.** As of 2026-05-21 the Magnific
+> catalog has expanded greatly (image generation incl. Nano Banana Pro / Pro
+> Flash, video upscaling, Kling 3 Omni, audio, lip-sync, …) plus new platform
+> features (MCP, x402 Web3 payments, credit-based plans). We still consume only
+> the video slice. See [`magnific-api-2026-update.md`](magnific-api-2026-update.md)
+> for the full diff, endpoint specs, and a prioritized expansion roadmap.
+
 ## Stack
 
 | Layer    | Tech                                          |
@@ -286,6 +293,14 @@ encodings (UTF-8 raw, hex-decoded, base64-decoded,
 matched on `utf8 + id.ts.body`. Mismatch logs the first 12 chars of
 every computed signature so a future schema drift is debuggable.
 
+> **Update (2026-05-21):** Magnific now officially documents this scheme and it
+> matches our production path exactly — `content = "{webhook-id}.{webhook-timestamp}.{body}"`,
+> HMAC-SHA256, base64 output, `webhook-signature` a space-delimited list of
+> `version,signature` pairs for secret rotation
+> ([docs](https://docs.magnific.com/webhooks)). The multi-encoding/multi-format
+> fallback can therefore be reduced to the documented path (kept behind a debug
+> flag) — see [`magnific-api-2026-update.md`](magnific-api-2026-update.md) §1.2.
+
 On success the handler runs the same `finalizeUsageOnPoll` path the
 poll route uses (idempotent via `WHERE status='pending'`), so the
 customer outcome is identical whether the task finalized via push
@@ -348,6 +363,10 @@ the admin dashboard.
 | `kling-motion-v2-6-pro` | 0.2761 EUR/s — retail (base 251 đ/s + 10%, 2026-05-19) |
 | `kling-motion-v3-std`   | 0.2948 EUR/s — retail (base 268 đ/s + 10%, 2026-05-19) |
 | `kling-motion-v3-pro`   | 0.3938 EUR/s — retail (base 358 đ/s + 10%, 2026-05-19) |
+| `kling-omni-std-video`  | 0.168 EUR/s (no audio) / 0.308 EUR/s (audio) — retail 2026-05-22 (matches V3 Std) |
+| `kling-omni-pro-video`  | 0.224 EUR/s (no audio) / 0.392 EUR/s (audio) — retail 2026-05-22 (matches V3 Pro) |
+| `kling-omni-std-reference` | same as `kling-omni-std-video` (per Magnific list) |
+| `kling-omni-pro-reference` | same as `kling-omni-pro-video` |
 | `wan-v27` 720P  | 0.20 EUR/s — UI hidden 2026-05-19 (rows kept for revert) |
 | `wan-v27` 1080P | 0.30 EUR/s — UI hidden 2026-05-19                      |
 | `improve-prompt`| 0.00 (free)                                            |
@@ -355,6 +374,15 @@ the admin dashboard.
 Kling 4K rate derivation: business rule pegs 4K at 2.857142857×
 (=20/7) of the Kling V3 Pro 1080p with-audio rate. `0.392 × 20/7 = 1.12`
 exactly.
+
+Kling 3 Omni: **per-second billing × audio variant**. 4 endpoint
+slugs (`kling-omni-{tier}-{mode}` where mode ∈ {video, reference},
+tier ∈ {std, pro}). Each has 2 pricing rows — `with_audio=false` and
+`with_audio=true` — audio variant ~1.83× base. Helper
+`calculateOmniCost(endpoint, seconds, withAudio)` derives per-second
+rate × `ceil(seconds)`. Customer-chosen `duration` field (3-15s)
+drives billing. Same rate across video + reference namespaces per
+Magnific list (admin can split later via pricing matrix).
 
 Kling Motion: **per-second billing với ceiling rounding** (changed
 2026-05-21 from tier-snap). Customer uploads a reference video of

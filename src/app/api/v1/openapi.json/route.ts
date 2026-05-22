@@ -291,6 +291,98 @@ function buildSpec(origin: string) {
           },
         },
       },
+      "/video/kling-omni/{tier}": {
+        post: {
+          summary: "Create a Kling 3 Omni video (T2V/I2V/V2V + multi-shot + audio)",
+          operationId: "createKlingOmni",
+          parameters: [
+            {
+              name: "tier",
+              in: "path",
+              required: true,
+              schema: {
+                type: "string",
+                enum: ["omni-std", "omni-pro", "omni-ref-std", "omni-ref-pro"],
+                description:
+                  "omni-std/pro = video namespace (T2V or I2V via image_url); omni-ref-std/pro = reference-to-video namespace (V2V via video_url).",
+              },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["params"],
+                  properties: {
+                    params: {
+                      type: "object",
+                      properties: {
+                        prompt: { type: "string", maxLength: 2500 },
+                        multi_prompt: {
+                          type: "array",
+                          items: { type: "string", maxLength: 2500 },
+                          maxItems: 6,
+                          description: "Up to 6 sequential shot prompts.",
+                        },
+                        shot_type: { type: "string", enum: ["customize"] },
+                        image_url: {
+                          type: "string",
+                          format: "uri",
+                          description: "I2V start frame (300×300+, ≤10MB, JPG/PNG).",
+                        },
+                        start_image_url: { type: "string", format: "uri" },
+                        end_image_url: { type: "string", format: "uri" },
+                        image_urls: {
+                          type: "array",
+                          items: { type: "string", format: "uri" },
+                          maxItems: 4,
+                          description:
+                            "Style guidance images, reference as @Image1..@Image4 in prompt.",
+                        },
+                        video_url: {
+                          type: "string",
+                          format: "uri",
+                          description:
+                            "V2V reference video (3-10s, ≤200MB, MP4/MOV). Required for omni-ref-* tier.",
+                        },
+                        generate_audio: {
+                          type: "boolean",
+                          description: "Native audio. Pricing ~1.83× base when true.",
+                        },
+                        aspect_ratio: {
+                          type: "string",
+                          enum: ["auto", "16:9", "9:16", "1:1"],
+                          default: "16:9",
+                        },
+                        duration: {
+                          type: "string",
+                          enum: [
+                            "3", "4", "5", "6", "7", "8",
+                            "9", "10", "11", "12", "13", "14", "15",
+                          ],
+                          default: "5",
+                        },
+                        cfg_scale: { type: "number", minimum: 0, maximum: 1 },
+                        negative_prompt: { type: "string", maxLength: 2500 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Task created",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/TaskCreated" } },
+              },
+            },
+          },
+        },
+      },
       "/prompt/improve": {
         post: {
           summary: "Expand a short prompt into a detailed one (free)",

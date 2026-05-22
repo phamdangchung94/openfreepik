@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Gem,
   Move3d,
+  Wand2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +80,7 @@ export default function CustomerPricingPage() {
         <div className="space-y-6">
           <KlingSection rules={rules} />
           <KlingMotionSection rules={rules} />
+          <KlingOmniSection rules={rules} />
           {/* WAN 2.7 tạm ẩn UI (per anh 2026-05-19). Pricing rows vẫn
               trong DB cho revert; uncomment dưới để hiện lại bảng giá. */}
           {/* <WanSection rules={rules} /> */}
@@ -366,6 +368,131 @@ function KlingMotionSection({ rules }: { rules: PricingRule[] }) {
           </li>
           <li>
             📹 Video tham chiếu: 3-30 giây, MP4/MOV/WEBM, tối đa 50MB.
+          </li>
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Kling 3 Omni — 4 endpoints × 2 audio variants. Per-second pricing
+ * with ceiling rounding. Table shows base rate per second; total cost
+ * = ceil(duration) × rate. Audio toggle flips between with/no audio.
+ */
+function KlingOmniSection({ rules }: { rules: PricingRule[] }) {
+  const [withAudio, setWithAudio] = useState(false);
+  const omniRules = rules.filter((r) =>
+    r.endpoint.startsWith("kling-omni-"),
+  );
+
+  function rateFor(tier: "std" | "pro", mode: "video" | "reference"): number | null {
+    const slug = `kling-omni-${tier}-${mode}`;
+    const row = omniRules.find(
+      (r) =>
+        r.endpoint === slug &&
+        r.withAudio === withAudio &&
+        r.durationSeconds !== null &&
+        r.durationSeconds > 0,
+    );
+    if (!row || !row.durationSeconds) return null;
+    return row.costEur / row.durationSeconds;
+  }
+
+  const columns = [
+    { id: "std", label: "Standard" },
+    { id: "pro", label: "Pro", highlight: true },
+  ] as const;
+
+  const rows = [
+    {
+      id: "video" as const,
+      label: "T2V / I2V",
+      sub: "prompt hoặc ảnh đầu",
+    },
+    {
+      id: "reference" as const,
+      label: "V2V (reference)",
+      sub: "video tham chiếu",
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="space-y-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wand2 className="size-4 text-primary" />
+          Kling 3 Omni — Đa năng: T2V / I2V / V2V + Multi-shot + Audio
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          1 model 3 chế độ: tạo từ prompt (T2V), từ ảnh (I2V), hoặc từ
+          video tham chiếu (V2V). Bật âm thanh tự nhiên (1.83× giá),
+          tối đa 6 cảnh multi-shot, thời lượng 3-15s.
+        </p>
+        <AudioToggle value={withAudio} onChange={setWithAudio} />
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium">Chế độ</th>
+                {columns.map((c) => (
+                  <ColHeader
+                    key={c.id}
+                    label={c.label}
+                    sub=""
+                    highlight={"highlight" in c ? c.highlight : false}
+                  />
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                >
+                  <td className="py-2 pr-3">
+                    <div className="font-medium">{row.label}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {row.sub}
+                    </div>
+                  </td>
+                  {columns.map((c) => {
+                    const rate = rateFor(c.id, row.id);
+                    return (
+                      <td
+                        key={c.id}
+                        className={cn(
+                          "py-2 px-2 text-center font-mono text-xs",
+                          "highlight" in c && c.highlight && "bg-primary/5",
+                        )}
+                      >
+                        {rate !== null ? `${formatVnd(rate)}/s` : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ul className="mt-4 space-y-1 text-[11px] text-muted-foreground">
+          <li>
+            ⏱️ Giá tính per-second với <strong>làm tròn lên</strong>:
+            video 7.3s → bill 8s × rate.
+          </li>
+          <li>
+            🔊 Audio: Std 168→308 đ/s, Pro 224→392 đ/s khi bật.
+          </li>
+          <li>
+            🎬 V2V cần video tham chiếu (3-10s, max 200MB), output kế
+            thừa độ dài input.
+          </li>
+          <li>
+            🎭 Multi-shot tối đa 6 cảnh — Omni tự ghép theo thứ tự
+            prompt, tổng thời lượng vẫn theo trường &ldquo;Thời lượng&rdquo;.
           </li>
         </ul>
       </CardContent>
