@@ -38,7 +38,9 @@ export const generatorFormSchema = z
      *   - "kling-motion" — character image + reference motion video,
      *                      4 tier combos (2.6/3.0 × Std/Pro)
      */
-    model: z.enum(["kling-v3", "wan-v27", "kling-motion"]).default("kling-v3"),
+    model: z
+      .enum(["kling-v3", "wan-v27", "kling-motion", "kling-omni"])
+      .default("kling-v3"),
     mode: z.enum(["t2v", "i2v"]),
     prompt: z.string().default(""),
     negative_prompt: z.string().max(2500).default("blur, distort, and low quality"),
@@ -103,6 +105,39 @@ export const generatorFormSchema = z
      * video upload.
      */
     output_duration: MOTION_DURATION.default(5),
+    // --- Kling 3 Omni fields (only used when model="kling-omni") ---
+    /** Input mode picker: video (T2V/I2V) or reference (V2V). */
+    omni_mode: z.enum(["video", "reference"]).default("video"),
+    /** T2V vs I2V inside the video namespace — UI-only marker. */
+    omni_input: z.enum(["t2v", "i2v"]).default("t2v"),
+    omni_tier: z.enum(["std", "pro"]).default("std"),
+    /** Reference video URL for V2V mode (uploaded same flow as motion). */
+    omni_video_url: z.string().default(""),
+    /** Reference video detected duration (seconds, float). Drives picker. */
+    omni_video_duration: z.number().default(0),
+    /**
+     * Omni native audio toggle. Costs ~1.5x base when on. T2V supports
+     * via native audio model; I2V + V2V depend on Magnific model
+     * version — flag passed through verbatim, upstream decides.
+     */
+    omni_audio: z.boolean().default(false),
+    /** Output duration in seconds (string enum to match Magnific API). */
+    omni_duration: z
+      .enum([
+        "3", "4", "5", "6", "7", "8",
+        "9", "10", "11", "12", "13", "14", "15",
+      ])
+      .default("5"),
+    /** Aspect ratio incl. "auto" — Magnific Omni adds auto-detection. */
+    omni_aspect_ratio: z
+      .enum(["auto", "16:9", "9:16", "1:1"])
+      .default("16:9"),
+    /** Omni-specific multi-shot (separate from Kling V3's). */
+    omni_multi_shot: z.boolean().default(false),
+    omni_multi_prompt: z
+      .array(z.object({ prompt: z.string().max(2500).default("") }))
+      .max(6)
+      .default([]),
   })
   .superRefine((data, ctx) => {
     // Kling Motion — needs both character image + reference video,
@@ -126,6 +161,42 @@ export const generatorFormSchema = z
       // orientation cap (see motion-output-duration-picker.tsx). The
       // route handler still enforces the cap server-side as defence
       // against a malicious direct POST.
+      return;
+    }
+
+    // Kling Omni — mode-aware required fields. Server route validates
+    // again via validateModeFields() but client checks save a roundtrip.
+    if (data.model === "kling-omni") {
+      if (data.omni_mode === "reference") {
+        if (!data.omni_video_url.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Cần video tham chiếu (3-10s) cho mode V2V.",
+            path: ["omni_video_url"],
+          });
+        }
+      } else if (data.omni_input === "i2v") {
+        if (!data.start_image_url.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Cần ảnh đầu (start image) cho I2V.",
+            path: ["start_image_url"],
+          });
+        }
+      } else {
+        // T2V — need prompt OR at least 1 non-empty multi_prompt entry
+        const hasPrompt = data.prompt.trim().length > 0;
+        const hasMulti =
+          data.omni_multi_shot &&
+          data.omni_multi_prompt.some((s) => s.prompt.trim().length > 0);
+        if (!hasPrompt && !hasMulti) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Cần prompt hoặc multi-shot cho T2V.",
+            path: ["prompt"],
+          });
+        }
+      }
       return;
     }
 

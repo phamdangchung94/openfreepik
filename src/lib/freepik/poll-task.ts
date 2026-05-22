@@ -80,7 +80,12 @@ export type PollEndpoint =
   | "kling-motion/v2-6-std"
   | "kling-motion/v2-6-pro"
   | "kling-motion/v3-std"
-  | "kling-motion/v3-pro";
+  | "kling-motion/v3-pro"
+  // Kling Omni uses same pattern — kling-omni/<route-slug>/<taskId>
+  | "kling-omni/omni-std"
+  | "kling-omni/omni-pro"
+  | "kling-omni/omni-ref-std"
+  | "kling-omni/omni-ref-pro";
 
 export interface PollTaskOptions {
   apiTaskId: string;

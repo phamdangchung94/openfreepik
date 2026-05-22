@@ -8,6 +8,7 @@ import type {
   Kling4kI2vGenerateParams,
   Kling4kT2vGenerateParams,
   KlingMotionGenerateParams,
+  KlingOmniGenerateParams,
   KlingV3Duration,
   KlingV3GenerateParams,
   WanV27GenerateParams,
@@ -54,6 +55,68 @@ export function toKlingMotionParams(v: GeneratorFormValues): {
     output_duration: v.output_duration,
     routeTier: v.motion_tier,
   };
+}
+
+/**
+ * Build Kling 3 Omni params + route slug for the [tier] URL.
+ *   omni_mode="video" + omni_input="t2v" → prompt-only payload
+ *   omni_mode="video" + omni_input="i2v" → image_url payload
+ *   omni_mode="reference"                → video_url payload
+ *
+ * Route slug encoding:
+ *   omni-std / omni-pro                (video namespace)
+ *   omni-ref-std / omni-ref-pro        (reference namespace)
+ */
+export function toKlingOmniParams(v: GeneratorFormValues): {
+  params: KlingOmniGenerateParams;
+  routeTier: "omni-std" | "omni-pro" | "omni-ref-std" | "omni-ref-pro";
+} {
+  const params: KlingOmniGenerateParams = {
+    duration: v.omni_duration,
+    aspect_ratio: v.omni_aspect_ratio,
+    cfg_scale: v.cfg_scale,
+    generate_audio: v.omni_audio,
+  };
+  const neg = v.negative_prompt?.trim();
+  if (neg) params.negative_prompt = neg;
+
+  // Multi-shot: pass `multi_prompt` array of non-empty strings; else use
+  // single `prompt`. Magnific requires shot_type when multi_prompt set.
+  if (
+    v.omni_input === "t2v" &&
+    v.omni_multi_shot &&
+    v.omni_multi_prompt.length > 0
+  ) {
+    const shots = v.omni_multi_prompt
+      .map((s) => s.prompt.trim())
+      .filter((s) => s.length > 0);
+    if (shots.length > 0) {
+      params.multi_prompt = shots;
+      params.shot_type = "customize";
+    } else if (v.prompt?.trim()) {
+      params.prompt = v.prompt.trim();
+    }
+  } else if (v.prompt?.trim()) {
+    params.prompt = v.prompt.trim();
+  }
+
+  // Mode-specific fields
+  if (v.omni_mode === "reference") {
+    params.video_url = v.omni_video_url.trim();
+  } else if (v.omni_input === "i2v" && v.start_image_url.trim()) {
+    params.start_image_url = v.start_image_url.trim();
+  }
+
+  const routeTier =
+    v.omni_mode === "reference"
+      ? v.omni_tier === "pro"
+        ? "omni-ref-pro"
+        : "omni-ref-std"
+      : v.omni_tier === "pro"
+        ? "omni-pro"
+        : "omni-std";
+
+  return { params, routeTier };
 }
 
 /**

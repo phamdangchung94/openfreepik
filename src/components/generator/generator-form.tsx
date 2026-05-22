@@ -19,6 +19,7 @@ import {
   toKling4kT2vParams,
   toKling4kI2vParams,
   toKlingMotionParams,
+  toKlingOmniParams,
   toWanParams,
 } from "@/lib/form/to-api-params";
 import { ModeToggle } from "./mode-toggle";
@@ -38,6 +39,13 @@ import { ResolutionPicker } from "./resolution-picker";
 import { MotionTierPicker } from "./motion-tier-picker";
 import { MotionVideoPicker } from "./motion-video-picker";
 import { MotionCharacterImagePicker } from "./motion-character-image-picker";
+import { OmniModePicker } from "./omni-mode-picker";
+import { OmniTierPicker } from "./omni-tier-picker";
+import { OmniVideoPicker } from "./omni-video-picker";
+import { OmniMultiShot } from "./omni-multi-shot";
+import { OmniAspectRatioPicker } from "./omni-aspect-ratio-picker";
+import { OmniDurationPicker } from "./omni-duration-picker";
+import { OmniAudioSwitch } from "./omni-audio-switch";
 import { MotionOrientationToggle } from "./motion-orientation-toggle";
 import { MotionOutputDurationPicker } from "./motion-output-duration-picker";
 import type { GeneratePayload } from "@/hooks/use-generate-video";
@@ -139,6 +147,12 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
   const isWan = model === "wan-v27";
   const isKling3 = model === "kling-v3";
   const isMotion = model === "kling-motion";
+  const isOmni = model === "kling-omni";
+  const omniMode = watch("omni_mode");
+  const omniInput = watch("omni_input");
+  const omniInputIsT2v = isOmni && omniMode === "video" && omniInput === "t2v";
+  const omniInputIsI2v = isOmni && omniMode === "video" && omniInput === "i2v";
+  const omniInputIsV2v = isOmni && omniMode === "reference";
   /**
    * Kling 4K runs on different Magnific endpoints (kling-4k-t2v /
    * kling-4k-i2v) that don't accept multi_shot or elements arrays.
@@ -207,6 +221,13 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
           tier: built.routeTier,
           output_duration: built.output_duration,
         });
+      } else if (values.model === "kling-omni") {
+        const built = toKlingOmniParams(values);
+        onSubmitSingle({
+          model: "kling-omni",
+          params: built.params,
+          tier: built.routeTier,
+        });
       } else if (values.model === "wan-v27") {
         onSubmitSingle({
           model: "wan-v27",
@@ -268,10 +289,31 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 <PromptField improveButton={improveButton} />
               </>
             )}
+            {/* Kling Omni — multi-modal (T2V/I2V/V2V). Mode picker
+                + tier + conditional input field (start image OR
+                reference video). Prompt + audio toggle + multi-shot
+                are shared across modes. */}
+            {isOmni && (
+              <>
+                <OmniModePicker />
+                <OmniTierPicker />
+                {omniInputIsI2v && (
+                  <GeneratorI2VSource
+                    batchItems={[]}
+                    onAddBatchItems={() => {}}
+                    onRemoveBatchItem={() => {}}
+                    onUpdateBatchPrompt={() => {}}
+                  />
+                )}
+                {omniInputIsV2v && <OmniVideoPicker />}
+                <PromptField improveButton={improveButton} />
+                {omniInputIsT2v && <OmniMultiShot />}
+              </>
+            )}
             {/* WAN 2.7 is image-to-video only — hide the t2v/i2v
                 toggle and any t2v-specific UI when WAN is selected.
                 The form schema already locks mode to "i2v" on switch. */}
-            {!isWan && !isMotion && (
+            {!isWan && !isMotion && !isOmni && (
               <ModeToggle
                 onModeChange={() => {
                   // Switching mode invalidates the queued batch — different shape.
@@ -281,7 +323,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 }}
               />
             )}
-            {!isWan && !isMotion && mode === "t2v" && (
+            {!isWan && !isMotion && !isOmni && mode === "t2v" && (
               <>
                 {!t2vBatchOpen && (
                   <PromptField improveButton={improveButton} />
@@ -308,7 +350,7 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
                 )}
               </>
             )}
-            {!isMotion && (mode === "i2v" || isWan) && (
+            {!isMotion && !isOmni && (mode === "i2v" || isWan) && (
               <>
                 <PromptField improveButton={improveButton} />
                 <GeneratorI2VSource
@@ -330,7 +372,16 @@ export const GeneratorForm = forwardRef<GeneratorFormHandle, GeneratorFormProps>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isMotion ? (
+            {isOmni ? (
+              // Kling Omni: aspect ratio (incl. "auto") + duration
+              // slider 3-15s + native audio toggle. Tier already picked
+              // above in main card. No cfg_scale field here (in advanced).
+              <>
+                <OmniAspectRatioPicker />
+                <OmniDurationPicker />
+                <OmniAudioSwitch />
+              </>
+            ) : isMotion ? (
               // Kling Motion: orientation toggle + output duration. No
               // aspect_ratio (output frames the character image / ref
               // video), no audio (motion doesn't generate audio), no

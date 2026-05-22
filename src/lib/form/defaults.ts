@@ -27,4 +27,16 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   motion_video_url: "",
   motion_video_duration: 0,
   output_duration: 5,
+  // Kling Omni defaults — only used when model="kling-omni" but form
+  // schema requires the keys present for RHF reset.
+  omni_mode: "video",
+  omni_input: "t2v",
+  omni_tier: "std",
+  omni_video_url: "",
+  omni_video_duration: 0,
+  omni_audio: false,
+  omni_duration: "5",
+  omni_aspect_ratio: "16:9",
+  omni_multi_shot: false,
+  omni_multi_prompt: [],
 };

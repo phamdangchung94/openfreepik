@@ -45,7 +45,12 @@ export interface TaskParams {
    * older tasks created before this field shipped fall back to legacy
    * mode/tier inference.
    */
-  model?: "kling-v3" | "kling-4k" | "kling-motion" | "wan-v27";
+  model?:
+    | "kling-v3"
+    | "kling-4k"
+    | "kling-motion"
+    | "kling-omni"
+    | "wan-v27";
   /** Kling Motion only — character vs video orientation cap (10s vs 30s). */
   orientation?: "video" | "image";
   /** Kling Motion only — full tier label like "v2-6-std". */
@@ -56,6 +61,10 @@ export interface TaskParams {
    * re-uploading. Lives at most 120 minutes (separate sweep cron).
    */
   motionVideoUrl?: string;
+  /** Kling Omni only — route slug indicates (mode, tier). */
+  omniTier?: "omni-std" | "omni-pro" | "omni-ref-std" | "omni-ref-pro";
+  /** Kling Omni V2V only — reference video R2 URL for regenerate. */
+  omniVideoUrl?: string;
 }
 
 export interface GenerationTask {

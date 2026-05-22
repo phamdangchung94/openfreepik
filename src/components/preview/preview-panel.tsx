@@ -252,6 +252,22 @@ function CompletedState({
                 </span>
               )}
             </>
+          ) : task.params?.model === "kling-omni" ? (
+            <>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                Omni {omniTierLabel(task.params.omniTier)}
+              </span>
+              {task.params.duration && (
+                <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                  {task.params.duration}s
+                </span>
+              )}
+              {task.params.audio && (
+                <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
+                  Audio
+                </span>
+              )}
+            </>
           ) : (
             <>
               <span className="rounded-md bg-muted px-1.5 py-0.5 font-medium text-foreground/80">
@@ -416,6 +432,21 @@ function motionTierLabel(tier: string | undefined): string {
       return '3.0 Std';
     case 'v3-pro':
       return '3.0 Pro';
+    default:
+      return '';
+  }
+}
+
+function omniTierLabel(tier: string | undefined): string {
+  switch (tier) {
+    case 'omni-std':
+      return 'Std';
+    case 'omni-pro':
+      return 'Pro';
+    case 'omni-ref-std':
+      return 'Std (V2V)';
+    case 'omni-ref-pro':
+      return 'Pro (V2V)';
     default:
       return '';
   }

@@ -34,6 +34,10 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   const audio = watch("generate_audio");
   const motionTier = watch("motion_tier");
   const outputDuration = watch("output_duration");
+  const omniMode = watch("omni_mode");
+  const omniTier = watch("omni_tier");
+  const omniDuration = watch("omni_duration");
+  const omniAudio = watch("omni_audio");
 
   const rates = usePricingRates();
   const metadata = useAuthStore((s) => s.metadata);
@@ -49,6 +53,23 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
   //            see lookupForWanV27 in lib/pricing/calculator.ts.
   const perItem = useMemo(() => {
     if (!rates) return null;
+    if (model === "kling-omni") {
+      // Per-second billing × audio variant. Endpoint slug shape:
+      //   kling-omni-{tier}-{mode}    mode ∈ {video, reference}
+      // Find matching row, derive per-second rate, multiply by ceil.
+      const slug = `kling-omni-${omniTier}-${omniMode}`;
+      const row = rates.find(
+        (r) =>
+          r.endpoint === slug &&
+          r.withAudio === !!omniAudio &&
+          r.durationSeconds !== null &&
+          r.durationSeconds > 0,
+      );
+      if (!row || !row.durationSeconds) return null;
+      const rate = row.costEur / row.durationSeconds;
+      const billed = Math.max(1, Math.ceil(Number(omniDuration)));
+      return billed * rate;
+    }
     if (model === "kling-motion") {
       // Per-second billing with ceiling — derive rate from any one
       // pricing row, multiply by ceil(outputDuration). Matches server
@@ -83,7 +104,11 @@ export function CostPreview({ count = 1 }: CostPreviewProps) {
       durationSeconds: Number(duration),
       withAudio: !!audio,
     });
-  }, [rates, model, mode, tier, resolution, duration, audio, motionTier, outputDuration]);
+  }, [
+    rates, model, mode, tier, resolution, duration, audio,
+    motionTier, outputDuration,
+    omniMode, omniTier, omniDuration, omniAudio,
+  ]);
 
   if (!rates) {
     // Skeleton matches the loaded card's footprint (rounded-2xl + same

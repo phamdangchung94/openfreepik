@@ -14,6 +14,7 @@ import type {
   Kling4kI2vGenerateParams,
   Kling4kT2vGenerateParams,
   KlingMotionGenerateParams,
+  KlingOmniGenerateParams,
   KlingV3GenerateParams,
   WanV27GenerateParams,
 } from "@/lib/freepik/types";
@@ -51,6 +52,12 @@ export type GeneratePayload =
       tier: "v2-6-std" | "v2-6-pro" | "v3-std" | "v3-pro";
       /** Pricing-only — Magnific has no API duration field. */
       output_duration: number;
+    }
+  | {
+      model: "kling-omni";
+      params: KlingOmniGenerateParams;
+      /** URL segment for the kling-omni/[tier] route. */
+      tier: "omni-std" | "omni-pro" | "omni-ref-std" | "omni-ref-pro";
     };
 
 interface GenerateOpts {
@@ -131,6 +138,19 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           motionVideoUrl: payload.params.video_url,
           cfgScale: payload.params.cfg_scale,
         };
+      } else if (payload.model === "kling-omni") {
+        paramsSnapshot = {
+          model: "kling-omni",
+          duration: payload.params.duration,
+          aspectRatio: payload.params.aspect_ratio,
+          audio: !!payload.params.generate_audio,
+          cfgScale: payload.params.cfg_scale,
+          negativePrompt: payload.params.negative_prompt,
+          multiShot: !!payload.params.multi_prompt?.length,
+          shotCount: payload.params.multi_prompt?.length,
+          omniTier: payload.tier,
+          omniVideoUrl: payload.params.video_url,
+        };
       } else {
         paramsSnapshot = {
           model: "wan-v27",
@@ -164,9 +184,14 @@ export function useGenerateVideo(): UseGenerateVideoResult {
                 ? payload.tier.endsWith("-pro")
                   ? "pro"
                   : "std"
-                : payload.params.resolution === "720P"
-                  ? "std"
-                  : "pro",
+                : payload.model === "kling-omni"
+                  ? payload.tier.endsWith("-pro") ||
+                    payload.tier === "omni-pro"
+                    ? "pro"
+                    : "std"
+                  : payload.params.resolution === "720P"
+                    ? "std"
+                    : "pro",
         createdAt: Date.now(),
         updatedAt: Date.now(),
         videoUrl: null,
@@ -188,7 +213,11 @@ export function useGenerateVideo(): UseGenerateVideoResult {
         | "kling-motion/v2-6-std"
         | "kling-motion/v2-6-pro"
         | "kling-motion/v3-std"
-        | "kling-motion/v3-pro";
+        | "kling-motion/v3-pro"
+        | "kling-omni/omni-std"
+        | "kling-omni/omni-pro"
+        | "kling-omni/omni-ref-std"
+        | "kling-omni/omni-ref-pro";
       let requestBody: object;
       if (payload.model === "kling-v3") {
         endpointPath = "kling-v3";
@@ -202,6 +231,9 @@ export function useGenerateVideo(): UseGenerateVideoResult {
           params: payload.params,
           output_duration: payload.output_duration,
         };
+      } else if (payload.model === "kling-omni") {
+        endpointPath = `kling-omni/${payload.tier}` as const;
+        requestBody = { params: payload.params };
       } else {
         endpointPath = "wan-v27";
         requestBody = { params: payload.params };

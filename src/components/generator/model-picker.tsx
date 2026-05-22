@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormContext } from "react-hook-form";
-import { Sparkles, Move3d } from "lucide-react";
+import { Sparkles, Move3d, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
@@ -11,6 +11,7 @@ import type { GeneratorFormValues } from "@/lib/form/generator-schema";
  * Currently visible:
  *   - Kling 3        — text/image → video, 3 tiers (4K / 1080p Pro / 720p Std)
  *   - Kling Motion   — character image + reference video → motion-transferred output
+ *   - Kling Omni     — multi-modal (T2V / I2V / V2V) với multi-shot + audio
  *
  * WAN 2.7 is temporarily hidden from the picker (per anh 2026-05-19).
  * The schema enum still includes "wan-v27" so any historical form
@@ -32,6 +33,13 @@ export function ModelPicker() {
       // does the right thing in mixed flows.
       setValue("mode", "i2v", { shouldDirty: true });
     }
+    if (next === "kling-omni") {
+      // Omni starts in T2V by default — the omni_mode picker inside
+      // the form lets the customer switch to I2V or V2V. Reset top-
+      // level mode to t2v so any legacy code reading task.mode for
+      // analytics doesn't show stale "i2v" from a previous selection.
+      setValue("mode", "t2v", { shouldDirty: true });
+    }
   }
 
   const options = [
@@ -47,6 +55,12 @@ export function ModelPicker() {
       sub: "Ảnh + video motion → video",
       icon: <Move3d className="size-4" />,
     },
+    {
+      id: "kling-omni" as const,
+      label: "Kling Omni",
+      sub: "T2V/I2V/V2V · multi-shot · audio",
+      icon: <Wand2 className="size-4" />,
+    },
     // {
     //   id: "wan-v27" as const,
     //   label: "WAN 2.7",
@@ -56,7 +70,7 @@ export function ModelPicker() {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-3 gap-2">
       {options.map((opt) => (
         <button
           key={opt.id}
