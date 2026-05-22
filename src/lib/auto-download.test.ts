@@ -77,4 +77,64 @@ describe("buildFilename", () => {
     });
     expect(fn.startsWith("abc123-do-this")).toBe(true);
   });
+
+  // — New format (taskId passed) — added 2026-05-23 to fix batch
+  //   download collisions when customers submit 100 prompts at once.
+  describe("with taskId (new format)", () => {
+    it("appends 6-char id suffix from the task UUID", () => {
+      const fn = buildFilename({
+        tier: "pro",
+        prompt: "cat at sunset",
+        createdAt: new Date("2026-05-23T14:30:52Z").getTime(),
+        taskId: "abc12345-def6-7890-1234-56789a4b9c2f",
+      });
+      // Last 6 hex chars of the de-dashed UUID = "a4b9c2f" → slice(-6) = "4b9c2f"
+      expect(fn).toMatch(/_4b9c2f\.mp4$/);
+    });
+
+    it("uses 20-char slug instead of 15 when taskId present", () => {
+      const fn = buildFilename({
+        tier: "pro",
+        prompt: "this is a very long prompt that should fit twenty chars",
+        createdAt: 0,
+        taskId: "11111111-2222-3333-4444-555555555555",
+      });
+      const slug = fn.split("_")[0] ?? "";
+      expect(slug.length).toBeLessThanOrEqual(20);
+      expect(slug.length).toBeGreaterThan(15);
+    });
+
+    it("uses second-precision timestamp instead of minute-only", () => {
+      const fn = buildFilename({
+        tier: "pro",
+        prompt: "x",
+        createdAt: 0,
+        taskId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      });
+      // YYYYMMDD-HHMMSS = 8 digits dash 6 digits
+      expect(fn).toMatch(/_\d{8}-\d{6}_[0-9a-f]{6}\.mp4$/);
+    });
+
+    it("two tasks with same prompt + minute but different taskId produce different filenames", () => {
+      const base = {
+        tier: "pro" as const,
+        prompt: "same prompt batch",
+        createdAt: new Date("2026-05-23T14:30:00Z").getTime(),
+      };
+      const a = buildFilename({ ...base, taskId: "11111111-aaaa-bbbb-cccc-dddddd111111" });
+      const b = buildFilename({ ...base, taskId: "22222222-aaaa-bbbb-cccc-dddddd222222" });
+      expect(a).not.toBe(b);
+    });
+
+    it("falls back to legacy format when taskId is null", () => {
+      const fn = buildFilename({
+        tier: "pro",
+        prompt: "x",
+        createdAt: 0,
+        taskId: null,
+      });
+      // Legacy format = minute precision (4 digits, not 6)
+      expect(fn).toMatch(/_\d{8}-\d{4}\.mp4$/);
+    });
+  });
 });

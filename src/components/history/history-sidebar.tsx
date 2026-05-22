@@ -110,6 +110,7 @@ export function HistorySidebar() {
           tier: task.tier,
           prompt: task.prompt,
           createdAt: task.createdAt,
+          taskId: task.taskId ?? task.id,
         }),
       });
       if (result.ok) {

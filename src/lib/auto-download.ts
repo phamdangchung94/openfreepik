@@ -94,27 +94,58 @@ export interface FilenameInputs {
   tier: "pro" | "std" | "4k";
   prompt: string;
   createdAt: number;
+  /**
+   * Optional task identifier — last 6 chars used as a uniqueness
+   * suffix so batch downloads (100 prompts submitted same minute,
+   * similar prompts) don't collide on disk. Pass `task.id` (local
+   * UUID) or `task.taskId` (freepik task_id) — both are uniformly
+   * distributed UUIDs. Omit for backward compat (old callers); then
+   * filename falls back to the legacy minute-precision pattern.
+   */
+  taskId?: string | null;
 }
 
 /**
- * Filename pattern: `{slug15}_kling-{tier}_{date}.mp4`
+ * Filename pattern:
+ *   With taskId:    `{slug20}_kling-{tier}_{YYYYMMDD-HHMMSS}_{id6}.mp4`
+ *   Legacy:         `{slug15}_kling-{tier}_{YYYYMMDD-HHMM}.mp4`
  *
- * Example: "ABC123 cinematic shot of a cat" →
- *          "abc123-cinemati_kling-pro_20260504-1430.mp4"
+ * Example (batch case, customer submits 100 similar prompts at once):
+ *   "Cảnh con mèo nhảy lên bàn ăn ban đêm" →
+ *   "canh-con-meo-nhay-len_kling-pro_20260523-143052_a4b9c2.mp4"
  *
- * The 15-char prompt slug at the FRONT means customers who put a
+ * Design choices (2026-05-23):
+ *   - **Slug bumped 15→20 chars** per anh request — more context in
+ *     filename so "Cat at sunset 1/2/3..." stays distinguishable
+ *   - **Second precision** in timestamp — minute-only collided when
+ *     batch dispatched in same minute
+ *   - **6-char task_id suffix** — guarantees uniqueness even when
+ *     batch dispatches < 1 sec apart with identical prompt prefix.
+ *     16^6 ≈ 16M combinations, effectively zero collision risk
+ *
+ * The 20-char prompt slug at the FRONT means customers who put a
  * tracking code at the start of the prompt (e.g. "ABC123 do this video")
  * can sort or grep their Downloads folder by that code. Underscores
- * separate the prompt-derived part from the system-generated metadata
- * so the visual boundary is unambiguous even when the slug ends in `-`.
+ * separate prompt-derived parts from system-generated metadata so the
+ * visual boundary is unambiguous even when the slug ends in `-`.
  */
 export function buildFilename(opts: FilenameInputs): string {
   const d = new Date(opts.createdAt);
   const pad = (n: number) => String(n).padStart(2, "0");
+  if (opts.taskId) {
+    // New format: 20-char slug + seconds + 6-char id suffix
+    const datePart =
+      `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+      `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const slug = sluggify(opts.prompt, 20);
+    // Drop dashes from UUID then take last 6 hex chars — short enough
+    // not to bloat the filename, wide enough for guaranteed uniqueness.
+    const idSuffix = opts.taskId.replace(/-/g, "").slice(-6);
+    return `${slug}_kling-${opts.tier}_${datePart}_${idSuffix}.mp4`;
+  }
+  // Legacy format (no taskId passed) — preserve old behaviour for
+  // back-compat. Minute precision + 15-char slug.
   const datePart = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  // 15 chars is enough for a typical "ABC123 + 8 chars description" code
-  // prefix. Strip diacritics first so Vietnamese prompts produce ASCII
-  // filenames the OS won't mangle.
   const slug = sluggify(opts.prompt, 15);
   return `${slug}_kling-${opts.tier}_${datePart}.mp4`;
 }

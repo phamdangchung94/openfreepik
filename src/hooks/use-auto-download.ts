@@ -98,6 +98,9 @@ async function fireSingleDownload(id: string, task: GenerationTask) {
     tier: task.tier,
     prompt: task.prompt,
     createdAt: task.createdAt,
+    // Prefer Magnific task_id (stable across reload) but fall back to
+    // local UUID — either gives a unique 6-char suffix for batch dedup.
+    taskId: task.taskId ?? task.id,
   });
 
   const loading = toast.loading(`Đang tải ${filename}...`);
@@ -154,6 +157,7 @@ async function downloadBatch(ids: string[]) {
         tier: t.tier,
         prompt: t.prompt,
         createdAt: t.createdAt,
+        taskId: t.taskId ?? t.id,
       }),
     });
     if (result.ok) {

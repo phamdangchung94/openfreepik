@@ -182,6 +182,7 @@ function CompletedState({
       tier: task.tier,
       prompt: task.prompt,
       createdAt: task.createdAt,
+      taskId: task.taskId ?? task.id,
     });
     const loading = toast.loading(`Đang tải ${filename}...`);
     const result = await downloadVideo({
