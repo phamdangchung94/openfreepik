@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/lib/db/client";
+import { vouchers } from "@/lib/db/schema";
 import {
   extractActivationCode,
   parseJsonBody,
@@ -13,6 +16,63 @@ import {
   parseVoucherCode,
 } from "@/lib/vouchers/format";
 import { errFields, log } from "@/lib/logger";
+
+/**
+ * GET /api/redeem-voucher
+ *
+ * Returns the last 10 vouchers redeemed by the authenticated activation
+ * code. Used by the customer-side Claim Code dialog to show "Lịch sử
+ * nạp" — receipts, mostly. Read-only, no rate limit needed.
+ *
+ * Voucher code is masked (`CODE-100-***MPQR`) in the response — the
+ * raw redeemed code is not actionable by the customer anymore but
+ * leaking it to a stolen-session attacker buys them nothing useful
+ * either way. Mask is a defensive minor anyway.
+ */
+export async function GET(request: Request) {
+  const bearer = extractActivationCode(request);
+  if (!bearer) {
+    return NextResponse.json(
+      { ok: false, error: "AUTH", message: "Cần kích hoạt code trước." },
+      { status: 401 },
+    );
+  }
+  const validation = await validateCode(bearer);
+  if (!validation.ok) {
+    return NextResponse.json(
+      { ok: false, error: "AUTH", message: "Code đã dùng/đã hết hạn." },
+      { status: 401 },
+    );
+  }
+
+  const rows = await db
+    .select({
+      id: vouchers.id,
+      code: vouchers.code,
+      tier: vouchers.tier,
+      vndValue: vouchers.vndValue,
+      eurValue: vouchers.eurValue,
+      redeemedAt: vouchers.redeemedAt,
+      refundedAt: vouchers.refundedAt,
+    })
+    .from(vouchers)
+    .where(eq(vouchers.redeemedByCodeId, validation.metadata.codeId))
+    .orderBy(desc(vouchers.redeemedAt))
+    .limit(10);
+
+  return NextResponse.json({
+    ok: true,
+    history: rows.map((r) => ({
+      id: r.id,
+      maskedCode: maskVoucherCode(r.code),
+      tier: r.tier,
+      vndValue: r.vndValue,
+      eurValue: Number(r.eurValue),
+      redeemedAt: r.redeemedAt,
+      refundedAt: r.refundedAt,
+    })),
+  });
+}
 
 /**
  * POST /api/redeem-voucher

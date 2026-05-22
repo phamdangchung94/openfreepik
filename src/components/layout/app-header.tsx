@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Coins } from "lucide-react";
 import { ActivationCodeInput } from "@/components/layout/activation-code-input";
+import { ClaimCodeButton } from "@/components/layout/claim-code-button";
 import { AutoDownloadToggle } from "@/components/layout/auto-download-toggle";
 import { UsageStatsButton } from "@/components/layout/usage-stats-button";
 import { ErrorLogButton } from "@/components/error-log/error-log-button";
@@ -40,6 +41,10 @@ export function AppHeader() {
           <ErrorLogButton />
           <UsageStatsButton />
           <ActivationCodeInput />
+          {/* "Claim Code" mounts only when activated + topup/quota mode
+              (the component self-gates). Sits right next to the
+              activation chip so customers find it intuitively. */}
+          <ClaimCodeButton />
           <AutoDownloadToggle />
         </div>
       </div>
