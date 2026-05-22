@@ -114,16 +114,11 @@ export async function GET(
 
   try {
     if (data.status === "FAILED") {
-      // TEMP DIAG (2026-05-22): stash raw upstream JSON into
-      // error_message so we can read it via Neon SQL (Vercel UI
-      // truncates log message bodies). Remove after root cause found.
-      const rawJson = JSON.stringify(data).slice(0, 500);
       await finalizeUsageOnPoll({
         freepikTaskId: taskId,
         outcome: "failed",
         failureReason: "MAGNIFIC_FAILED",
-        upstreamErrorMessage:
-          data.error_message ?? `DIAG_RAW: ${rawJson}`,
+        upstreamErrorMessage: data.error_message ?? null,
       });
     } else if (data.status === "COMPLETED") {
       const sourceUrl = data.generated[0];

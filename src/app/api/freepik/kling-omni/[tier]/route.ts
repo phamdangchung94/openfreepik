@@ -134,19 +134,6 @@ export async function POST(
     ? { ...omniParams, webhook_url: webhookUrl }
     : omniParams;
 
-  // TEMP DIAG (2026-05-22): log outbound body shape to debug Omni
-  // upstream failures. Strip webhook_url to reduce noise. Remove after
-  // root cause identified.
-  log.info("OMNI_POST_DEBUG", {
-    slug,
-    mode,
-    tier,
-    body: JSON.stringify({
-      ...paramsWithWebhook,
-      webhook_url: paramsWithWebhook.webhook_url ? "[set]" : undefined,
-    }),
-  });
-
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
     preValidated: validation,
