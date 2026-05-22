@@ -741,6 +741,21 @@ trong `pricing_rules` (4 endpoint × 2 audio). Reference (V2V) priced
 same as video — admin có thể split sau qua admin pricing matrix nếu
 upstream charge khác.
 
+**⚠️ Std tier hidden từ UI 2026-05-22** — e2e test (3 lần × 3 account
+khác nhau) confirm Magnific upstream silently fails mọi Std task: POST
+trả task_id OK, GET status=FAILED + generated=[] trong ~3-5s, không
+có error_message. Pro tier hoạt động bình thường (test thành công ~86s
+end-to-end). Pricing rows + backend route Std intact cho revert.
+
+**Re-enable Std flow** (sau khi anh xác nhận Magnific support đã enable
+SKU cho accounts):
+1. `omni-tier-picker.tsx`: uncomment Std option trong `OPTIONS` array
+2. `(customer)/pricing/page.tsx KlingOmniSection`: uncomment Std column
+3. `defaults.ts` + `generator-schema.ts`: optional — đổi default
+   `omni_tier` về `"std"` nếu muốn (Pro vẫn fine làm default)
+4. Test lại với `pnpm tsx --env-file=.env.local scripts/test-omni-e2e.ts`
+   với `OMNI_TEST_TIER=omni-std` — confirm SUCCESS trước khi rollout
+
 **Multi-shot**: tách riêng UI khỏi Kling V3 (`omni-multi-shot.tsx`).
 Field `omni_multi_prompt[N].prompt`, max 6 shots. Magnific tự ghép
 khi `shot_type="customize"`. Anh muốn iterate UI multi-shot V3 riêng

@@ -399,8 +399,10 @@ function KlingOmniSection({ rules }: { rules: PricingRule[] }) {
     return row.costEur / row.durationSeconds;
   }
 
+  // Std hidden 2026-05-22 — Magnific upstream silently fails (see
+  // RUNBOOK "Kling 3 Omni" section). Pricing rows kept for revert.
   const columns = [
-    { id: "std", label: "Standard" },
+    // { id: "std", label: "Standard" },
     { id: "pro", label: "Pro", highlight: true },
   ] as const;
 

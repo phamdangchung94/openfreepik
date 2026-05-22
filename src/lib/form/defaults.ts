@@ -31,7 +31,7 @@ export const FORM_DEFAULTS: GeneratorFormValues = {
   // schema requires the keys present for RHF reset.
   omni_mode: "video",
   omni_input: "t2v",
-  omni_tier: "std",
+  omni_tier: "pro",
   omni_video_url: "",
   omni_video_duration: 0,
   omni_audio: false,

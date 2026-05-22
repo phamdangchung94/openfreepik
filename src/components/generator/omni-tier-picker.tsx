@@ -7,13 +7,19 @@ import { formatVnd } from "@/lib/format-currency";
 import type { GeneratorFormValues } from "@/lib/form/generator-schema";
 
 /**
- * 2-button tier picker for Kling Omni. Rate labels reflect the retail
- * EUR/s from pricing_rules (kling-omni-{tier}-video with/without audio).
- * Audio toggle is separate — these are no-audio base rates; with-audio
+ * Tier picker for Kling Omni. Rate labels reflect retail EUR/s from
+ * pricing_rules (kling-omni-{tier}-video with/without audio). Audio
+ * toggle is separate — these are no-audio base rates; with-audio
  * variant costs ~1.83x.
+ *
+ * Std hidden from UI 2026-05-22 — Magnific upstream silently fails
+ * every Std task (confirmed via e2e test on 3 different accounts:
+ * POST returns task_id, GET status=FAILED + generated=[] within 5s,
+ * no error_message). Pricing rows + backend route intact for revert.
+ * Re-enable: uncomment Std option below + flip default in defaults.ts.
  */
 const OPTIONS = [
-  { id: "std" as const, label: "Standard", rateEurPerSec: 0.168 },
+  // { id: "std" as const, label: "Standard", rateEurPerSec: 0.168 },
   { id: "pro" as const, label: "Pro", rateEurPerSec: 0.224 },
 ];
 
@@ -24,7 +30,11 @@ export function OmniTierPicker() {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs">Chất lượng</Label>
-      <div className="grid grid-cols-2 gap-2">
+      <div
+        className={
+          OPTIONS.length === 1 ? "grid grid-cols-1 gap-2" : "grid grid-cols-2 gap-2"
+        }
+      >
         {OPTIONS.map((opt) => (
           <button
             key={opt.id}

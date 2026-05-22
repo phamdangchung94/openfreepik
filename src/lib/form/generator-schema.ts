@@ -110,7 +110,7 @@ export const generatorFormSchema = z
     omni_mode: z.enum(["video", "reference"]).default("video"),
     /** T2V vs I2V inside the video namespace — UI-only marker. */
     omni_input: z.enum(["t2v", "i2v"]).default("t2v"),
-    omni_tier: z.enum(["std", "pro"]).default("std"),
+    omni_tier: z.enum(["std", "pro"]).default("pro"),
     /** Reference video URL for V2V mode (uploaded same flow as motion). */
     omni_video_url: z.string().default(""),
     /** Reference video detected duration (seconds, float). Drives picker. */
