@@ -114,6 +114,14 @@ export async function GET(
 
   try {
     if (data.status === "FAILED") {
+      // TEMP DIAG (2026-05-22): Omni tasks failing fast with no upstream
+      // reason — dump raw response so we can see what Magnific actually
+      // returns. Remove after root cause identified.
+      log.warn("OMNI_TASK_FAILED_DEBUG", {
+        taskId,
+        tier: tierParam,
+        rawData: JSON.stringify(data),
+      });
       await finalizeUsageOnPoll({
         freepikTaskId: taskId,
         outcome: "failed",
