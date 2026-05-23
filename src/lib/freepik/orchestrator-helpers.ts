@@ -12,6 +12,7 @@ import { usageLogs, type NewUsageLog } from "@/lib/db/schema";
 import { refundCode } from "@/lib/auth/activation";
 import { FreepikApiError } from "@/lib/freepik/errors";
 import { errFields, log } from "@/lib/logger";
+import { fireCustomerWebhook } from "@/lib/api-v1/customer-webhook";
 
 export interface LogUsageOpts {
   endpoint:
@@ -39,6 +40,13 @@ export interface LogUsageOpts {
    * Migration 0011.
    */
   prompt?: string | null;
+  /**
+   * Customer-supplied webhook URL (from /v1/* request body top-level
+   * `webhook_url`). Persisted to `usage_logs.customer_webhook_url`;
+   * fired by finalizeUsageOnPoll on terminal state change. Null for
+   * web UI requests (which use in-app polling).
+   */
+  customerWebhookUrl?: string | null;
 }
 
 export type OrchestrateResult<T> =
@@ -117,6 +125,7 @@ export async function logUsage(
       freepikTaskId,
       status,
       prompt: opts.prompt ?? null,
+      customerWebhookUrl: opts.customerWebhookUrl ?? null,
     });
   } catch (err) {
     log.error("USAGE_LOG_INSERT_FAILED", {
@@ -191,7 +200,7 @@ export async function finalizeUsageOnPoll(
       });
       return finalizeUsageOnPoll({ ...opts, outcome: "failed", failureReason: "MISSING_URL" });
     }
-    await db
+    const succRows = await db
       .update(usageLogs)
       .set({
         status: "succeeded",
@@ -204,7 +213,34 @@ export async function finalizeUsageOnPoll(
           eq(usageLogs.freepikTaskId, opts.freepikTaskId),
           eq(usageLogs.status, "pending"),
         ),
+      )
+      .returning({
+        endpoint: usageLogs.endpoint,
+        customerWebhookUrl: usageLogs.customerWebhookUrl,
+        videoUrlExpiresAt: usageLogs.videoUrlExpiresAt,
+      });
+    const succRow = succRows[0];
+    // Fire customer webhook if this transition actually flipped a row
+    // (idempotency guard above means concurrent finalizes return 0
+    // rows; only the WINNING finalize sends the notification).
+    if (succRow?.customerWebhookUrl) {
+      // Don't await — finalize must complete regardless of webhook
+      // delivery. Helper handles errors internally.
+      void fireCustomerWebhook(
+        succRow.customerWebhookUrl,
+        "task.succeeded",
+        {
+          task_id: opts.freepikTaskId,
+          status: "COMPLETED",
+          endpoint: succRow.endpoint,
+          video_url: opts.videoUrl,
+          video_url_expires_at:
+            succRow.videoUrlExpiresAt?.toISOString() ?? null,
+          error_message: null,
+          finalized_at: new Date().toISOString(),
+        },
       );
+    }
     return;
   }
 
@@ -235,10 +271,31 @@ export async function finalizeUsageOnPoll(
     .returning({
       codeId: usageLogs.codeId,
       costEur: usageLogs.costEur,
+      endpoint: usageLogs.endpoint,
+      customerWebhookUrl: usageLogs.customerWebhookUrl,
     });
 
   const [row] = updated;
   if (!row) return; // already finalized by a concurrent path
+
+  // Fire customer webhook (failed path). Treat refunded == failed
+  // from customer POV — the request is dead and won't produce video.
+  if (row.customerWebhookUrl) {
+    void fireCustomerWebhook(
+      row.customerWebhookUrl,
+      "task.failed",
+      {
+        task_id: opts.freepikTaskId,
+        status: "FAILED",
+        endpoint: row.endpoint,
+        video_url: null,
+        video_url_expires_at: null,
+        error_message:
+          opts.upstreamErrorMessage ?? opts.failureReason ?? null,
+        finalized_at: new Date().toISOString(),
+      },
+    );
+  }
 
   const cost = Number(row.costEur);
   if (cost <= 0) return;

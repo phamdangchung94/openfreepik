@@ -110,6 +110,14 @@ export interface OrchestrateOptions<T> {
    * polling-only finalization for that one task.
    */
   requiresWebhook?: boolean;
+  /**
+   * Customer-supplied webhook URL (from /v1/* request body). Persisted
+   * to usage_logs and fired by finalizeUsageOnPoll on terminal status
+   * change. Distinct from `requiresWebhook` which controls the upstream
+   * Magnific callback — this is for notifying the CUSTOMER. Null for
+   * web UI requests.
+   */
+  customerWebhookUrl?: string | null;
 }
 
 export async function orchestrateFreepikCall<T>(
@@ -273,7 +281,13 @@ async function runOrchestrate<T>(
         // pending entirely — nothing to refund and no poll-side
         // finalize wired up.
         const initialStatus = opts.costEur > 0 ? "pending" : "succeeded";
-        await logUsage(opts, codeId, key.id, taskId, initialStatus);
+        await logUsage(
+          { ...opts, customerWebhookUrl: opts.customerWebhookUrl },
+          codeId,
+          key.id,
+          taskId,
+          initialStatus,
+        );
       } catch (trackErr) {
         log.error("POST_CHARGE_TRACKING_FAILED", {
           requestId,

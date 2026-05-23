@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { purgeExpiredSessions } from "@/lib/auth/admin";
 import { purgeStaleFailedLogins } from "@/lib/auth/login-throttle";
 import { purgeExpiredRateLimitBuckets } from "@/lib/rate-limit";
+import { purgeExpiredIdempotencyKeys } from "@/lib/api-v1/idempotency";
 import { probeAndHealthcheckActiveKeys } from "@/lib/freepik/probe-quota";
 import { errFields, log } from "@/lib/logger";
 
@@ -46,17 +47,21 @@ export async function GET(request: Request) {
     purgeExpiredSessions(),
     purgeExpiredRateLimitBuckets(),
     purgeStaleFailedLogins(),
+    purgeExpiredIdempotencyKeys(),
     probeAndHealthcheckActiveKeys(),
   ]);
 
+  // Index 4 = probeAndHealthcheckActiveKeys (was 3 before idempotency
+  // cleanup was inserted at index 3). Keep this in sync if reordering.
   const keyHealth =
-    results[3].status === "fulfilled" ? results[3].value : null;
+    results[4].status === "fulfilled" ? results[4].value : null;
 
   const summary = {
     sessions: results[0].status,
     rateLimitBuckets: results[1].status,
     failedLogins: results[2].status,
-    keyHealth: results[3].status,
+    idempotencyKeys: results[3].status,
+    keyHealth: results[4].status,
     keysProbed: keyHealth?.probed ?? 0,
     keysDeactivated: keyHealth?.deactivated ?? 0,
     keysFailed: keyHealth?.failed ?? 0,

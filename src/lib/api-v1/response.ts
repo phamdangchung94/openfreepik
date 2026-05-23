@@ -76,6 +76,32 @@ export function apiSuccess<T>(opts: ApiSuccessOpts<T>): NextResponse {
 }
 
 /**
+ * Extract the optional `webhook_url` field from a parsed request body
+ * and validate it as a URL. Returns null if absent or invalid (silent
+ * — invalid webhook is non-fatal; customer can still poll). Used by
+ * v1 video POST routes to capture the customer's notification endpoint
+ * for later forwarding by finalizeUsageOnPoll.
+ *
+ * Accepts http/https only — file:// or javascript: URLs would let an
+ * attacker make the server POST sensitive payloads to its own loopback
+ * or trigger redirector flows.
+ */
+export function extractCustomerWebhookUrl(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const raw = (body as Record<string, unknown>).webhook_url;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Generate `X-RateLimit-Limit / Remaining / Reset` headers from a
  * checkRateLimit result. Customer-facing convention follows
  * draft-ietf-httpapi-ratelimit-headers — Remaining = limit - count,

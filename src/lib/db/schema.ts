@@ -2,8 +2,10 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -210,6 +212,14 @@ export const usageLogs = pgTable(
      * stay valid. Migration 0011.
      */
     prompt: text("prompt"),
+    /**
+     * Customer-supplied webhook URL for /v1/* task completion
+     * notification. When set, the finalizer fires a POST here on
+     * status change (succeeded/failed/refunded). Best-effort fire-
+     * and-forget; customer can still poll /v1/tasks/{id} if delivery
+     * fails. Migration 0016.
+     */
+    customerWebhookUrl: text("customer_webhook_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -404,3 +414,35 @@ export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
 export type Voucher = typeof vouchers.$inferSelect;
 export type NewVoucher = typeof vouchers.$inferInsert;
+
+/**
+ * Idempotency-Key cache for /api/v1/* POST endpoints. Stripe-style:
+ * customer sends a unique key, server caches the response, replays
+ * verbatim on retry. PK = (api_key_id, idempotency_key) so two
+ * customers can use the same key string without collision.
+ * Migration 0017.
+ */
+export const idempotencyKeys = pgTable(
+  "idempotency_keys",
+  {
+    apiKeyId: uuid("api_key_id")
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    /** SHA-256 hex of the request body JSON — detects key reuse with different body. */
+    requestBodyHash: text("request_body_hash").notNull(),
+    responseStatus: integer("response_status").notNull(),
+    responseBody: jsonb("response_body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.apiKeyId, t.idempotencyKey] }),
+    index("idempotency_keys_expires_at_idx").on(t.expiresAt),
+  ],
+);
+
+export type IdempotencyKey = typeof idempotencyKeys.$inferSelect;
+export type NewIdempotencyKey = typeof idempotencyKeys.$inferInsert;

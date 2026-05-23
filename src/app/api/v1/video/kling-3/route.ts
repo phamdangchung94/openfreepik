@@ -10,6 +10,8 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
+import { extractCustomerWebhookUrl } from "@/lib/api-v1/response";
+import { beginIdempotency } from "@/lib/api-v1/idempotency";
 import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
@@ -102,6 +104,9 @@ export async function POST(request: Request) {
   // Webhook URL inject conditional theo key picked — orchestrator
   // gate qua requiresWebhook + withConditionalWebhook (2026-05-23).
 
+  const idem = await beginIdempotency(request, body, auth);
+  if (idem.replay) return idem.replay;
+
   const result = await orchestrateFreepikCall({
     bearerCode: null,
     preValidated: auth.preValidated,
@@ -111,7 +116,7 @@ export async function POST(request: Request) {
     durationSeconds: Number(params.duration ?? 5),
     withAudio: !!params.generate_audio,
     prompt: params.prompt ?? null,
-    requiresWebhook: webhookUrl !== null,    callFreepik: (apiKey, ctx) => freepik.klingV3.generate(withConditionalWebhook(params, webhookUrl, ctx), { apiKey, tier }),
+    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    callFreepik: (apiKey, ctx) => freepik.klingV3.generate(withConditionalWebhook(params, webhookUrl, ctx), { apiKey, tier }),
     extractTaskId: (data) => data.task_id,
   });
 
@@ -119,7 +124,7 @@ export async function POST(request: Request) {
     return NextResponse.json(result.body, { status: result.status });
   }
 
-  return NextResponse.json({
+  const responseBody = {
     ok: true,
     task_id: result.data.task_id,
     balance: {
@@ -128,5 +133,7 @@ export async function POST(request: Request) {
       quotaEur: result.metadata.quotaEur,
       remainingEur: result.metadata.remainingEur,
     },
-  });
+  };
+  await idem.commit({ status: 200, body: responseBody });
+  return NextResponse.json(responseBody);
 }
