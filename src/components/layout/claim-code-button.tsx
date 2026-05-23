@@ -18,7 +18,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuthStore, type BalanceUpdate } from "@/store/auth-store";
-import { formatVnd } from "@/lib/format-currency";
 
 /**
  * Customer-side "Claim Code" — opens a dialog where the customer pastes
@@ -115,9 +114,9 @@ function ClaimDialog({ activationCode }: { activationCode: string }) {
       // immediately without a separate /api/activate roundtrip.
       const balance = json.balance as BalanceUpdate;
       mergeBalance(balance);
-      toast.success(
-        `Đã nạp +${json.eurValue} € (${formatVnd(json.eurValue)})`,
-      );
+      // Hiển thị theo tier (vd "+500k") thay vì EUR — khách hàng quen
+      // với mệnh giá VND của voucher hơn là số EUR equivalent.
+      toast.success(`Đã nạp +${json.tier} vào tài khoản`);
       setVoucherCode("");
       // Refresh history so the new redemption shows up.
       void fetchHistory();
@@ -145,7 +144,7 @@ function ClaimDialog({ activationCode }: { activationCode: string }) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Ticket className="size-4 text-emerald-500" />
-            Nạp tiền — Claim Code
+            Claim Code
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 text-sm">
@@ -219,7 +218,7 @@ function ClaimDialog({ activationCode }: { activationCode: string }) {
                       <span
                         className={`font-medium ${h.refundedAt ? "text-muted-foreground line-through" : "text-emerald-600 dark:text-emerald-400"}`}
                       >
-                        +{h.eurValue} €
+                        +{h.tier}
                       </span>
                     </li>
                   ))}
