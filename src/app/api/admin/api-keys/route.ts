@@ -6,7 +6,8 @@ import { activationCodes, apiKeys, usageLogs } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
 import { mintApiKey } from "@/lib/auth/api-key";
-import { log } from "@/lib/logger";
+import { encrypt } from "@/lib/crypto/aes-gcm";
+import { errFields, log } from "@/lib/logger";
 
 /**
  * Admin CRUD for programmatic API keys.
@@ -50,6 +51,10 @@ export async function GET() {
       lastUsedAt: apiKeys.lastUsedAt,
       createdAt: apiKeys.createdAt,
       expiresAt: apiKeys.expiresAt,
+      // Drives the "Show key" button gate in the admin UI — true when
+      // the key was minted after migration 0018 and we can decrypt
+      // plaintext on demand.
+      hasPlaintext: sql<boolean>`${apiKeys.keyEncrypted} IS NOT NULL`,
     })
     .from(apiKeys)
     .leftJoin(activationCodes, eq(activationCodes.id, apiKeys.codeId))
@@ -101,6 +106,7 @@ export async function GET() {
       lastUsedAt: r.lastUsedAt,
       createdAt: r.createdAt,
       expiresAt: r.expiresAt,
+      hasPlaintext: r.hasPlaintext,
       // Linked activation code balance snapshot — saves a roundtrip
       // when admin wants to know "how much credit does this key have?".
       account: {
@@ -163,10 +169,32 @@ export async function POST(request: Request) {
     ? new Date(Date.now() + parsed.data.expiresInDays * 86_400_000)
     : null;
 
+  // AES-GCM encrypt plaintext for admin-side reveal (migration 0018).
+  // Decryption requires KEY_ENCRYPTION_SECRET — leaked DB alone yields
+  // nothing.
+  let keyEncrypted: string;
+  try {
+    keyEncrypted = await encrypt(plaintext);
+  } catch (err) {
+    log.error("API_KEY_ENCRYPT_FAILED", {
+      label: parsed.data.label,
+      ...errFields(err),
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "ENCRYPT_FAILED",
+        message: "Không thể lưu key — kiểm tra KEY_ENCRYPTION_SECRET.",
+      },
+      { status: 500 },
+    );
+  }
+
   const [row] = await db
     .insert(apiKeys)
     .values({
       keyHash: hash,
+      keyEncrypted,
       label: parsed.data.label,
       codeId: parsed.data.codeId,
       rateLimitPerMin: parsed.data.rateLimitPerMin ?? null,

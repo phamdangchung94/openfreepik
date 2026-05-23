@@ -14,6 +14,7 @@ import {
   ExternalLink,
   Wallet,
   Activity,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -64,6 +65,11 @@ interface ApiKeyRow {
     pendingCount: number;
     spendEur: number;
   };
+  /**
+   * True when the row has an encrypted plaintext on file (migration
+   * 0018+). False for legacy keys — UI hides the Reveal button.
+   */
+  hasPlaintext: boolean;
 }
 
 interface CodeOption {
@@ -357,7 +363,8 @@ function ApiTokenCard({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <RevealKeyButton row={row} />
           <Button
             variant="outline"
             size="sm"
@@ -396,6 +403,136 @@ function ApiTokenCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * "Xem key" button — on click, fetches plaintext from /reveal endpoint
+ * + opens dialog with copy button. For legacy keys (hasPlaintext=false),
+ * renders disabled with a tooltip explaining why.
+ */
+function RevealKeyButton({ row }: { row: ApiKeyRow }) {
+  const [open, setOpen] = useState(false);
+  const [plaintext, setPlaintext] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  if (!row.hasPlaintext) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex-1"
+        disabled
+        title="Key này được tạo trước khi tính năng lưu plaintext bật. Mint key mới để xem được."
+      >
+        <Eye className="size-3.5" />
+        Xem key
+      </Button>
+    );
+  }
+
+  async function fetchPlaintext() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/api-keys/${row.id}/reveal`);
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Không lấy được plaintext");
+        return;
+      }
+      setPlaintext(json.plaintext);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copy() {
+    if (!plaintext) return;
+    try {
+      await navigator.clipboard.writeText(plaintext);
+      setCopied(true);
+      toast.success("Đã copy");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Copy thất bại");
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex-1"
+        onClick={() => {
+          setOpen(true);
+          if (!plaintext) void fetchPlaintext();
+        }}
+        title="Xem plaintext key — gửi lại cho customer nếu họ mất"
+      >
+        <Eye className="size-3.5" />
+        Xem key
+      </Button>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) {
+            // Clear plaintext on close so it's not lingering in React
+            // state after dialog dismisses — refetched on next open.
+            setPlaintext(null);
+            setCopied(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>API key: {row.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-3" />
+                Gửi key này qua kênh bảo mật (Zalo private, password manager)
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Mỗi lần xem được audit-log. Nếu nghi rò rỉ → Revoke + mint key mới.
+              </p>
+            </div>
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+                <RefreshCw className="size-3.5 animate-spin" />
+                Đang giải mã…
+              </div>
+            ) : plaintext ? (
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
+                  {plaintext}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copy}
+                  className="size-9 shrink-0 [&_svg]:size-3.5"
+                  aria-label="Copy plaintext key"
+                >
+                  {copied ? <Check className="text-emerald-500" /> : <Copy />}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-destructive">Không lấy được key. Thử lại.</p>
+            )}
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

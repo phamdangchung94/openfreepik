@@ -124,8 +124,15 @@ export const apiKeys = pgTable(
   "api_keys",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** SHA-256(plaintext_key). Lookup index. Plaintext never stored. */
+    /** SHA-256(plaintext_key). Lookup index for auth. */
     keyHash: text("key_hash").notNull(),
+    /**
+     * AES-GCM encrypted plaintext (migration 0018). Lets admin reveal
+     * the key later when customer loses their copy. Same secret as
+     * freepik_keys.key_encrypted. Null for legacy keys created before
+     * migration — those can't be recovered, must be re-minted.
+     */
+    keyEncrypted: text("key_encrypted"),
     /** Customer-readable name. Admin sees this in the dashboard. */
     label: text("label").notNull(),
     /** Links the key to an activation code that owns billing. */
