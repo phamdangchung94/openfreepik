@@ -9,6 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { TryIt } from "./try-it";
 import { SidebarNav, MobileSectionMenu, type NavItem } from "./sidebar-nav";
+import { CopyForAiButton } from "./copy-for-ai-button";
 
 const NAV_ITEMS: readonly NavItem[] = [
   { anchor: "auth", label: "Kiểm tra key", method: "GET", group: "Bắt đầu" },
@@ -38,22 +39,27 @@ export default function ApiDocsPage() {
     <div className="mx-auto flex max-w-7xl gap-6 px-4 py-8">
       <SidebarNav items={NAV_ITEMS} />
       <div className="min-w-0 flex-1 space-y-8">
-        <div className="flex items-center justify-between gap-2">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold">API tài liệu</h1>
             <p className="text-sm text-muted-foreground">
               Tích hợp video AI vào ứng dụng của bạn qua API key. Mỗi
               endpoint có nút <span className="font-medium text-foreground">Test trực tiếp</span> để
-              thử ngay không cần copy-paste.
+              thử ngay không cần copy-paste — hoặc bấm{" "}
+              <span className="font-medium text-foreground">Copy cho AI</span>{" "}
+              để dán toàn bộ spec vào ChatGPT/Claude/Cursor.
             </p>
           </div>
-          <Link
-            href="/"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-          >
-            <ArrowLeft className="size-4" />
-            <span className="hidden sm:inline">Quay lại</span>
-          </Link>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <CopyForAiButton />
+            <Link
+              href="/"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              <ArrowLeft className="size-4" />
+              <span className="hidden sm:inline">Quay lại</span>
+            </Link>
+          </div>
         </div>
 
         <MobileSectionMenu items={NAV_ITEMS} />
