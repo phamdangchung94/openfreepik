@@ -14,7 +14,7 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
-import { getWebhookUrl } from "@/lib/freepik/webhook-url";
+import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 /**
@@ -121,9 +121,9 @@ export async function POST(
   }
 
   const webhookUrl = getWebhookUrl();
-  const paramsWithWebhook = webhookUrl
-    ? { ...omniParams, webhook_url: webhookUrl }
-    : omniParams;
+
+  // Webhook URL inject conditional theo key picked — orchestrator
+  // gate qua requiresWebhook + withConditionalWebhook (2026-05-23).
 
   const result = await orchestrateFreepikCall({
     bearerCode: null,
@@ -135,8 +135,8 @@ export async function POST(
     withAudio,
     prompt:
       omniParams.prompt ?? omniParams.multi_prompt?.join(" / ") ?? null,
-    callFreepik: (apiKey) =>
-      freepik.klingOmni.generate(paramsWithWebhook, {
+    requiresWebhook: webhookUrl !== null,    callFreepik: (apiKey, ctx) =>
+      freepik.klingOmni.generate(withConditionalWebhook(omniParams, webhookUrl, ctx), {
         mode,
         tier,
         apiKey,

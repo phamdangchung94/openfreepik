@@ -10,7 +10,7 @@ import {
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
-import { getWebhookUrl } from "@/lib/freepik/webhook-url";
+import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 /**
@@ -98,9 +98,9 @@ export async function POST(request: Request) {
   }
 
   const webhookUrl = getWebhookUrl();
-  const paramsWithWebhook = webhookUrl
-    ? { ...params, webhook_url: webhookUrl }
-    : params;
+
+  // Webhook URL inject conditional theo key picked — orchestrator
+  // gate qua requiresWebhook + withConditionalWebhook (2026-05-23).
 
   const result = await orchestrateFreepikCall({
     bearerCode: null,
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
     durationSeconds: Number(params.duration ?? 5),
     withAudio: !!params.generate_audio,
     prompt: params.prompt ?? null,
-    callFreepik: (apiKey) => freepik.klingV3.generate(paramsWithWebhook, { apiKey, tier }),
+    requiresWebhook: webhookUrl !== null,    callFreepik: (apiKey, ctx) => freepik.klingV3.generate(withConditionalWebhook(params, webhookUrl, ctx), { apiKey, tier }),
     extractTaskId: (data) => data.task_id,
   });
 

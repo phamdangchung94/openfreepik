@@ -79,8 +79,20 @@ export interface OrchestrateOptions<T> {
    * params.prompt the user supplied.
    */
   prompt?: string | null;
-  /** Closure that performs the Freepik HTTP call with the chosen key. */
-  callFreepik: (apiKey: string) => Promise<T>;
+  /**
+   * Closure that performs the Freepik HTTP call with the chosen key.
+   *
+   * `ctx.hasWebhookSecret` lets the route handler conditionally include
+   * `webhook_url` in the payload — when the picked key lacks a webhook
+   * signing secret, requesting webhook delivery generates 401 noise
+   * (Magnific sends → we can't verify → reject) and leaves tasks pending
+   * until orphan-sweeper runs. Routes use this to skip webhook_url so
+   * Magnific doesn't bother trying.
+   */
+  callFreepik: (
+    apiKey: string,
+    ctx: { hasWebhookSecret: boolean },
+  ) => Promise<T>;
   /** Extract the Freepik task_id from the response, for logging. */
   extractTaskId?: (data: T) => string | null;
   /**
@@ -89,6 +101,15 @@ export interface OrchestrateOptions<T> {
    * roundtrip — see audit #11 W1.
    */
   preValidated?: ValidationResult;
+  /**
+   * When true, the orchestrator asks the key pool to PREFER keys with
+   * `webhook_secret_encrypted` configured. Set this whenever the route
+   * intends to include `webhook_url` in the upstream payload. Falls back
+   * to non-webhook keys if all webhook-capable keys are saturated /
+   * exhausted — never blocks the request, just down-grades to
+   * polling-only finalization for that one task.
+   */
+  requiresWebhook?: boolean;
 }
 
 export async function orchestrateFreepikCall<T>(
@@ -171,7 +192,9 @@ async function runOrchestrate<T>(
   const triedKeyIds = new Set<string>();
 
   for (let attempt = 0; attempt < MAX_KEY_RETRIES; attempt++) {
-    const key = await pickActiveKey(opts.costEur, triedKeyIds);
+    const key = await pickActiveKey(opts.costEur, triedKeyIds, {
+      preferWebhookCapable: opts.requiresWebhook ?? false,
+    });
     if (!key) {
       // Diagnostic: when this fires, admin needs to know WHY the pool
       // looked empty — was every key inactive, or just out of budget,
@@ -195,8 +218,24 @@ async function runOrchestrate<T>(
       );
     }
 
+    // Diagnostic: when caller wanted webhook but pool gave us a key
+    // without one, log a warning so admin sees the downgrade in real
+    // time. The request still proceeds (better than 503), Magnific just
+    // won't send a webhook → completion routes through polling +
+    // orphan-sweeper fallback.
+    if (opts.requiresWebhook && !key.hasWebhookSecret) {
+      log.warn("WEBHOOK_DOWNGRADE", {
+        requestId,
+        endpoint: opts.endpoint,
+        keyId: key.id,
+        keyLabel: key.label,
+      });
+    }
+
     try {
-      const data = await opts.callFreepik(key.decryptedKey);
+      const data = await opts.callFreepik(key.decryptedKey, {
+        hasWebhookSecret: key.hasWebhookSecret,
+      });
 
       // P0-2: Freepik occasionally returns 200 with a malformed body. If
       // we can't extract a task_id, the customer has nothing to poll —

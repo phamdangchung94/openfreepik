@@ -15,6 +15,32 @@ export interface PickedKey {
   id: string;
   label: string;
   decryptedKey: string;
+  /**
+   * True if this key has a Magnific webhook signing secret configured.
+   * The orchestrator uses this to decide whether to include
+   * `webhook_url` in the upstream POST — keys WITHOUT a secret can't
+   * verify incoming webhook signatures, so requesting webhook delivery
+   * just generates noise (401 rejections) and prevents instant
+   * task finalization. Without webhook, finalize falls back to
+   * client polling + orphan-sweeper (15-min worst-case finalization).
+   */
+  hasWebhookSecret: boolean;
+}
+
+export interface PickActiveKeyOptions {
+  /**
+   * When true, the picker ORDERs webhook-capable keys (those with
+   * `webhook_secret_encrypted IS NOT NULL`) ahead of non-webhook keys.
+   * Falls back to non-webhook keys if all webhook-capable ones are
+   * saturated / out of budget — never returns null just because no
+   * webhook key is available.
+   *
+   * Set this true when the request includes `webhook_url` so Magnific
+   * doesn't end up trying to deliver webhooks to a server that can't
+   * verify them. 2026-05-23: 4/6 active keys lack secrets and were
+   * causing tasks to sit pending until orphan-sweeper ran.
+   */
+  preferWebhookCapable?: boolean;
 }
 
 /**
@@ -36,6 +62,7 @@ export interface PickedKey {
 export async function pickActiveKey(
   estimatedCostEur: number,
   excludeKeyIds: ReadonlySet<string> = new Set(),
+  opts: PickActiveKeyOptions = {},
 ): Promise<PickedKey | null> {
   const cost = Math.max(estimatedCostEur, 0).toFixed(2);
   // Build the NOT-IN list as a SQL ARRAY[…] literal. UUIDs are validated
@@ -56,6 +83,14 @@ export async function pickActiveKey(
       ? sql`TRUE`
       : sql`k.id <> ALL(ARRAY[${excludeArray}]::uuid[])`;
 
+  // When the caller signaled webhook delivery is preferred, ORDER BY
+  // pushes keys WITH webhook_secret to the front. `(... IS NULL)` casts
+  // to bool — `false < true` in Postgres, so NOT-NULL rows sort first.
+  // When not preferred, this term collapses to 0 (no-op for the sort).
+  const webhookPreferClause = opts.preferWebhookCapable
+    ? sql`(k.webhook_secret_encrypted IS NULL) ASC,`
+    : sql``;
+
   // Per-key concurrency limit (migration 0006). "In-flight" =
   // tasks created in the last 5 minutes whose poll hasn't yet
   // observed COMPLETED (video_url IS NULL). Self-healing: a crashed
@@ -65,12 +100,14 @@ export async function pickActiveKey(
   // The CTE chain:
   //   1. inflight  — count of in-flight tasks per key.
   //   2. picked    — first eligible key (LRU, has budget, not in
-  //                  exclude list, AND inflight < max_concurrent).
+  //                  exclude list, AND inflight < max_concurrent;
+  //                  optionally webhook-capable first).
   //   3. UPDATE    — touch last_used_at on the picked row.
   const result = await db.execute<{
     id: string;
     label: string;
     key_encrypted: string;
+    has_webhook_secret: boolean;
   }>(sql`
     WITH inflight AS (
       SELECT key_id, COUNT(*)::int AS n
@@ -92,7 +129,7 @@ export async function pickActiveKey(
         -- Skip keys auto-paused by the healthcheck (rate-limit burst).
         -- NULL = never paused; past-timestamp = pause window expired.
         AND (k.paused_until IS NULL OR k.paused_until < now())
-      ORDER BY k.last_used_at ASC NULLS FIRST, k.created_at ASC
+      ORDER BY ${webhookPreferClause} k.last_used_at ASC NULLS FIRST, k.created_at ASC
       FOR UPDATE OF k
       LIMIT 1
     )
@@ -100,16 +137,25 @@ export async function pickActiveKey(
     SET last_used_at = now()
     FROM picked
     WHERE freepik_keys.id = picked.id
-    RETURNING freepik_keys.id, freepik_keys.label, freepik_keys.key_encrypted;
+    RETURNING
+      freepik_keys.id,
+      freepik_keys.label,
+      freepik_keys.key_encrypted,
+      (freepik_keys.webhook_secret_encrypted IS NOT NULL) AS has_webhook_secret;
   `);
 
   // Neon HTTP driver returns { rows: T[], ... } despite the generic shape.
-  const rows = (result as unknown as { rows: Array<{ id: string; label: string; key_encrypted: string }> }).rows;
+  const rows = (result as unknown as { rows: Array<{ id: string; label: string; key_encrypted: string; has_webhook_secret: boolean }> }).rows;
   const row = rows[0];
   if (!row) return null;
 
   const decryptedKey = await decrypt(row.key_encrypted);
-  return { id: row.id, label: row.label, decryptedKey };
+  return {
+    id: row.id,
+    label: row.label,
+    decryptedKey,
+    hasWebhookSecret: row.has_webhook_secret,
+  };
 }
 
 /**
@@ -223,6 +269,7 @@ export async function pickKeyById(keyId: string): Promise<PickedKey | null> {
       id: freepikKeys.id,
       label: freepikKeys.label,
       keyEncrypted: freepikKeys.keyEncrypted,
+      webhookSecretEncrypted: freepikKeys.webhookSecretEncrypted,
     })
     .from(freepikKeys)
     .where(eq(freepikKeys.id, keyId))
@@ -232,7 +279,12 @@ export async function pickKeyById(keyId: string): Promise<PickedKey | null> {
   if (!row) return null;
   try {
     const decryptedKey = await decrypt(row.keyEncrypted);
-    return { id: row.id, label: row.label, decryptedKey };
+    return {
+      id: row.id,
+      label: row.label,
+      decryptedKey,
+      hasWebhookSecret: row.webhookSecretEncrypted !== null,
+    };
   } catch {
     return null;
   }

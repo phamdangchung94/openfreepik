@@ -13,7 +13,7 @@ import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
-import { getWebhookUrl } from "@/lib/freepik/webhook-url";
+import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 const RATE_LIMIT = 30;
@@ -89,9 +89,9 @@ export async function POST(request: Request) {
   }
 
   const webhookUrl = getWebhookUrl();
-  const paramsWithWebhook = webhookUrl
-    ? { ...params, webhook_url: webhookUrl }
-    : params;
+
+  // Webhook URL inject conditional theo key picked — orchestrator
+  // gate qua requiresWebhook + withConditionalWebhook (2026-05-23).
 
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
@@ -102,8 +102,8 @@ export async function POST(request: Request) {
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
     prompt: params.prompt ?? null,
-    callFreepik: (apiKey) =>
-      freepik.kling4k.generateI2v(paramsWithWebhook, { apiKey }),
+    requiresWebhook: webhookUrl !== null,    callFreepik: (apiKey, ctx) =>
+      freepik.kling4k.generateI2v(withConditionalWebhook(params, webhookUrl, ctx), { apiKey }),
     extractTaskId: (data) => data.task_id,
   });
 

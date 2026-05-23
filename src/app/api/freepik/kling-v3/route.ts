@@ -13,7 +13,7 @@ import {
   extractActivationCode,
   parseJsonBody,
 } from "@/lib/freepik/route-helpers";
-import { getWebhookUrl } from "@/lib/freepik/webhook-url";
+import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
 
 const KLING_V3_RATE_LIMIT = 30;
@@ -105,14 +105,10 @@ export async function POST(request: Request) {
     throw err;
   }
 
-  // Inject webhook_url so Magnific posts completions to our
-  // /api/freepik/webhook receiver. The helper returns null on
-  // non-production deploys, in which case Magnific falls back to
-  // client polling only.
+  // Webhook URL resolution deferred to the orchestrator callback so the
+  // chosen key's webhook-secret capability gates the actual injection.
+  // See withConditionalWebhook + 2026-05-23 stuck-task investigation.
   const webhookUrl = getWebhookUrl();
-  const paramsWithWebhook = webhookUrl
-    ? { ...params, webhook_url: webhookUrl }
-    : params;
 
   const result = await orchestrateFreepikCall({
     bearerCode: bearer,
@@ -123,8 +119,12 @@ export async function POST(request: Request) {
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
     prompt: params.prompt ?? null,
-    callFreepik: (apiKey) =>
-      freepik.klingV3.generate(paramsWithWebhook, { tier, apiKey }),
+    requiresWebhook: webhookUrl !== null,
+    callFreepik: (apiKey, ctx) =>
+      freepik.klingV3.generate(
+        withConditionalWebhook(params, webhookUrl, ctx),
+        { tier, apiKey },
+      ),
     extractTaskId: (data) => data.task_id,
   });
 
