@@ -229,7 +229,7 @@ export function BulkCreateCodeDialog({ onCreated }: { onCreated: () => void }) {
                 required
               />
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Chỉ chữ, số, dấu &lsquo;-&rsquo;, &lsquo;_&rsquo;, &lsquo;.&rsquo;
+                Chữ (kể cả tiếng Việt), số, khoảng trắng, dấu &lsquo;-&rsquo;, &lsquo;_&rsquo;, &lsquo;.&rsquo;
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2">

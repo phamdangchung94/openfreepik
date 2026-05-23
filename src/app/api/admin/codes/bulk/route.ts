@@ -26,8 +26,13 @@ import { log } from "@/lib/logger";
 const MAX_BULK = 200;
 
 const bulkSchema = z.object({
-  prefix: z.string().min(1).max(20).regex(/^[\w.-]+$/, {
-    message: "Prefix chỉ chứa chữ, số, dấu '-', '_', '.'",
+  // Allow Unicode letters (\p{L} — Vietnamese ệ/ô/ế etc.) + digits +
+  // whitespace + safe punctuation. The label is admin-only (shown in
+  // dashboard); customer auths with the random `code` string, not the
+  // label. Excludes filesystem-hostile chars (`<>:"/\|?*`) so any
+  // future "export to filename" path stays safe.
+  prefix: z.string().min(1).max(20).regex(/^[\p{L}\p{N}\s._-]+$/u, {
+    message: "Prefix chỉ chứa chữ (kể cả tiếng Việt), số, khoảng trắng, dấu '-', '_', '.'",
   }),
   startNumber: z.number().int().min(0).max(99999).default(1),
   count: z.number().int().min(1).max(MAX_BULK),
