@@ -193,7 +193,7 @@ export default function AdminKeysPage() {
     <div className="space-y-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold sm:text-2xl">API keys</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">Magnific Pool Keys</h1>
           <p className="text-xs text-muted-foreground sm:text-sm">
             {showAll ? rows.length : visibleRows.length}{" "}
             {(showAll ? rows.length : visibleRows.length) === 1 ? "key" : "keys"}{" "}

@@ -11,6 +11,9 @@ import {
   Check,
   AlertTriangle,
   BookOpen,
+  ExternalLink,
+  Wallet,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -44,6 +47,23 @@ interface ApiKeyRow {
   lastUsedAt: string | null;
   createdAt: string;
   expiresAt: string | null;
+  /** Linked activation code balance snapshot. */
+  account: {
+    mode: "unlimited" | "quota" | "topup" | null;
+    isActive: boolean | null;
+    quotaEur: number | null;
+    usedEur: number;
+    remainingEur: number | null;
+  };
+  /** Per-key usage aggregate over last 30 days. */
+  usage30d: {
+    reqCount: number;
+    successCount: number;
+    refundedCount: number;
+    failedCount: number;
+    pendingCount: number;
+    spendEur: number;
+  };
 }
 
 interface CodeOption {
@@ -108,10 +128,12 @@ export default function AdminApiKeysPage() {
     <div className="space-y-4 p-4 sm:p-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold sm:text-2xl">API keys</h1>
+          <h1 className="text-xl font-semibold sm:text-2xl">API Tokens</h1>
           <p className="text-xs text-muted-foreground sm:text-sm">
-            Programmatic access keys cho /api/v1/*. Mỗi key link tới 1
-            activation code (billing chảy qua code đó).
+            Bearer credentials (<code className="font-mono text-[11px]">sk_*</code>) cho{" "}
+            <code className="font-mono text-[11px]">/api/v1/*</code>. Mỗi
+            token link tới 1 activation code — billing + balance chảy qua
+            code đó.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -144,71 +166,245 @@ export default function AdminApiKeysPage() {
 
       <div className="grid gap-3 md:grid-cols-2">
         {rows.map((r) => (
-          <Card key={r.id}>
-            <CardContent className="space-y-3 p-4 text-sm">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h3 className="truncate text-sm font-medium">{r.label}</h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Code: {r.customerLabel ?? "(no label)"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Badge
-                    variant={r.isActive ? "default" : "secondary"}
-                    className="text-[10px]"
-                  >
-                    {r.isActive ? "active" : "revoked"}
-                  </Badge>
-                  {r.expiresAt && new Date(r.expiresAt) < new Date() && (
-                    <Badge variant="destructive" className="text-[10px]">
-                      expired
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-1 text-[11px] text-muted-foreground">
-                <p>
-                  Rate limit:{" "}
-                  <span className="text-foreground">
-                    {r.rateLimitPerMin
-                      ? `${r.rateLimitPerMin} req/min`
-                      : "Mặc định endpoint"}
-                  </span>
-                </p>
-                <p>
-                  Last used:{" "}
-                  <span className="text-foreground">
-                    {r.lastUsedAt
-                      ? new Date(r.lastUsedAt).toLocaleString()
-                      : "Chưa dùng"}
-                  </span>
-                </p>
-                <p>
-                  Created: {new Date(r.createdAt).toLocaleDateString()}
-                  {r.expiresAt && (
-                    <>
-                      {" "}
-                      · Expires {new Date(r.expiresAt).toLocaleDateString()}
-                    </>
-                  )}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleRevoke(r.id, r.label)}
-                className="w-full"
-              >
-                <Trash2 className="size-3.5 text-destructive" />
-                Revoke
-              </Button>
-            </CardContent>
-          </Card>
+          <ApiTokenCard key={r.id} row={r} onRevoke={handleRevoke} />
         ))}
       </div>
     </div>
   );
+}
+
+/**
+ * Per-token detail card. Surface everything an admin needs to answer
+ * "what's going on with this key" without leaving the page:
+ *   - Health badges (active/revoked, expired, account inactive)
+ *   - Linked activation code balance + progress bar
+ *   - Last 30d activity (request count, spend, success/failed/refunded breakdown)
+ *   - Rate limit + last-used + created/expires
+ *   - Copy token ID + link to drill into the linked code
+ */
+function ApiTokenCard({
+  row,
+  onRevoke,
+}: {
+  row: ApiKeyRow;
+  onRevoke: (id: string, label: string) => void;
+}) {
+  const [idCopied, setIdCopied] = useState(false);
+  const expired = row.expiresAt && new Date(row.expiresAt) < new Date();
+  const accountInactive = row.account.isActive === false;
+  const lowBalance =
+    row.account.remainingEur !== null && row.account.remainingEur < 1;
+  const balancePct =
+    row.account.quotaEur && row.account.quotaEur > 0
+      ? Math.min(100, (row.account.usedEur / row.account.quotaEur) * 100)
+      : null;
+
+  async function copyId() {
+    try {
+      await navigator.clipboard.writeText(row.id);
+      setIdCopied(true);
+      toast.success("Đã copy token ID");
+      setTimeout(() => setIdCopied(false), 1500);
+    } catch {
+      toast.error("Copy thất bại");
+    }
+  }
+
+  return (
+    <Card className={cn(!row.isActive && "opacity-60")}>
+      <CardContent className="space-y-3 p-4 text-sm">
+        {/* Header: label + status badges */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-medium">{row.label}</h3>
+            <p className="text-[11px] text-muted-foreground">
+              Account:{" "}
+              <Link
+                href={`/dashboard/codes`}
+                className="hover:text-foreground hover:underline"
+              >
+                {row.customerLabel ?? "(no label)"}
+              </Link>
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <div className="flex items-center gap-1">
+              <Badge
+                variant={row.isActive ? "default" : "secondary"}
+                className="text-[10px]"
+              >
+                {row.isActive ? "active" : "revoked"}
+              </Badge>
+              {expired && (
+                <Badge variant="destructive" className="text-[10px]">
+                  expired
+                </Badge>
+              )}
+              {accountInactive && (
+                <Badge variant="destructive" className="text-[10px]">
+                  account off
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Balance — only meaningful for topup/quota mode */}
+        {row.account.mode === "unlimited" ? (
+          <div className="flex items-center gap-1.5 rounded-md bg-muted/30 px-2 py-1.5 text-[11px]">
+            <Wallet className="size-3 text-muted-foreground" />
+            <span className="text-muted-foreground">Balance:</span>
+            <span className="font-medium text-foreground">không giới hạn</span>
+          </div>
+        ) : (
+          <div className="space-y-1 rounded-md bg-muted/30 px-2 py-1.5">
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <Wallet className="size-3" />
+                Balance
+              </span>
+              <span
+                className={cn(
+                  "font-medium tabular-nums",
+                  lowBalance ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+                )}
+              >
+                {fmtEur(row.account.remainingEur)} còn /{" "}
+                {fmtEur(row.account.quotaEur)} cấp
+              </span>
+            </div>
+            {balancePct !== null && (
+              <div className="h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    balancePct > 90
+                      ? "bg-destructive"
+                      : balancePct > 70
+                        ? "bg-amber-500"
+                        : "bg-emerald-500",
+                  )}
+                  style={{ width: `${balancePct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Usage 30d */}
+        <div className="space-y-1 rounded-md bg-muted/30 px-2 py-1.5 text-[11px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <Activity className="size-3" />
+              30 ngày qua
+            </span>
+            <span className="font-medium tabular-nums text-foreground">
+              {row.usage30d.reqCount} requests · {fmtEur(row.usage30d.spendEur)} spent
+            </span>
+          </div>
+          {row.usage30d.reqCount > 0 && (
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+              {row.usage30d.successCount > 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  ✓ {row.usage30d.successCount} success
+                </span>
+              )}
+              {row.usage30d.refundedCount > 0 && (
+                <span>↩ {row.usage30d.refundedCount} refunded</span>
+              )}
+              {row.usage30d.failedCount > 0 && (
+                <span className="text-destructive">
+                  ✗ {row.usage30d.failedCount} failed
+                </span>
+              )}
+              {row.usage30d.pendingCount > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  ⏳ {row.usage30d.pendingCount} pending
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Meta row */}
+        <div className="space-y-0.5 text-[11px] text-muted-foreground">
+          <p>
+            Rate limit:{" "}
+            <span className="text-foreground">
+              {row.rateLimitPerMin
+                ? `${row.rateLimitPerMin} req/min`
+                : "Mặc định endpoint"}
+            </span>
+          </p>
+          <p>
+            Last used:{" "}
+            <span className="text-foreground">
+              {row.lastUsedAt
+                ? new Date(row.lastUsedAt).toLocaleString("vi-VN")
+                : "Chưa dùng"}
+            </span>
+          </p>
+          <p>
+            Created: {new Date(row.createdAt).toLocaleDateString("vi-VN")}
+            {row.expiresAt && (
+              <>
+                {" "}
+                · Expires{" "}
+                {new Date(row.expiresAt).toLocaleDateString("vi-VN")}
+              </>
+            )}
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={copyId}
+            className="flex-1"
+            title="Copy token ID — paste vào log query"
+          >
+            {idCopied ? (
+              <Check className="size-3.5 text-emerald-500" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+            Copy ID
+          </Button>
+          <Link
+            href="/dashboard/codes"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "flex-1",
+            )}
+            title="Xem account chi tiết"
+          >
+            <ExternalLink className="size-3.5" />
+            Account
+          </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onRevoke(row.id, row.label)}
+            className="flex-1"
+            disabled={!row.isActive}
+          >
+            <Trash2 className="size-3.5 text-destructive" />
+            Revoke
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Format EUR as "X.XX €" with sensible precision (4 dp for <1, 2 dp otherwise). */
+function fmtEur(value: number | null): string {
+  if (value === null) return "—";
+  if (value === 0) return "0 €";
+  const precision = Math.abs(value) < 1 ? 4 : 2;
+  return `${value.toFixed(precision)} €`;
 }
 
 function CreateApiKeyDialog({

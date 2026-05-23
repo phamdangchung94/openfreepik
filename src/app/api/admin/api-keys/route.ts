@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { activationCodes, apiKeys } from "@/lib/db/schema";
+import { activationCodes, apiKeys, usageLogs } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
 import { mintApiKey } from "@/lib/auth/api-key";
@@ -31,12 +31,20 @@ export async function GET() {
   const denied = await requireAdminApi();
   if (denied) return denied;
 
+  // Two-step fetch keeps SQL simple + cheap:
+  //   1. Pull keys + linked code metadata (balance) — single LEFT JOIN
+  //   2. Aggregate usage_logs in the last 30 days per key_id
+  // Merge in JS. With ~50 keys max this stays under 100ms.
   const rows = await db
     .select({
       id: apiKeys.id,
       label: apiKeys.label,
       codeId: apiKeys.codeId,
       customerLabel: activationCodes.customerLabel,
+      codeMode: activationCodes.mode,
+      codeQuotaEur: activationCodes.quotaEur,
+      codeUsedEur: activationCodes.usedEur,
+      codeIsActive: activationCodes.isActive,
       rateLimitPerMin: apiKeys.rateLimitPerMin,
       isActive: apiKeys.isActive,
       lastUsedAt: apiKeys.lastUsedAt,
@@ -47,7 +55,74 @@ export async function GET() {
     .leftJoin(activationCodes, eq(activationCodes.id, apiKeys.codeId))
     .orderBy(desc(apiKeys.createdAt));
 
-  return NextResponse.json({ ok: true, keys: rows });
+  // Aggregate usage_logs for last 30 days, GROUP BY key_id.
+  // Filters by `key_id IS NOT NULL` so we skip ORM-impacted joins.
+  const stats = await db.execute<{
+    key_id: string;
+    req_count: string;
+    success_count: string;
+    refunded_count: string;
+    failed_count: string;
+    pending_count: string;
+    spend_eur: string;
+  }>(sql`
+    SELECT
+      key_id,
+      COUNT(*)::text AS req_count,
+      COUNT(*) FILTER (WHERE status = 'succeeded')::text AS success_count,
+      COUNT(*) FILTER (WHERE status = 'refunded')::text AS refunded_count,
+      COUNT(*) FILTER (WHERE status = 'failed')::text AS failed_count,
+      COUNT(*) FILTER (WHERE status = 'pending')::text AS pending_count,
+      COALESCE(SUM(CASE WHEN status = 'succeeded' THEN cost_eur ELSE 0 END), 0)::text AS spend_eur
+    FROM usage_logs
+    WHERE key_id IS NOT NULL
+      AND created_at > NOW() - INTERVAL '30 days'
+    GROUP BY key_id
+  `);
+
+  const statsRows = (stats as unknown as { rows: Array<{ key_id: string; req_count: string; success_count: string; refunded_count: string; failed_count: string; pending_count: string; spend_eur: string }> }).rows;
+  const statsByKey = new Map<string, (typeof statsRows)[number]>();
+  for (const s of statsRows) statsByKey.set(s.key_id, s);
+
+  // Merge stats + compute derived fields the UI cares about.
+  const enriched = rows.map((r) => {
+    const s = statsByKey.get(r.id);
+    const quota = r.codeQuotaEur === null ? null : Number(r.codeQuotaEur);
+    const used = Number(r.codeUsedEur ?? 0);
+    const remaining =
+      r.codeMode === "unlimited" || quota === null ? null : quota - used;
+    return {
+      id: r.id,
+      label: r.label,
+      codeId: r.codeId,
+      customerLabel: r.customerLabel,
+      rateLimitPerMin: r.rateLimitPerMin,
+      isActive: r.isActive,
+      lastUsedAt: r.lastUsedAt,
+      createdAt: r.createdAt,
+      expiresAt: r.expiresAt,
+      // Linked activation code balance snapshot — saves a roundtrip
+      // when admin wants to know "how much credit does this key have?".
+      account: {
+        mode: r.codeMode,
+        isActive: r.codeIsActive,
+        quotaEur: quota,
+        usedEur: used,
+        remainingEur: remaining,
+      },
+      // Last 30 days via this specific key.
+      usage30d: {
+        reqCount: Number(s?.req_count ?? "0"),
+        successCount: Number(s?.success_count ?? "0"),
+        refundedCount: Number(s?.refunded_count ?? "0"),
+        failedCount: Number(s?.failed_count ?? "0"),
+        pendingCount: Number(s?.pending_count ?? "0"),
+        spendEur: Number(s?.spend_eur ?? "0"),
+      },
+    };
+  });
+
+  return NextResponse.json({ ok: true, keys: enriched });
 }
 
 export async function POST(request: Request) {

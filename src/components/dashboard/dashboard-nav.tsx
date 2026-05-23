@@ -22,14 +22,21 @@ import { Button } from "@/components/ui/button";
 // abbreviated to fit a 5-column bottom bar on 375px viewports.
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Overview", shortLabel: "Tổng", icon: Home, exact: true },
-  { href: "/dashboard/codes", label: "Codes", shortLabel: "Codes", icon: KeyRound, exact: false },
-  { href: "/dashboard/vouchers", label: "Vouchers", shortLabel: "Nạp", icon: Ticket, exact: false },
-  { href: "/dashboard/keys", label: "API keys", shortLabel: "Keys", icon: Server, exact: false },
+  // Naming convention (2026-05-23): three "key-like" things in the app
+  // — keep their nav labels distinct to avoid the long-running confusion
+  // of "API keys" meaning either the Magnific pool OR the customer sk_*.
+  //   - "Tài khoản"    → activation codes (customer wallets, FK-...)
+  //   - "Voucher"     → top-up codes (CODE-100-...)
+  //   - "Magnific Pool" → upstream FPSX_... keys (admin internal)
+  //   - "API Token"   → customer-facing sk_* (programmatic /v1/* auth)
+  { href: "/dashboard/codes", label: "Tài khoản", shortLabel: "Acct", icon: KeyRound, exact: false },
+  { href: "/dashboard/vouchers", label: "Voucher", shortLabel: "Nạp", icon: Ticket, exact: false },
+  { href: "/dashboard/keys", label: "Magnific Pool", shortLabel: "Pool", icon: Server, exact: false },
   { href: "/dashboard/pricing", label: "Pricing", shortLabel: "Giá", icon: Tag, exact: false },
   { href: "/dashboard/usage", label: "Usage logs", shortLabel: "Log", icon: Activity, exact: false },
   { href: "/dashboard/costs", label: "Costs", shortLabel: "Chi phí", icon: Wallet, exact: false },
   { href: "/dashboard/announcements", label: "Announcements", shortLabel: "Tin", icon: Megaphone, exact: false },
-  { href: "/dashboard/api-keys", label: "API tokens", shortLabel: "Token", icon: Code2, exact: false },
+  { href: "/dashboard/api-keys", label: "API Token", shortLabel: "Token", icon: Code2, exact: false },
 ] as const;
 
 /**
