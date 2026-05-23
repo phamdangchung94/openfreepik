@@ -559,6 +559,115 @@ def wait_for_task(task_id: str, api_key: str) -> str:
         />
       </Section>
 
+      <Section
+        anchor="advanced"
+        title="8. Tính năng nâng cao (mới)"
+        method="POST"
+        path="Headers + tham số chung — áp dụng mọi POST endpoint"
+      >
+        <div className="space-y-4 text-sm">
+          <div>
+            <h4 className="mb-2 font-semibold text-foreground">
+              <Code>Idempotency-Key</Code> header
+            </h4>
+            <p className="text-muted-foreground">
+              Gửi 1 chuỗi duy nhất (UUID) ở header này để retry an toàn:
+              cùng key + cùng body = trả lại response cũ (không charge 2 lần).
+              Khác body = HTTP 409 <Code>IDEMPOTENCY_CONFLICT</Code>.
+              TTL 24 giờ. Áp dụng cho mọi POST <Code>/v1/video/*</Code>.
+            </p>
+            <CodeTabs
+              samples={{
+                curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Idempotency-Key: $(uuidgen)" \\
+  -H "Content-Type: application/json" \\
+  -d '{"tier":"std","params":{"prompt":"con mèo"}}'`,
+                javascript: `import { randomUUID } from "node:crypto";
+const idemKey = randomUUID();
+// Retry up to 3 times — same key returns cached response if first succeeded
+const res = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer sk_your_key_here",
+    "Idempotency-Key": idemKey,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ tier: "std", params: { prompt: "con mèo" } }),
+});`,
+                python: `import uuid
+idem_key = str(uuid.uuid4())
+res = requests.post(
+    "https://video.chugax.io.vn/api/v1/video/kling-3",
+    headers={
+        "Authorization": "Bearer sk_your_key_here",
+        "Idempotency-Key": idem_key,
+        "Content-Type": "application/json",
+    },
+    json={"tier": "std", "params": {"prompt": "con mèo"}},
+)`,
+              }}
+            />
+          </div>
+
+          <div>
+            <h4 className="mb-2 font-semibold text-foreground">
+              <Code>webhook_url</Code> top-level field
+            </h4>
+            <p className="text-muted-foreground">
+              Thêm <Code>webhook_url</Code> ở TOP LEVEL của body (không phải
+              trong <Code>params</Code>) — sau khi task xong, server POST
+              event <Code>task.succeeded</Code> hoặc <Code>task.failed</Code>
+              về URL này. Khỏi phải poll. Best-effort fire-and-forget; vẫn
+              có thể poll backup.
+            </p>
+            <CodeTabs
+              samples={{
+                curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier": "std",
+    "params": {"prompt": "con mèo"},
+    "webhook_url": "https://your-server.com/webhook?token=xyz"
+  }'`,
+                javascript: `// Payload server sẽ POST về webhook_url:
+// Headers: x-webhook-event: task.succeeded | task.failed
+// Body:
+// {
+//   "task_id": "abc-...",
+//   "status": "COMPLETED" | "FAILED",
+//   "endpoint": "kling-v3",
+//   "video_url": "https://...",
+//   "video_url_expires_at": "2026-05-24T...",
+//   "error_message": null,
+//   "finalized_at": "2026-05-23T..."
+// }`,
+                python: `# Cùng webhook payload shape — verify từ source IP hoặc query token
+# trên webhook_url (vd ?token=xxx) để chống spoof.`,
+              }}
+            />
+          </div>
+
+          <div>
+            <h4 className="mb-2 font-semibold text-foreground">
+              Rate-limit headers + request_id
+            </h4>
+            <p className="text-muted-foreground">
+              Mỗi response trả về:
+              <br />
+              <Code>X-RateLimit-Limit</Code>,{" "}
+              <Code>X-RateLimit-Remaining</Code>,{" "}
+              <Code>X-RateLimit-Reset</Code> — để tự throttle.
+              <br />
+              <Code>X-Request-Id</Code> + field <Code>request_id</Code>{" "}
+              trong error body — paste vào support ticket để admin grep
+              được log.
+            </p>
+          </div>
+        </div>
+      </Section>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Mã lỗi</CardTitle>

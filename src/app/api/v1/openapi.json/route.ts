@@ -26,9 +26,20 @@ function buildSpec(origin: string) {
     openapi: "3.1.0",
     info: {
       title: "Video AI API",
-      version: "1.0.0",
-      description:
+      version: "1.1.0",
+      description: [
         "Public REST API for AI video generation. Authenticate with an API key (sk_*) issued from the admin dashboard.",
+        "",
+        "## Global features",
+        "",
+        "**Idempotency-Key header** (optional, all POST endpoints): send a unique string to make retries safe. Same key + same body returns cached response; same key + different body returns 409.",
+        "",
+        "**Top-level `webhook_url`** (optional, all video POSTs): customer-supplied URL. Server POSTs task status (`task.succeeded` / `task.failed`) here on terminal state. Best-effort fire-and-forget; polling /v1/tasks/{id} remains the canonical source of truth.",
+        "",
+        "**Rate-limit headers** (all responses): X-RateLimit-Limit / -Remaining / -Reset for self-throttling.",
+        "",
+        "**Request IDs** (all responses): X-Request-Id header + `request_id` field in error bodies. Quote in support tickets.",
+      ].join("\n"),
     },
     servers: [{ url: `${origin}/api/v1` }],
     security: [{ bearerAuth: [] }],
@@ -38,6 +49,16 @@ function buildSpec(origin: string) {
           type: "http",
           scheme: "bearer",
           bearerFormat: "sk_*",
+        },
+      },
+      parameters: {
+        IdempotencyKey: {
+          name: "Idempotency-Key",
+          in: "header",
+          description:
+            "Optional unique string. Same key + same body within 24h returns the cached response (no double-charge on retry). Same key + different body returns 409 IDEMPOTENCY_CONFLICT. Generate a UUID per logical request.",
+          required: false,
+          schema: { type: "string", maxLength: 255 },
         },
       },
       schemas: {
@@ -56,6 +77,11 @@ function buildSpec(origin: string) {
             ok: { type: "boolean", enum: [false] },
             error: { type: "string" },
             message: { type: "string" },
+            request_id: {
+              type: "string",
+              description:
+                "Per-request UUID — quote this in support tickets so admin can grep server logs.",
+            },
           },
         },
         TaskCreated: {
@@ -82,6 +108,107 @@ function buildSpec(origin: string) {
       },
     },
     paths: {
+      "/models": {
+        get: {
+          summary: "List available models + per-second pricing",
+          operationId: "listModels",
+          security: [],
+          responses: {
+            "200": {
+              description: "Catalog of models, each with tier list and pricing",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      version: { type: "string" },
+                      models: { type: "array", items: { type: "object" } },
+                      meta: { type: "object" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/usage": {
+        get: {
+          summary: "Recent usage history + spend summary for this account",
+          operationId: "listUsage",
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 200, default: 50 } },
+            { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } },
+            { name: "since", in: "query", schema: { type: "string", format: "date-time" }, description: "ISO 8601. Defaults to 30 days ago." },
+          ],
+          responses: {
+            "200": {
+              description: "Usage rows + summary aggregate + balance snapshot",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      usage: { type: "array", items: { type: "object" } },
+                      summary: { type: "object" },
+                      balance: { $ref: "#/components/schemas/Balance" },
+                      pagination: { type: "object" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      "/upload": {
+        post: {
+          summary: "Issue a presigned R2 PUT URL for an image/video upload",
+          operationId: "presignUpload",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["filename", "contentType", "size", "kind"],
+                  properties: {
+                    filename: { type: "string", maxLength: 200 },
+                    contentType: { type: "string", maxLength: 120 },
+                    size: { type: "integer", minimum: 1 },
+                    kind: { type: "string", enum: ["video", "image"] },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Upload URL + public URL to pass back as image_url/video_url",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      ok: { type: "boolean" },
+                      upload_url: { type: "string", format: "uri" },
+                      public_url: { type: "string", format: "uri" },
+                      key: { type: "string" },
+                      expires_at: { type: "string", format: "date-time" },
+                    },
+                  },
+                },
+              },
+            },
+            "413": {
+              description: "File too large (15MB image / 60MB video cap)",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+            },
+          },
+        },
+      },
       "/me": {
         get: {
           summary: "Validate API key and read balance",
