@@ -33,8 +33,8 @@ trên GPT-4, Claude Sonnet, Gemini 2.5):
 Tôi cần tích hợp với REST API sinh video AI.
 
 Auth: header "Authorization: Bearer sk_..." (lấy key từ dashboard).
-Base URL: https://your-domain.com/api/v1
-OpenAPI spec: https://your-domain.com/api/v1/openapi.json
+Base URL: https://video.chugax.io.vn/api/v1
+OpenAPI spec: https://video.chugax.io.vn/api/v1/openapi.json
 
 Endpoints chính:
 - POST /video/kling-3        — text/image-to-video, body: {tier:"pro"|"std", params:{prompt, aspect_ratio, duration, image?}}
@@ -65,7 +65,7 @@ gọi tool trực tiếp:
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-openapi"],
       "env": {
-        "OPENAPI_URL": "https://your-domain.com/api/v1/openapi.json",
+        "OPENAPI_URL": "https://video.chugax.io.vn/api/v1/openapi.json",
         "API_KEY": "sk_..."
       }
     }
@@ -88,7 +88,7 @@ from langchain_community.tools import RequestsToolkit
 from langchain_community.utilities.requests import TextRequestsWrapper
 
 API_KEY = "sk_..."
-spec = OpenAPISpec.from_url("https://your-domain.com/api/v1/openapi.json")
+spec = OpenAPISpec.from_url("https://video.chugax.io.vn/api/v1/openapi.json")
 requests = TextRequestsWrapper(headers={"Authorization": f"Bearer {API_KEY}"})
 
 toolkit = OpenAPIToolkit.from_llm(
@@ -150,7 +150,7 @@ const assistant = await openai.beta.assistants.create({
 
 // Trong handler runStep — gọi lại API thật:
 async function createVideo(args) {
-  const r = await fetch("https://your-domain.com/api/v1/video/kling-3", {
+  const r = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${VIDEO_API_KEY}`,

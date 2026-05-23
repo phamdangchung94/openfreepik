@@ -28,6 +28,10 @@ export interface RateLimitResult {
   allowed: boolean;
   /** Current count inside the active window after this request. */
   count: number;
+  /** Configured cap (echoed back for `X-RateLimit-Limit` header). */
+  limit: number;
+  /** Estimated requests left in window (limit - count, floored 0). */
+  remaining: number;
   /** Seconds until the active window resets (Retry-After header). */
   retryAfterSeconds: number;
 }
@@ -70,6 +74,8 @@ export async function checkRateLimit(
   return {
     allowed: count <= opts.limit,
     count,
+    limit: opts.limit,
+    remaining: Math.max(0, opts.limit - count),
     retryAfterSeconds,
   };
 }

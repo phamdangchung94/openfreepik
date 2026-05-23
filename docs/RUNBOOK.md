@@ -1,7 +1,7 @@
 # OpenFreepik Operations Runbook
 
-Production: **https://openfreepik.vercel.app**
-Admin dashboard: **https://openfreepik.vercel.app/dashboard**
+Production: **https://video.chugax.io.vn**
+Admin dashboard: **https://video.chugax.io.vn/dashboard**
 Customer-facing: same URL, no `/dashboard`.
 
 > **Read first**: this is the guide you reach for when something is broken at 2 AM. Linear, command-first, no narrative.
@@ -52,7 +52,7 @@ pnpm dlx vercel deployments ls --token $VERCEL_TOKEN
 pnpm dlx vercel promote <deployment-id> --token $VERCEL_TOKEN
 ```
 
-Verify rollback: `curl -sI https://openfreepik.vercel.app/` returns 200 + the security headers from `next.config.ts`.
+Verify rollback: `curl -sI https://video.chugax.io.vn/` returns 200 + the security headers from `next.config.ts`.
 
 ### 2. Hotfix without rolling back
 
@@ -68,7 +68,7 @@ pnpm dlx vercel deploy --prod --token $VERCEL_TOKEN --yes
 
 ### Add a new Freepik API key (when current one is exhausted)
 
-1. Go to https://openfreepik.vercel.app/dashboard → **Freepik keys** → **Add key**
+1. Go to https://video.chugax.io.vn/dashboard → **Freepik keys** → **Add key**
 2. Paste plaintext API key (starts with `FPSX...`)
 3. **Webhook secret (optional)** — if you've registered the OpenFreepik webhook URL on this Magnific account, paste its signing secret here. Without it, Magnific won't deliver push callbacks for tasks served by this key and the client polls drive finalization. Either path is fine — webhook just trims polling latency.
 4. Set `assignedEur` to whatever Freepik gave you (default 500 EUR free tier)
@@ -83,7 +83,7 @@ pnpm dlx vercel deploy --prod --token $VERCEL_TOKEN --yes
 Magnific's push delivery cuts customer wait time from "poll every 2-10s" to "instant fan-out". One-time setup per Freepik key:
 
 1. Log into the Magnific dashboard for that account → API → Webhooks.
-2. Register endpoint `https://openfreepik.vercel.app/api/freepik/webhook` (or your custom domain → same path).
+2. Register endpoint `https://video.chugax.io.vn/api/freepik/webhook` (or your custom domain → same path).
 3. Magnific shows a signing secret (often hex-encoded). Copy it.
 4. Open the OpenFreepik admin dashboard → **Freepik keys** → edit the matching key → paste the secret.
 5. Verify: trigger a small generation, watch logs for `WEBHOOK_RECEIVED`. The companion poll route still runs as a safety net.
@@ -217,7 +217,7 @@ Dashboard → **API tokens** → **+ Tạo key**.
 
 **Revoke key** (mất / nghi rò rỉ): Dashboard → **API tokens** → card → icon thùng rác → confirm. Customer's next request gets HTTP 401. Số dư activation code KHÔNG bị xoá — chỉ key bị huỷ.
 
-**Verify key hoạt động**: customer gửi anh `curl https://your-domain.com/api/v1/me -H "Authorization: Bearer sk_..."` → expect 200 với balance info.
+**Verify key hoạt động**: customer gửi anh `curl https://video.chugax.io.vn/api/v1/me -H "Authorization: Bearer sk_..."` → expect 200 với balance info.
 
 **Docs cho customer**: link `/docs/api` (page công khai, không cần login) — có cURL/JS/Python sample. OpenAPI spec ở `/api/v1/openapi.json` cho AI tool (ChatGPT Custom GPT, Cursor MCP, LangChain) auto-load.
 
@@ -276,7 +276,7 @@ Anyone with an active admin cookie gets logged out immediately on next request. 
 1. Neon console → Project → **Roles** → `neondb_owner` → **Reset password** → copy new pooled connection string
 2. `vercel env rm DATABASE_URL production && vercel env add DATABASE_URL production` → paste
 3. Redeploy
-4. Verify: `curl https://openfreepik.vercel.app/api/admin/overview` (need a valid admin cookie)
+4. Verify: `curl https://video.chugax.io.vn/api/admin/overview` (need a valid admin cookie)
 
 ---
 
@@ -400,7 +400,7 @@ no auto-action).
 Manual sweep trigger (e.g. immediately after a known crash):
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" \
-  https://openfreepik.vercel.app/api/cron/sweep-orphan-charges
+  https://video.chugax.io.vn/api/cron/sweep-orphan-charges
 ```
 
 If the customer was already refunded by the sweep but admin still

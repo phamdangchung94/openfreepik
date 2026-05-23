@@ -47,7 +47,7 @@ export default function ApiDocsPage() {
           </p>
           <p>
             Base URL:{" "}
-            <Code>{typeof window !== "undefined" ? window.location.origin : "https://your-domain.com"}/api/v1</Code>
+            <Code>{typeof window !== "undefined" ? window.location.origin : "https://video.chugax.io.vn"}/api/v1</Code>
           </p>
           <p className="text-muted-foreground">
             Rate limit mặc định: 3 req/phút cho video, 30 req/phút cho
@@ -68,9 +68,9 @@ export default function ApiDocsPage() {
         </p>
         <CodeTabs
           samples={{
-            curl: `curl https://your-domain.com/api/v1/me \\
+            curl: `curl https://video.chugax.io.vn/api/v1/me \\
   -H "Authorization: Bearer sk_your_key_here"`,
-            javascript: `const res = await fetch("https://your-domain.com/api/v1/me", {
+            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/me", {
   headers: { Authorization: "Bearer sk_your_key_here" },
 });
 const { key, balance } = await res.json();
@@ -78,7 +78,7 @@ console.log("Số dư còn:", balance.remainingEur, "EUR");`,
             python: `import requests
 
 r = requests.get(
-    "https://your-domain.com/api/v1/me",
+    "https://video.chugax.io.vn/api/v1/me",
     headers={"Authorization": "Bearer sk_your_key_here"},
 )
 data = r.json()
@@ -112,7 +112,7 @@ print("Số dư còn:", data["balance"]["remainingEur"], "EUR")`,
         </p>
         <CodeTabs
           samples={{
-            curl: `curl -X POST https://your-domain.com/api/v1/video/kling-3 \\
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -124,7 +124,7 @@ print("Số dư còn:", data["balance"]["remainingEur"], "EUR")`,
       "generate_audio": false
     }
   }'`,
-            javascript: `const res = await fetch("https://your-domain.com/api/v1/video/kling-3", {
+            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
   method: "POST",
   headers: {
     Authorization: "Bearer sk_your_key_here",
@@ -144,7 +144,7 @@ const { task_id } = await res.json();`,
             python: `import requests
 
 r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-3",
+    "https://video.chugax.io.vn/api/v1/video/kling-3",
     headers={
         "Authorization": "Bearer sk_your_key_here",
         "Content-Type": "application/json",
@@ -182,7 +182,7 @@ task_id = r.json()["task_id"]`,
         <CodeTabs
           samples={{
             curl: `# Text-to-Video 4K
-curl -X POST https://your-domain.com/api/v1/video/kling-3-4k-text \\
+curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-text \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -194,7 +194,7 @@ curl -X POST https://your-domain.com/api/v1/video/kling-3-4k-text \\
   }'
 
 # Image-to-Video 4K
-curl -X POST https://your-domain.com/api/v1/video/kling-3-4k-image \\
+curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-image \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -205,7 +205,7 @@ curl -X POST https://your-domain.com/api/v1/video/kling-3-4k-image \\
     }
   }'`,
             javascript: `// Text-to-Video 4K
-const t2v = await fetch("https://your-domain.com/api/v1/video/kling-3-4k-text", {
+const t2v = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3-4k-text", {
   method: "POST",
   headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -214,7 +214,7 @@ const t2v = await fetch("https://your-domain.com/api/v1/video/kling-3-4k-text", 
 });
 
 // Image-to-Video 4K
-const i2v = await fetch("https://your-domain.com/api/v1/video/kling-3-4k-image", {
+const i2v = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3-4k-image", {
   method: "POST",
   headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -223,14 +223,14 @@ const i2v = await fetch("https://your-domain.com/api/v1/video/kling-3-4k-image",
 });`,
             python: `# Text-to-Video 4K
 r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-3-4k-text",
+    "https://video.chugax.io.vn/api/v1/video/kling-3-4k-text",
     headers={"Authorization": "Bearer sk_...", "Content-Type": "application/json"},
     json={"params": {"prompt": "...", "duration": "5", "aspect_ratio": "16:9"}},
 )
 
 # Image-to-Video 4K
 r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-3-4k-image",
+    "https://video.chugax.io.vn/api/v1/video/kling-3-4k-image",
     headers={"Authorization": "Bearer sk_...", "Content-Type": "application/json"},
     json={"params": {"image": "https://your-cdn.com/portrait.jpg", "prompt": "...", "duration": "5"}},
 )`,
@@ -252,7 +252,7 @@ r = requests.post(
         </p>
         <CodeTabs
           samples={{
-            curl: `curl -X POST https://your-domain.com/api/v1/video/kling-motion/v3-pro \\
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-motion/v3-pro \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -266,7 +266,7 @@ r = requests.post(
     "output_duration": 5
   }'`,
             javascript: `const res = await fetch(
-  "https://your-domain.com/api/v1/video/kling-motion/v3-pro",
+  "https://video.chugax.io.vn/api/v1/video/kling-motion/v3-pro",
   {
     method: "POST",
     headers: {
@@ -286,7 +286,7 @@ r = requests.post(
   },
 );`,
             python: `r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-motion/v3-pro",
+    "https://video.chugax.io.vn/api/v1/video/kling-motion/v3-pro",
     headers={
         "Authorization": "Bearer sk_your_key_here",
         "Content-Type": "application/json",
@@ -336,7 +336,7 @@ r = requests.post(
         <CodeTabs
           samples={{
             curl: `# T2V đơn giản
-curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-pro \\
+curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -349,7 +349,7 @@ curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-pro \\
   }'
 
 # Multi-shot 3 cảnh
-curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-pro \\
+curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -366,7 +366,7 @@ curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-pro \\
   }'
 
 # V2V (reference-to-video)
-curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-ref-pro \\
+curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -379,7 +379,7 @@ curl -X POST https://your-domain.com/api/v1/video/kling-omni/omni-ref-pro \\
   }'`,
             javascript: `// T2V
 const res = await fetch(
-  "https://your-domain.com/api/v1/video/kling-omni/omni-pro",
+  "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro",
   {
     method: "POST",
     headers: {
@@ -399,7 +399,7 @@ const res = await fetch(
 
 // V2V
 const v2v = await fetch(
-  "https://your-domain.com/api/v1/video/kling-omni/omni-ref-pro",
+  "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro",
   {
     method: "POST",
     headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
@@ -416,7 +416,7 @@ const v2v = await fetch(
 
 # T2V
 r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-omni/omni-pro",
+    "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro",
     headers={
         "Authorization": "Bearer sk_your_key_here",
         "Content-Type": "application/json",
@@ -434,7 +434,7 @@ task_id = r.json()["task_id"]
 
 # V2V
 r = requests.post(
-    "https://your-domain.com/api/v1/video/kling-omni/omni-ref-pro",
+    "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro",
     headers={
         "Authorization": "Bearer sk_...",
         "Content-Type": "application/json",
@@ -472,7 +472,7 @@ r = requests.post(
         </p>
         <CodeTabs
           samples={{
-            curl: `curl -X POST https://your-domain.com/api/v1/prompt/improve \\
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/prompt/improve \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -480,7 +480,7 @@ r = requests.post(
     "type": "video",
     "language": "vi"
   }'`,
-            javascript: `const res = await fetch("https://your-domain.com/api/v1/prompt/improve", {
+            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/prompt/improve", {
   method: "POST",
   headers: {
     Authorization: "Bearer sk_your_key_here",
@@ -493,7 +493,7 @@ r = requests.post(
   }),
 });`,
             python: `r = requests.post(
-    "https://your-domain.com/api/v1/prompt/improve",
+    "https://video.chugax.io.vn/api/v1/prompt/improve",
     headers={
         "Authorization": "Bearer sk_your_key_here",
         "Content-Type": "application/json",
@@ -516,11 +516,11 @@ r = requests.post(
         </p>
         <CodeTabs
           samples={{
-            curl: `curl https://your-domain.com/api/v1/tasks/abc123 \\
+            curl: `curl https://video.chugax.io.vn/api/v1/tasks/abc123 \\
   -H "Authorization: Bearer sk_your_key_here"`,
             javascript: `async function waitForTask(taskId, apiKey) {
   for (let attempt = 0; attempt < 60; attempt++) {
-    const r = await fetch(\`https://your-domain.com/api/v1/tasks/\${taskId}\`, {
+    const r = await fetch(\`https://video.chugax.io.vn/api/v1/tasks/\${taskId}\`, {
       headers: { Authorization: \`Bearer \${apiKey}\` },
     });
     const data = await r.json();
@@ -536,7 +536,7 @@ def wait_for_task(task_id: str, api_key: str) -> str:
     headers = {"Authorization": f"Bearer {api_key}"}
     for _ in range(60):
         r = requests.get(
-            f"https://your-domain.com/api/v1/tasks/{task_id}",
+            f"https://video.chugax.io.vn/api/v1/tasks/{task_id}",
             headers=headers,
         )
         data = r.json()
@@ -596,7 +596,7 @@ def wait_for_task(task_id: str, api_key: str) -> str:
           </p>
           <pre className="overflow-x-auto rounded-md bg-muted/60 p-3 text-xs">
 {`Tôi cần một hàm Python sinh video qua API. Spec:
-- Base URL: https://your-domain.com/api/v1
+- Base URL: https://video.chugax.io.vn/api/v1
 - Auth: header "Authorization: Bearer sk_..."
 - POST /video/kling-3  body: {tier, params:{prompt, aspect_ratio, duration}}
   → trả {ok, task_id}
