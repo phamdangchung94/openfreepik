@@ -18,7 +18,10 @@ const NAV_ITEMS: readonly NavItem[] = [
   { anchor: "kling-3", label: "Kling 3 video", method: "POST", group: "Video" },
   { anchor: "kling-3-4k", label: "Kling 3 4K", method: "POST", group: "Video" },
   { anchor: "motion", label: "Motion Control", method: "POST", group: "Video" },
-  { anchor: "omni", label: "Omni (multi-shot)", method: "POST", group: "Video" },
+  // Omni nav entry hidden (2026-05-23) — Std SKU unstable on upstream.
+  // Backend route + OpenAPI spec vẫn còn để customer biết qua AI tool
+  // tự discover, chỉ ẩn navigation chính.
+  // { anchor: "omni", label: "Omni (multi-shot)", method: "POST", group: "Video" },
   { anchor: "improve-prompt", label: "Mở rộng prompt", method: "POST", group: "Tools" },
   { anchor: "poll", label: "Theo dõi tác vụ", method: "GET", group: "Tools" },
   { anchor: "advanced", label: "Headers nâng cao", group: "Tham khảo" },
@@ -26,10 +29,9 @@ const NAV_ITEMS: readonly NavItem[] = [
 ] as const;
 
 /**
- * Public API documentation. Standalone page — no /api/pricing/rates
- * fetch, no auth. Everything is static content + copy-to-clipboard
- * code blocks. The /api/v1/* endpoints use SHA-256 hashed API keys
- * (sk_*) provisioned via the admin dashboard.
+ * Public API documentation. Standalone page — no auth required.
+ * Customer-facing: keep wording free of admin-internal jargon
+ * ("Magnific", "pool keys", "orphan sweeper", etc.) per content audit.
  */
 export default function ApiDocsPage() {
   return (
@@ -71,8 +73,8 @@ export default function ApiDocsPage() {
             <Code>{typeof window !== "undefined" ? window.location.origin : "https://video.chugax.io.vn"}/api/v1</Code>
           </p>
           <p className="text-muted-foreground">
-            Rate limit mặc định: 3 req/phút cho video, 30 req/phút cho
-            improve prompt. Admin có thể nâng giới hạn cho từng key.
+            Rate limit mặc định: 30 req/phút cho video + improve prompt.
+            Liên hệ qua Zalo nếu cần nâng giới hạn cho dự án lớn.
           </p>
         </CardContent>
       </Card>
@@ -202,13 +204,13 @@ print(f"{data['summary']['total_count']} reqs, {data['summary']['total_cost_eur'
         path="/api/v1/upload"
       >
         <p className="text-sm text-muted-foreground">
-          Cấp URL upload tạm cho ảnh/video. Customer PUT trực tiếp file lên
-          R2, lấy <Code>public_url</Code> rồi pass cho Motion/Omni endpoints
-          ở field <Code>image_url</Code> / <Code>video_url</Code>.
+          Cấp URL upload tạm cho ảnh/video. Bạn PUT trực tiếp file lên
+          storage CDN, lấy <Code>public_url</Code> rồi pass cho Motion
+          endpoint ở field <Code>image_url</Code> / <Code>video_url</Code>.
         </p>
         <p className="text-xs text-muted-foreground">
-          Caps: image ≤ 15MB, video ≤ 60MB. File tự xoá sau 2h (kịp Magnific
-          consume).
+          Caps: image ≤ 15MB, video ≤ 60MB. File tự xoá sau 2 giờ — đủ
+          để gọi endpoint generate ngay sau đó.
         </p>
         <CodeTabs
           samples={{
@@ -530,164 +532,8 @@ r = requests.post(
         />
       </Section>
 
-      <Section
-        anchor="omni"
-        title="5. Tạo video Kling 3 Omni (T2V / I2V / V2V + multi-shot + audio)"
-        method="POST"
-        path="/api/v1/video/kling-omni/{tier}"
-      >
-        <p className="text-sm text-muted-foreground">
-          Model đa năng — chọn 1 trong 3 chế độ qua URL slug. Hỗ trợ
-          multi-shot tới 6 cảnh và audio tự nhiên. <Code>{"{tier}"}</Code>{" "}
-          có 4 giá trị:
-        </p>
-        <ul className="ml-5 list-disc text-xs text-muted-foreground">
-          <li>
-            <Code>omni-std</Code> / <Code>omni-pro</Code> — Text/Image-to-Video
-          </li>
-          <li>
-            <Code>omni-ref-std</Code> / <Code>omni-ref-pro</Code> —
-            Reference-to-Video (cần <Code>video_url</Code>)
-          </li>
-        </ul>
-        <CodeTabs
-          samples={{
-            curl: `# T2V đơn giản
-curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro \\
-  -H "Authorization: Bearer sk_your_key_here" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "params": {
-      "prompt": "A cat surfing through neon Tokyo at night",
-      "duration": "8",
-      "aspect_ratio": "16:9",
-      "generate_audio": true
-    }
-  }'
-
-# Multi-shot 3 cảnh
-curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro \\
-  -H "Authorization: Bearer sk_your_key_here" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "params": {
-      "multi_prompt": [
-        "Wide shot of misty forest at dawn",
-        "Close-up of a deer drinking from stream",
-        "Pan up to mountains in the distance"
-      ],
-      "shot_type": "customize",
-      "duration": "9",
-      "aspect_ratio": "9:16"
-    }
-  }'
-
-# V2V (reference-to-video)
-curl -X POST https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro \\
-  -H "Authorization: Bearer sk_your_key_here" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "params": {
-      "video_url": "https://your-cdn.com/reference.mp4",
-      "prompt": "@Video1 reimagined as cyberpunk anime",
-      "duration": "5",
-      "aspect_ratio": "auto"
-    }
-  }'`,
-            javascript: `// T2V
-const res = await fetch(
-  "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro",
-  {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer sk_your_key_here",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      params: {
-        prompt: "A cat surfing through neon Tokyo at night",
-        duration: "8",
-        aspect_ratio: "16:9",
-        generate_audio: true,
-      },
-    }),
-  },
-);
-
-// V2V
-const v2v = await fetch(
-  "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro",
-  {
-    method: "POST",
-    headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      params: {
-        video_url: "https://your-cdn.com/reference.mp4",
-        prompt: "@Video1 reimagined as cyberpunk anime",
-        duration: "5",
-      },
-    }),
-  },
-);`,
-            python: `import requests
-
-# T2V
-r = requests.post(
-    "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-pro",
-    headers={
-        "Authorization": "Bearer sk_your_key_here",
-        "Content-Type": "application/json",
-    },
-    json={
-        "params": {
-            "prompt": "A cat surfing through neon Tokyo at night",
-            "duration": "8",
-            "aspect_ratio": "16:9",
-            "generate_audio": True,
-        },
-    },
-)
-task_id = r.json()["task_id"]
-
-# V2V
-r = requests.post(
-    "https://video.chugax.io.vn/api/v1/video/kling-omni/omni-ref-pro",
-    headers={
-        "Authorization": "Bearer sk_...",
-        "Content-Type": "application/json",
-    },
-    json={
-        "params": {
-            "video_url": "https://your-cdn.com/reference.mp4",
-            "prompt": "@Video1 reimagined as cyberpunk anime",
-            "duration": "5",
-        },
-    },
-)`,
-          }}
-        />
-        <p className="text-xs text-muted-foreground">
-          <Code>aspect_ratio</Code>: <Code>auto</Code> / 16:9 / 9:16 / 1:1.
-          <br />
-          <Code>duration</Code>: string &quot;3&quot;..&quot;15&quot; (giây). Pricing
-          per-second với ceiling.
-          <br />
-          <Code>generate_audio</Code>: bật → giá ~1.83× cao hơn.
-        </p>
-        <TryIt
-          method="POST"
-          path="/api/v1/video/kling-omni/omni-pro"
-          optionalHeaders={["Idempotency-Key"]}
-          defaultBody={`{
-  "params": {
-    "prompt": "Cinematic shot of a Vietnamese street food market at night",
-    "aspect_ratio": "16:9",
-    "duration": "5",
-    "generate_audio": false
-  }
-}`}
-        />
-      </Section>
+      {/* Kling Omni section hidden 2026-05-23 — backend route + OpenAPI
+          still callable; commented out here per stability concern. */}
 
       <Section
         anchor="improve-prompt"

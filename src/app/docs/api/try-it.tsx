@@ -21,11 +21,11 @@ import { cn } from "@/lib/utils";
  * live response. Inspired by Mintlify's right-panel playground.
  *
  * State persistence:
- *   - API key: localStorage `openfreepik_docs_api_key` so the user
- *     doesn't re-enter it on every endpoint (it's THEIR key, only
- *     stored in their browser)
+ *   - API key: localStorage so the user doesn't re-enter on every
+ *     endpoint AND a custom event syncs all open TryIt panels on the
+ *     page (typing in panel A updates B/C/D instantly).
  *   - Body: per-component (resets on page reload — that's intentional,
- *     a stale body from a different endpoint would surprise the user)
+ *     a stale body from a different endpoint would surprise the user).
  *
  * Safety:
  *   - Requests fire from the user's browser directly to the same origin
@@ -33,6 +33,14 @@ import { cn } from "@/lib/utils";
  *   - The API key never leaves the browser except in the Authorization
  *     header sent to /api/v1/*.
  */
+
+const API_KEY_STORAGE = "video_api_docs_key";
+const API_KEY_LEGACY_STORAGE = "openfreepik_docs_api_key"; // back-compat
+const API_KEY_CHANGE_EVENT = "video-api-key-change";
+
+interface ApiKeyChangeDetail {
+  value: string;
+}
 
 interface TryItProps {
   method: "GET" | "POST" | "PATCH" | "DELETE";
@@ -54,8 +62,6 @@ interface TryItResponse {
   isJson: boolean;
 }
 
-const API_KEY_STORAGE = "openfreepik_docs_api_key";
-
 export function TryIt({
   method,
   path,
@@ -64,30 +70,52 @@ export function TryIt({
   defaultOpen = false,
 }: TryItProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKeyLocal] = useState("");
   const [apiKeyVisible, setApiKeyVisible] = useState(false);
   const [body, setBody] = useState(defaultBody ?? "");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [headerValues, setHeaderValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<TryItResponse | null>(null);
   const [bodyError, setBodyError] = useState<string | null>(null);
 
-  // Load persisted API key on mount.
-  useEffect(() => {
+  // Setter that broadcasts to all other TryIt panels on the page so
+  // typing the key once in section #1 propagates to section #2/#3/...
+  // immediately, no reload needed.
+  const setApiKey = useCallback((value: string) => {
+    setApiKeyLocal(value);
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(API_KEY_STORAGE);
-    if (stored) setApiKey(stored);
-  }, []);
-
-  // Persist API key changes (debounced via setItem semantics — cheap).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (apiKey) {
-      window.localStorage.setItem(API_KEY_STORAGE, apiKey);
+    if (value) {
+      window.localStorage.setItem(API_KEY_STORAGE, value);
     } else {
       window.localStorage.removeItem(API_KEY_STORAGE);
     }
-  }, [apiKey]);
+    window.dispatchEvent(
+      new CustomEvent<ApiKeyChangeDetail>(API_KEY_CHANGE_EVENT, {
+        detail: { value },
+      }),
+    );
+  }, []);
+
+  // Load persisted API key on mount + subscribe to cross-panel updates.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Try the canonical key first, fall back to legacy name for users
+    // who saved under the old `openfreepik_*` storage key.
+    const stored =
+      window.localStorage.getItem(API_KEY_STORAGE) ??
+      window.localStorage.getItem(API_KEY_LEGACY_STORAGE);
+    if (stored) setApiKeyLocal(stored);
+
+    const onChange = (e: Event) => {
+      const ce = e as CustomEvent<ApiKeyChangeDetail>;
+      if (typeof ce.detail?.value === "string") {
+        setApiKeyLocal(ce.detail.value);
+      }
+    };
+    window.addEventListener(API_KEY_CHANGE_EVENT, onChange);
+    return () => window.removeEventListener(API_KEY_CHANGE_EVENT, onChange);
+  }, []);
 
   const hasBody = method === "POST" || method === "PATCH";
 
@@ -201,17 +229,6 @@ export function TryIt({
             onToggleVisible={() => setApiKeyVisible((v) => !v)}
           />
 
-          {optionalHeaders.map((name) => (
-            <OptionalHeaderField
-              key={name}
-              name={name}
-              value={headerValues[name] ?? ""}
-              onChange={(v) =>
-                setHeaderValues((prev) => ({ ...prev, [name]: v }))
-              }
-            />
-          ))}
-
           {hasBody && (
             <div>
               <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -232,6 +249,38 @@ export function TryIt({
                 <p className="mt-1 text-[10px] text-destructive">
                   JSON lỗi: {bodyError}
                 </p>
+              )}
+            </div>
+          )}
+
+          {optionalHeaders.length > 0 && (
+            <div className="rounded-md border bg-muted/20">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((s) => !s)}
+                className="flex w-full items-center justify-between gap-2 px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:bg-muted/40"
+              >
+                <span>Tuỳ chọn nâng cao</span>
+                <ChevronDown
+                  className={cn(
+                    "size-3 transition-transform",
+                    showAdvanced && "rotate-180",
+                  )}
+                />
+              </button>
+              {showAdvanced && (
+                <div className="space-y-2 border-t bg-background/40 px-2 py-2">
+                  {optionalHeaders.map((name) => (
+                    <OptionalHeaderField
+                      key={name}
+                      name={name}
+                      value={headerValues[name] ?? ""}
+                      onChange={(v) =>
+                        setHeaderValues((prev) => ({ ...prev, [name]: v }))
+                      }
+                    />
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -333,8 +382,12 @@ function OptionalHeaderField({
   return (
     <div>
       <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {name} <span className="font-normal lowercase">(tuỳ chọn)</span>
+        {name}
       </label>
+      <p className="mb-1 text-[10px] leading-snug text-muted-foreground">
+        Chống double-charge khi retry mạng. Gửi cùng key + cùng body 2 lần ={" "}
+        trả response cũ. Bỏ trống nếu chỉ test thử.
+      </p>
       <div className="flex gap-1.5">
         <Input
           value={value}
