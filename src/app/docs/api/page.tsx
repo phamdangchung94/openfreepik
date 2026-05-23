@@ -7,6 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { TryIt } from "./try-it";
+import { SidebarNav, MobileSectionMenu, type NavItem } from "./sidebar-nav";
+
+const NAV_ITEMS: readonly NavItem[] = [
+  { anchor: "auth", label: "Kiểm tra key", method: "GET", group: "Bắt đầu" },
+  { anchor: "models", label: "Danh sách model", method: "GET", group: "Khám phá" },
+  { anchor: "usage", label: "Lịch sử dùng", method: "GET", group: "Khám phá" },
+  { anchor: "upload", label: "Tải file", method: "POST", group: "Khám phá" },
+  { anchor: "kling-3", label: "Kling 3 video", method: "POST", group: "Video" },
+  { anchor: "kling-3-4k", label: "Kling 3 4K", method: "POST", group: "Video" },
+  { anchor: "motion", label: "Motion Control", method: "POST", group: "Video" },
+  { anchor: "omni", label: "Omni (multi-shot)", method: "POST", group: "Video" },
+  { anchor: "improve-prompt", label: "Mở rộng prompt", method: "POST", group: "Tools" },
+  { anchor: "poll", label: "Theo dõi tác vụ", method: "GET", group: "Tools" },
+  { anchor: "advanced", label: "Headers nâng cao", group: "Tham khảo" },
+  { anchor: "errors", label: "Mã lỗi", group: "Tham khảo" },
+] as const;
 
 /**
  * Public API documentation. Standalone page — no /api/pricing/rates
@@ -16,24 +33,28 @@ import { cn } from "@/lib/utils";
  */
 export default function ApiDocsPage() {
   return (
-    <div className="mx-auto max-w-5xl space-y-8 px-4 py-8">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold">API tài liệu</h1>
-          <p className="text-sm text-muted-foreground">
-            Tích hợp video AI vào ứng dụng của bạn qua API key. Hỗ trợ
-            curl, JavaScript, Python — và tích hợp trực tiếp với
-            ChatGPT, Claude, Cursor.
-          </p>
+    <div className="mx-auto flex max-w-7xl gap-6 px-4 py-8">
+      <SidebarNav items={NAV_ITEMS} />
+      <div className="min-w-0 flex-1 space-y-8">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold">API tài liệu</h1>
+            <p className="text-sm text-muted-foreground">
+              Tích hợp video AI vào ứng dụng của bạn qua API key. Mỗi
+              endpoint có nút <span className="font-medium text-foreground">Test trực tiếp</span> để
+              thử ngay không cần copy-paste.
+            </p>
+          </div>
+          <Link
+            href="/"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            <ArrowLeft className="size-4" />
+            <span className="hidden sm:inline">Quay lại</span>
+          </Link>
         </div>
-        <Link
-          href="/"
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-        >
-          <ArrowLeft className="size-4" />
-          <span className="hidden sm:inline">Quay lại</span>
-        </Link>
-      </div>
+
+        <MobileSectionMenu items={NAV_ITEMS} />
 
       <Card>
         <CardHeader>
@@ -95,6 +116,161 @@ print("Số dư còn:", data["balance"]["remainingEur"], "EUR")`,
     "quotaEur": 10.0,
     "remainingEur": 8.766
   }
+}`}
+        />
+        <TryIt method="GET" path="/api/v1/me" />
+      </Section>
+
+      <Section
+        anchor="models"
+        title="2. Danh sách model + giá"
+        method="GET"
+        path="/api/v1/models"
+      >
+        <p className="text-sm text-muted-foreground">
+          Trả về catalog model đang khả dụng + giá theo giây. Public endpoint
+          (không cần API key) — AI tool tự discover.
+        </p>
+        <CodeTabs
+          samples={{
+            curl: `curl https://video.chugax.io.vn/api/v1/models`,
+            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/models");
+const { models, meta } = await res.json();
+console.log(\`\${models.length} models available\`);`,
+            python: `import requests
+data = requests.get("https://video.chugax.io.vn/api/v1/models").json()
+print(f"{len(data['models'])} models available")`,
+          }}
+        />
+        <ResponseBlock
+          json={`{
+  "ok": true,
+  "version": "1",
+  "models": [
+    {
+      "id": "kling-3",
+      "endpoint": "POST /v1/video/kling-3",
+      "capabilities": ["text-to-video", "image-to-video"],
+      "tiers": [
+        { "id": "std", "label": "Kling 3 720p", "eur_per_second": 0.018, "vnd_per_second": 18 },
+        { "id": "pro", "label": "Kling 3 1080p", "eur_per_second": 0.063, "vnd_per_second": 63 }
+      ]
+    }
+    // ...
+  ]
+}`}
+        />
+        <TryIt method="GET" path="/api/v1/models" />
+      </Section>
+
+      <Section
+        anchor="usage"
+        title="3. Lịch sử sử dụng + spend summary"
+        method="GET"
+        path="/api/v1/usage"
+      >
+        <p className="text-sm text-muted-foreground">
+          Self-serve audit cho activation code của bạn. Mặc định 30 ngày gần
+          nhất; query string <Code>?limit=N&offset=M&since=ISO</Code> để
+          phân trang/lọc theo thời gian.
+        </p>
+        <CodeTabs
+          samples={{
+            curl: `curl "https://video.chugax.io.vn/api/v1/usage?limit=10" \\
+  -H "Authorization: Bearer sk_your_key_here"`,
+            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/usage?limit=10", {
+  headers: { Authorization: "Bearer sk_your_key_here" },
+});
+const { usage, summary } = await res.json();
+console.log(\`\${summary.total_count} requests, \${summary.total_cost_eur} EUR\`);`,
+            python: `import requests
+r = requests.get(
+    "https://video.chugax.io.vn/api/v1/usage?limit=10",
+    headers={"Authorization": "Bearer sk_your_key_here"},
+)
+data = r.json()
+print(f"{data['summary']['total_count']} reqs, {data['summary']['total_cost_eur']} EUR")`,
+          }}
+        />
+        <TryIt method="GET" path="/api/v1/usage?limit=10" />
+      </Section>
+
+      <Section
+        anchor="upload"
+        title="4. Tải file (presigned R2 PUT)"
+        method="POST"
+        path="/api/v1/upload"
+      >
+        <p className="text-sm text-muted-foreground">
+          Cấp URL upload tạm cho ảnh/video. Customer PUT trực tiếp file lên
+          R2, lấy <Code>public_url</Code> rồi pass cho Motion/Omni endpoints
+          ở field <Code>image_url</Code> / <Code>video_url</Code>.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Caps: image ≤ 15MB, video ≤ 60MB. File tự xoá sau 2h (kịp Magnific
+          consume).
+        </p>
+        <CodeTabs
+          samples={{
+            curl: `# Step 1: presign
+curl -X POST https://video.chugax.io.vn/api/v1/upload \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "filename": "character.jpg",
+    "contentType": "image/jpeg",
+    "size": 524288,
+    "kind": "image"
+  }'
+
+# Step 2: PUT file lên upload_url (URL hết hạn ~10 phút)
+curl -X PUT "$UPLOAD_URL" -H "Content-Type: image/jpeg" --data-binary @character.jpg
+
+# Step 3: dùng public_url làm image_url cho Motion/Omni`,
+            javascript: `// Step 1: presign
+const presign = await fetch("https://video.chugax.io.vn/api/v1/upload", {
+  method: "POST",
+  headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
+  body: JSON.stringify({
+    filename: file.name,
+    contentType: file.type,
+    size: file.size,
+    kind: "image",
+  }),
+}).then((r) => r.json());
+
+// Step 2: upload trực tiếp lên R2
+await fetch(presign.upload_url, {
+  method: "PUT",
+  headers: { "Content-Type": file.type },
+  body: file,
+});
+
+// Step 3: presign.public_url đã sẵn sàng dùng
+const imageUrl = presign.public_url;`,
+            python: `# Step 1: presign
+import requests
+presign = requests.post(
+    "https://video.chugax.io.vn/api/v1/upload",
+    headers={"Authorization": "Bearer sk_..."},
+    json={"filename": "x.jpg", "contentType": "image/jpeg", "size": len(data), "kind": "image"},
+).json()
+
+# Step 2: PUT
+requests.put(presign["upload_url"], data=data, headers={"Content-Type": "image/jpeg"})
+
+# Step 3: public_url ready
+image_url = presign["public_url"]`,
+          }}
+        />
+        <TryIt
+          method="POST"
+          path="/api/v1/upload"
+          defaultBody={`{
+  "filename": "test.jpg",
+  "contentType": "image/jpeg",
+  "size": 524288,
+  "kind": "image"
 }`}
         />
       </Section>
@@ -167,6 +343,20 @@ task_id = r.json()["task_id"]`,
           {" "}<Code>duration</Code>: 5 hoặc 10 giây.{" "}
           <Code>aspect_ratio</Code>: 16:9 / 9:16 / 1:1.
         </p>
+        <TryIt
+          method="POST"
+          path="/api/v1/video/kling-3"
+          optionalHeaders={["Idempotency-Key"]}
+          defaultBody={`{
+  "tier": "std",
+  "params": {
+    "prompt": "A cat surfing a wave at sunset, cinematic 4K",
+    "aspect_ratio": "16:9",
+    "duration": "5",
+    "generate_audio": false
+  }
+}`}
+        />
       </Section>
 
       <Section
@@ -235,6 +425,18 @@ r = requests.post(
     json={"params": {"image": "https://your-cdn.com/portrait.jpg", "prompt": "...", "duration": "5"}},
 )`,
           }}
+        />
+        <TryIt
+          method="POST"
+          path="/api/v1/video/kling-3-4k-text"
+          optionalHeaders={["Idempotency-Key"]}
+          defaultBody={`{
+  "params": {
+    "prompt": "Aerial shot of Hanoi old quarter at dusk, neon signs reflecting in puddles",
+    "aspect_ratio": "16:9",
+    "duration": "5"
+  }
+}`}
         />
       </Section>
 
@@ -311,6 +513,21 @@ r = requests.post(
           <Code>output_duration</Code>: 5/10/15/30 giây tuỳ orientation —
           giá tính theo giây delivered.
         </p>
+        <TryIt
+          method="POST"
+          path="/api/v1/video/kling-motion/v3-pro"
+          optionalHeaders={["Idempotency-Key"]}
+          defaultBody={`{
+  "params": {
+    "image_url": "https://picsum.photos/seed/character/720/1280",
+    "video_url": "https://your-cdn.com/reference-motion.mp4",
+    "prompt": "anime style, vibrant colors",
+    "character_orientation": "video",
+    "cfg_scale": 0.5
+  },
+  "output_duration": 5
+}`}
+        />
       </Section>
 
       <Section
@@ -457,6 +674,19 @@ r = requests.post(
           <br />
           <Code>generate_audio</Code>: bật → giá ~1.83× cao hơn.
         </p>
+        <TryIt
+          method="POST"
+          path="/api/v1/video/kling-omni/omni-pro"
+          optionalHeaders={["Idempotency-Key"]}
+          defaultBody={`{
+  "params": {
+    "prompt": "Cinematic shot of a Vietnamese street food market at night",
+    "aspect_ratio": "16:9",
+    "duration": "5",
+    "generate_audio": false
+  }
+}`}
+        />
       </Section>
 
       <Section
@@ -501,6 +731,15 @@ r = requests.post(
     json={"prompt": "con mèo lướt sóng", "type": "video", "language": "vi"},
 )`,
           }}
+        />
+        <TryIt
+          method="POST"
+          path="/api/v1/prompt/improve"
+          defaultBody={`{
+  "prompt": "con mèo lướt sóng",
+  "type": "video",
+  "language": "vi"
+}`}
         />
       </Section>
 
@@ -556,6 +795,10 @@ def wait_for_task(task_id: str, api_key: str) -> str:
   "generated": ["https://cdn.../video.mp4"],
   "error_message": null
 }`}
+        />
+        <TryIt
+          method="GET"
+          path="/api/v1/tasks/REPLACE-WITH-TASK-ID"
         />
       </Section>
 
@@ -668,7 +911,7 @@ res = requests.post(
         </div>
       </Section>
 
-      <Card>
+      <Card id="errors" className="scroll-mt-20">
         <CardHeader>
           <CardTitle className="text-lg">Mã lỗi</CardTitle>
         </CardHeader>
@@ -725,6 +968,7 @@ Viết hàm generate_video(prompt) trả về URL video, raise lỗi nếu FAILE
         Video URL hết hạn sau 24 giờ. Tải xuống và lưu trữ về phía bạn
         nếu cần lâu dài. Số dư dùng đến đâu trừ đến đó — request
         FAILED sẽ được hoàn lại tự động.
+      </div>
       </div>
     </div>
   );
