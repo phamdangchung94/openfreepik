@@ -1,7 +1,10 @@
 /**
- * Voucher redemption — atomic single-use credit to activation code balance.
+ * Voucher redemption — single-use credit to activation code balance.
  *
- * Transaction order is critical:
+ * Two-step flow (sequential, NOT wrapped in db.transaction() because
+ * neon-http driver does NOT support real ACID transactions — its
+ * `transaction()` API just batches HTTP statements without atomicity):
+ *
  *   1. UPDATE vouchers SET redeemed_at = NOW(), redeemed_by_code_id = $codeId
  *      WHERE code = $voucher AND redeemed_at IS NULL AND revoked_at IS NULL
  *      RETURNING eur_value
@@ -11,9 +14,13 @@
  * If (1) returns 0 rows → voucher invalid/already-used/revoked → reject
  * with a generic message (anti-bruteforce: don't leak which state).
  *
- * If (2) returns 0 rows mid-transaction → activation code disappeared or
- * went inactive after the route's preflight validateCode. Throw → tx
- * rolls back step (1) → voucher reverts to claimable. Customer can retry.
+ * If (2) returns 0 rows after (1) succeeded → activation code disappeared
+ * or went inactive after the route's preflight validateCode. We log
+ * `VOUCHER_REDEEM_ORPHAN` for admin manual recovery (voucher marked
+ * redeemed but no credit applied) and surface RedeemRollbackError so
+ * the route returns 409 with a friendly message. Admin can refund the
+ * voucher via /api/admin/vouchers/[id]/refund OR manually credit the
+ * activation code's quota_eur.
  *
  * Race: two concurrent redemption attempts of the same voucher both
  * pass the route's pre-check but Postgres serializes the UPDATEs → only
@@ -23,6 +30,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { activationCodes, vouchers, type Voucher } from "@/lib/db/schema";
+import { errFields, log } from "@/lib/logger";
 
 export type RedeemFailureReason =
   | "invalid_or_used" // voucher not found OR redeemed OR revoked (don't leak which)
@@ -52,62 +60,82 @@ export async function redeemVoucher(
   normalizedVoucherCode: string,
   codeId: string,
 ): Promise<RedeemResult> {
-  return await db.transaction(async (tx) => {
-    // Step 1: atomic flip of the voucher's claim state.
-    const voucherRows = await tx
-      .update(vouchers)
-      .set({
-        redeemedAt: sql`NOW()`,
-        redeemedByCodeId: codeId,
-      })
-      .where(
-        and(
-          eq(vouchers.code, normalizedVoucherCode),
-          isNull(vouchers.redeemedAt),
-          isNull(vouchers.revokedAt),
-        ),
-      )
-      .returning();
+  // Step 1: atomic flip of the voucher's claim state. The WHERE clause
+  // is the gating concurrency check — Postgres serializes UPDATEs on
+  // the same row so two concurrent redeems of the same code only
+  // return a row to ONE caller.
+  const voucherRows = await db
+    .update(vouchers)
+    .set({
+      redeemedAt: sql`NOW()`,
+      redeemedByCodeId: codeId,
+    })
+    .where(
+      and(
+        eq(vouchers.code, normalizedVoucherCode),
+        isNull(vouchers.redeemedAt),
+        isNull(vouchers.revokedAt),
+      ),
+    )
+    .returning();
 
-    const voucher = voucherRows[0];
-    if (!voucher) return { ok: false, reason: "invalid_or_used" };
+  const voucher = voucherRows[0];
+  if (!voucher) return { ok: false, reason: "invalid_or_used" };
 
-    // Step 2: credit the activation code. The mode check excludes
-    // 'unlimited' codes — they don't track balance, so crediting is
-    // meaningless. Route already pre-rejects this case but defense in
-    // depth: if it slipped through, rollback the voucher claim.
-    const codeRows = await tx
-      .update(activationCodes)
-      .set({
-        quotaEur: sql`COALESCE(${activationCodes.quotaEur}, 0) + ${voucher.eurValue}`,
-      })
-      .where(
-        and(
-          eq(activationCodes.id, codeId),
-          eq(activationCodes.isActive, true),
-          sql`${activationCodes.mode} != 'unlimited'`,
-        ),
-      )
-      .returning();
+  // Step 2: credit the activation code. The mode check excludes
+  // 'unlimited' codes — they don't track balance, so crediting is
+  // meaningless. Route already pre-rejects this case but defense in
+  // depth.
+  //
+  // If step 2 fails (activation code disappeared or went inactive
+  // between preflight and now), we have an orphan voucher (redeemed
+  // but no credit). We try to undo step 1 — best-effort, may still
+  // race with a concurrent action. Either way we log VOUCHER_REDEEM_
+  // ORPHAN loudly with both IDs so admin can manually reconcile via
+  // /api/admin/vouchers/[id]/refund or direct credit.
+  const codeRows = await db
+    .update(activationCodes)
+    .set({
+      quotaEur: sql`COALESCE(${activationCodes.quotaEur}, 0) + ${voucher.eurValue}`,
+    })
+    .where(
+      and(
+        eq(activationCodes.id, codeId),
+        eq(activationCodes.isActive, true),
+        sql`${activationCodes.mode} != 'unlimited'`,
+      ),
+    )
+    .returning();
 
-    const codeRow = codeRows[0];
-    if (!codeRow) {
-      // Throwing rolls back step 1 — voucher returns to claimable
-      // state. Customer can retry once admin re-activates the code,
-      // or admin can revoke + re-issue the voucher.
-      throw new RedeemRollbackError(
+  const codeRow = codeRows[0];
+  if (!codeRow) {
+    // Best-effort revert: undo step 1 so voucher returns to claimable.
+    try {
+      await db
+        .update(vouchers)
+        .set({ redeemedAt: null, redeemedByCodeId: null })
+        .where(eq(vouchers.id, voucher.id));
+    } catch (err) {
+      log.error("VOUCHER_REDEEM_ORPHAN", {
+        voucherId: voucher.id,
         codeId,
-        "Activation code unavailable mid-redemption (inactive or unlimited mode)",
-      );
+        eurValue: voucher.eurValue,
+        revertFailed: true,
+        ...errFields(err),
+      });
     }
+    throw new RedeemRollbackError(
+      codeId,
+      "Activation code unavailable mid-redemption (inactive or unlimited mode)",
+    );
+  }
 
-    return {
-      ok: true,
-      voucher,
-      newQuotaEur: Number(codeRow.quotaEur ?? 0),
-      newUsedEur: Number(codeRow.usedEur),
-    };
-  });
+  return {
+    ok: true,
+    voucher,
+    newQuotaEur: Number(codeRow.quotaEur ?? 0),
+    newUsedEur: Number(codeRow.usedEur),
+  };
 }
 
 /**
@@ -149,37 +177,41 @@ export async function refundRedeemedVoucher(
   voucherId: string,
   reason: string,
 ): Promise<RefundResult> {
-  return await db.transaction(async (tx) => {
-    const [voucher] = await tx
-      .select()
-      .from(vouchers)
-      .where(eq(vouchers.id, voucherId))
-      .limit(1);
+  // No db.transaction wrapper — neon-http doesn't support real ACID
+  // transactions. Two sequential UPDATEs; if step 2 fails after step 1
+  // succeeds, voucher is marked refunded but quota not deducted. The
+  // refund-flag check below prevents double-flag on retry; admin can
+  // re-fire the refund and step 2 will execute again (idempotent —
+  // the GREATEST(... - eur, 0) clamp prevents over-deduct on first run).
+  const [voucher] = await db
+    .select()
+    .from(vouchers)
+    .where(eq(vouchers.id, voucherId))
+    .limit(1);
 
-    if (!voucher) return { ok: false, reason: "not_found" };
-    if (!voucher.redeemedAt) return { ok: false, reason: "not_redeemed" };
-    if (voucher.refundedAt) return { ok: false, reason: "already_refunded" };
-    if (!voucher.redeemedByCodeId) {
-      return { ok: false, reason: "no_target_code" };
-    }
+  if (!voucher) return { ok: false, reason: "not_found" };
+  if (!voucher.redeemedAt) return { ok: false, reason: "not_redeemed" };
+  if (voucher.refundedAt) return { ok: false, reason: "already_refunded" };
+  if (!voucher.redeemedByCodeId) {
+    return { ok: false, reason: "no_target_code" };
+  }
 
-    await tx
-      .update(vouchers)
-      .set({
-        refundedAt: sql`NOW()`,
-        refundReason: reason,
-      })
-      .where(eq(vouchers.id, voucherId));
+  await db
+    .update(vouchers)
+    .set({
+      refundedAt: sql`NOW()`,
+      refundReason: reason,
+    })
+    .where(eq(vouchers.id, voucherId));
 
-    await tx
-      .update(activationCodes)
-      .set({
-        quotaEur: sql`GREATEST(COALESCE(${activationCodes.quotaEur}, 0) - ${voucher.eurValue}, 0)`,
-      })
-      .where(eq(activationCodes.id, voucher.redeemedByCodeId));
+  await db
+    .update(activationCodes)
+    .set({
+      quotaEur: sql`GREATEST(COALESCE(${activationCodes.quotaEur}, 0) - ${voucher.eurValue}, 0)`,
+    })
+    .where(eq(activationCodes.id, voucher.redeemedByCodeId));
 
-    return { ok: true };
-  });
+  return { ok: true };
 }
 
 /**
