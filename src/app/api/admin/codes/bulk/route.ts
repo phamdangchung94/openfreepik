@@ -95,13 +95,20 @@ export async function POST(request: Request) {
     });
   }
 
-  const inserted = await db.transaction(async (tx) => {
-    return tx.insert(activationCodes).values(rows).returning({
+  // No db.transaction() wrapper — neon-http driver throws "No
+  // transactions support" when fed an async callback. The multi-row
+  // INSERT is already atomic at the statement level (Postgres
+  // guarantees all-or-nothing for one INSERT) so the wrapper bought
+  // us nothing here. 2026-05-23: matches the same fix applied to
+  // voucher bulk + redeem earlier the same day.
+  const inserted = await db
+    .insert(activationCodes)
+    .values(rows)
+    .returning({
       id: activationCodes.id,
       code: activationCodes.code,
       customerLabel: activationCodes.customerLabel,
     });
-  });
 
   log.info("CODES_BULK_CREATED", {
     prefix,
