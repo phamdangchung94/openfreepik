@@ -2,30 +2,55 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE_NAME } from "@/lib/auth/admin";
 
 /**
- * Edge proxy — runs on dashboard routes only.
+ * Edge proxy — two responsibilities, ordered intentionally:
  *
- * What used to live here: an `/api/*` Origin allowlist intended to block
- * browser-based cross-origin abuse (audit S5). In practice, that gate was
- * causing legitimate 403s for customers visiting via Vercel preview
- * aliases or Vercel CDN edge variants whose Host header didn't match the
- * Origin the browser sent. Browsers already enforce same-origin policy
- * on the response side (CORS), so a server-side Origin allowlist adds
- * friction without preventing real abuse — a malicious site can always
- * server-side-proxy the call and never send an Origin header at all.
+ *   1. **Canonical-host redirect**: funnel all customer-facing browser
+ *      traffic to https://video.chugax.io.vn so docs URLs + bookmarks
+ *      always show the canonical brand. Aliases (freepik.io.vn,
+ *      openfreepik.vercel.app, etc.) get 308'd. /api/* exempted for
+ *      backwards-compat (existing customer integrations + Magnific
+ *      webhook delivery keyed on the old aliases).
  *
- * Defense remaining: rate limit + activation-code bearer auth (both at
- * the route level), plus the strict CSP in next.config.ts that prevents
- * scripts from other origins from loading inside our pages.
+ *   2. **Dashboard auth gate**: any /dashboard/* hit without the admin
+ *      session cookie redirects to /dashboard/login.
+ *
+ * Historical note: this file used to host an /api/* Origin allowlist
+ * (audit S5) which was removed because browsers already enforce
+ * same-origin via CORS — server-side Origin gates just caused 403s for
+ * customers on Vercel preview aliases without preventing real abuse.
+ *
+ * Filename: Next.js 16 renamed `middleware.ts` → `proxy.ts`; same edge
+ * runtime semantics, no behavioral diff vs the old name.
  */
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
 
-  // Skip the login page itself.
+const CANONICAL_HOST = "video.chugax.io.vn";
+
+export function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+  const host = (request.headers.get("host") ?? "").toLowerCase();
+
+  // ── 1. Canonical-host redirect ───────────────────────────────────
+  // Skip when:
+  //   - already canonical
+  //   - localhost / 127.0.0.1 (dev)
+  //   - *.vercel.app (preview deploys must stay reachable for QA)
+  //   - /api/* (legacy callers + Magnific webhook continue working)
+  const isCanonical = host === CANONICAL_HOST;
+  const isDev = host.startsWith("localhost") || host.startsWith("127.0.0.1");
+  const isPreview = host.endsWith(".vercel.app");
+  const isApi = pathname.startsWith("/api/");
+
+  if (!isCanonical && !isDev && !isPreview && !isApi) {
+    const targetUrl = `https://${CANONICAL_HOST}${pathname}${search}`;
+    // 308 preserves the HTTP method through the redirect (301 would
+    // coerce POST → GET on some clients). Browser caches the redirect.
+    return NextResponse.redirect(targetUrl, 308);
+  }
+
+  // ── 2. Dashboard auth gate ───────────────────────────────────────
   if (pathname === "/dashboard/login") {
     return NextResponse.next();
   }
-
-  // Only gate /dashboard/*. Everything else (including /api/*) is open.
   if (!pathname.startsWith("/dashboard")) {
     return NextResponse.next();
   }
@@ -41,5 +66,11 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  // Cover everything except Next build assets + common static files.
+  // Required so canonical-host check fires on EVERY navigation, not
+  // just /dashboard/*. /api/* still flows through but early-exits
+  // inside the function body (isApi check).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+  ],
 };
