@@ -38,6 +38,13 @@ const API_KEY_STORAGE = "video_api_docs_key";
 const API_KEY_LEGACY_STORAGE = "openfreepik_docs_api_key"; // back-compat
 const API_KEY_CHANGE_EVENT = "video-api-key-change";
 
+/**
+ * Canonical origin for API calls + copy-paste samples. Hardcoded so
+ * the docs page always shows the same URL regardless of which alias
+ * the user accessed it through.
+ */
+const CANONICAL_ORIGIN = "https://video.chugax.io.vn";
+
 interface ApiKeyChangeDetail {
   value: string;
 }
@@ -150,10 +157,12 @@ export function TryIt({
       if (v) headers[name] = v;
     }
 
-    const url =
-      typeof window !== "undefined"
-        ? `${window.location.origin}${path}`
-        : path;
+    // Always hit the canonical origin so the request matches what
+    // customers see in copy-paste samples. Same-origin when the docs
+    // page is served from video.chugax.io.vn (no CORS); if user lands
+    // via a legacy alias (e.g. freepik.io.vn), the request still
+    // routes to canonical (CORS allowed via same Vercel project).
+    const url = `${CANONICAL_ORIGIN}${path}`;
 
     const t0 = performance.now();
     try {
@@ -521,9 +530,10 @@ function buildCurl(opts: {
   headers: Record<string, string>;
   optionalHeaders: readonly string[];
 }): string {
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "https://video.chugax.io.vn";
-  const lines = [`curl -X ${opts.method} ${origin}${opts.path}`];
+  // Hardcoded canonical origin — keeps the copy-paste cURL identical
+  // regardless of which alias the user lands on (freepik.io.vn,
+  // openfreepik.vercel.app, etc. all should funnel to video.chugax.io.vn).
+  const lines = [`curl -X ${opts.method} ${CANONICAL_ORIGIN}${opts.path}`];
   if (opts.apiKey) lines.push(`  -H "Authorization: Bearer ${opts.apiKey}"`);
   if (opts.body) lines.push(`  -H "Content-Type: application/json"`);
   for (const h of opts.optionalHeaders) {
