@@ -285,15 +285,36 @@ image_url = presign["public_url"]`,
 
       <Section
         anchor="kling-3"
-        title="2. Tạo video Kling 3 (text-to-video / image-to-video)"
+        title="2. Tạo video Kling 3 (T2V / I2V / multi-shot / start-end frame)"
         method="POST"
         path="/api/v1/video/kling-3"
       >
         <p className="text-sm text-muted-foreground">
-          Sinh video từ prompt (T2V) hoặc prompt + ảnh (I2V). Trả về
-          <Code>task_id</Code>; gọi <Code>GET /api/v1/tasks/{"{task_id}"}</Code> mỗi 2 giây để
-          theo dõi trạng thái.
+          Endpoint mạnh nhất — hỗ trợ 5 mode trong cùng 1 body shape:
+          T2V, I2V first-frame, I2V first+last-frame, multi-shot (tới 6
+          cảnh), và identity-locked elements. Trả về <Code>task_id</Code>;
+          poll <Code>GET /api/v1/tasks/{"{task_id}"}</Code> mỗi 2 giây.
         </p>
+
+        <div className="rounded-md border bg-muted/30 p-3 text-xs">
+          <p className="mb-2 font-medium text-foreground">Tham số đầy đủ trong <Code>params</Code>:</p>
+          <ul className="space-y-1 text-muted-foreground">
+            <li><Code>prompt</Code>: text mô tả, ≤2500 chars (bỏ nếu dùng <Code>multi_prompt</Code>)</li>
+            <li><Code>negative_prompt</Code>: text mô tả thứ KHÔNG muốn, ≤2500 chars</li>
+            <li><Code>start_image_url</Code>: URL ảnh frame đầu (I2V). Bỏ = T2V</li>
+            <li><Code>end_image_url</Code>: URL ảnh frame cuối — model interpolate giữa start và end</li>
+            <li><Code>multi_shot</Code>: <Code>true</Code> để bật multi-shot mode</li>
+            <li><Code>shot_type</Code>: <Code>customize</Code> (tự kiểm soát mỗi shot) hoặc <Code>intelligent</Code> (AI tự cắt cảnh)</li>
+            <li><Code>multi_prompt</Code>: mảng tới 6 cảnh, mỗi cảnh <Code>{`{prompt, duration}`}</Code></li>
+            <li><Code>elements</Code>: mảng tới N identity refs <Code>{`{frontal_image_url, reference_image_urls[]}`}</Code></li>
+            <li><Code>aspect_ratio</Code>: <Code>16:9</Code> / <Code>9:16</Code> / <Code>1:1</Code></li>
+            <li><Code>duration</Code>: <Code>"3"</Code> đến <Code>"15"</Code> giây (string)</li>
+            <li><Code>cfg_scale</Code>: 0.0 - 1.0 (mặc định ~0.5, càng cao bám prompt càng chặt)</li>
+            <li><Code>generate_audio</Code>: bật audio (+1.5× giá)</li>
+          </ul>
+        </div>
+
+        <p className="text-sm font-medium text-foreground">Mẫu A: T2V đơn giản</p>
         <CodeTabs
           samples={{
             curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
@@ -308,49 +329,173 @@ image_url = presign["public_url"]`,
       "generate_audio": false
     }
   }'`,
-            javascript: `const res = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
+            javascript: `await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
   method: "POST",
-  headers: {
-    Authorization: "Bearer sk_your_key_here",
-    "Content-Type": "application/json",
-  },
+  headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
   body: JSON.stringify({
     tier: "pro",
     params: {
       prompt: "A cat surfing a wave at sunset, cinematic 4K",
       aspect_ratio: "16:9",
       duration: "5",
-      generate_audio: false,
     },
   }),
-});
-const { task_id } = await res.json();`,
+});`,
             python: `import requests
-
 r = requests.post(
     "https://video.chugax.io.vn/api/v1/video/kling-3",
-    headers={
-        "Authorization": "Bearer sk_your_key_here",
-        "Content-Type": "application/json",
-    },
-    json={
-        "tier": "pro",
-        "params": {
-            "prompt": "A cat surfing a wave at sunset, cinematic 4K",
-            "aspect_ratio": "16:9",
-            "duration": "5",
-            "generate_audio": False,
-        },
-    },
-)
-task_id = r.json()["task_id"]`,
+    headers={"Authorization": "Bearer sk_..."},
+    json={"tier": "pro", "params": {"prompt": "Cat surfing...", "duration": "5"}},
+)`,
           }}
         />
+
+        <p className="text-sm font-medium text-foreground">Mẫu B: I2V start + end frame (model interpolate giữa 2 ảnh)</p>
+        <CodeTabs
+          samples={{
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier": "pro",
+    "params": {
+      "prompt": "Smooth zoom-in transition",
+      "start_image_url": "https://your-cdn.com/wide-shot.jpg",
+      "end_image_url": "https://your-cdn.com/closeup.jpg",
+      "duration": "8",
+      "aspect_ratio": "16:9"
+    }
+  }'`,
+            javascript: `body: JSON.stringify({
+  tier: "pro",
+  params: {
+    prompt: "Smooth zoom-in transition",
+    start_image_url: "https://your-cdn.com/wide-shot.jpg",
+    end_image_url: "https://your-cdn.com/closeup.jpg",
+    duration: "8",
+  },
+});`,
+            python: `json={
+    "tier": "pro",
+    "params": {
+        "prompt": "Smooth zoom-in transition",
+        "start_image_url": "https://your-cdn.com/wide-shot.jpg",
+        "end_image_url": "https://your-cdn.com/closeup.jpg",
+        "duration": "8",
+    },
+}`,
+          }}
+        />
+
+        <p className="text-sm font-medium text-foreground">Mẫu C: Multi-shot (3 cảnh, mỗi cảnh riêng prompt + duration)</p>
+        <CodeTabs
+          samples={{
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier": "pro",
+    "params": {
+      "multi_shot": true,
+      "shot_type": "customize",
+      "multi_prompt": [
+        { "prompt": "Wide shot of a city at dawn", "duration": "5" },
+        { "prompt": "Camera zooms in on a coffee shop", "duration": "5" },
+        { "prompt": "Close-up of barista pouring latte art", "duration": "5" }
+      ],
+      "aspect_ratio": "16:9"
+    }
+  }'`,
+            javascript: `body: JSON.stringify({
+  tier: "pro",
+  params: {
+    multi_shot: true,
+    shot_type: "customize",
+    multi_prompt: [
+      { prompt: "Wide shot of a city at dawn", duration: "5" },
+      { prompt: "Camera zooms in on a coffee shop", duration: "5" },
+      { prompt: "Close-up of barista pouring latte art", duration: "5" },
+    ],
+    aspect_ratio: "16:9",
+  },
+});`,
+            python: `json={
+    "tier": "pro",
+    "params": {
+        "multi_shot": True,
+        "shot_type": "customize",
+        "multi_prompt": [
+            {"prompt": "Wide shot of a city at dawn", "duration": "5"},
+            {"prompt": "Camera zooms in on a coffee shop", "duration": "5"},
+            {"prompt": "Close-up of barista pouring latte art", "duration": "5"},
+        ],
+    },
+}`,
+          }}
+        />
+
+        <p className="text-sm font-medium text-foreground">Mẫu D: Elements (giữ nhân vật/đối tượng nhất quán across frames)</p>
+        <CodeTabs
+          samples={{
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier": "pro",
+    "params": {
+      "prompt": "@Element1 walking through a Tokyo street at night",
+      "elements": [
+        {
+          "frontal_image_url": "https://your-cdn.com/character-front.jpg",
+          "reference_image_urls": [
+            "https://your-cdn.com/character-side.jpg",
+            "https://your-cdn.com/character-back.jpg"
+          ]
+        }
+      ],
+      "duration": "5"
+    }
+  }'`,
+            javascript: `body: JSON.stringify({
+  tier: "pro",
+  params: {
+    prompt: "@Element1 walking through a Tokyo street at night",
+    elements: [
+      {
+        frontal_image_url: "https://your-cdn.com/character-front.jpg",
+        reference_image_urls: [
+          "https://your-cdn.com/character-side.jpg",
+          "https://your-cdn.com/character-back.jpg",
+        ],
+      },
+    ],
+    duration: "5",
+  },
+});`,
+            python: `json={
+    "tier": "pro",
+    "params": {
+        "prompt": "@Element1 walking through a Tokyo street at night",
+        "elements": [{
+            "frontal_image_url": "https://your-cdn.com/character-front.jpg",
+            "reference_image_urls": [
+                "https://your-cdn.com/character-side.jpg",
+                "https://your-cdn.com/character-back.jpg",
+            ],
+        }],
+        "duration": "5",
+    },
+}`,
+          }}
+        />
+
         <p className="text-xs text-muted-foreground">
-          Tham số <Code>tier</Code>: <Code>std</Code> hoặc <Code>pro</Code>.
-          {" "}<Code>duration</Code>: 5 hoặc 10 giây.{" "}
-          <Code>aspect_ratio</Code>: 16:9 / 9:16 / 1:1.
+          <strong className="text-foreground">Pricing</strong>:{" "}
+          <Code>std</Code> 0.018 €/giây ·{" "}
+          <Code>pro</Code> 0.063 €/giây. With audio ×1.5. Multi-shot tính theo
+          tổng duration các cảnh cộng lại.
         </p>
+
         <TryIt
           method="POST"
           path="/api/v1/video/kling-3"
@@ -369,71 +514,105 @@ task_id = r.json()["task_id"]`,
 
       <Section
         anchor="kling-3-4k"
-        title="3. Tạo video Kling 3 4K"
+        title="3. Tạo video Kling 3 4K (T2V / I2V)"
         method="POST"
-        path="/api/v1/video/kling-3-4k-text · /api/v1/video/kling-3-4k-image"
+        path="/api/v1/video/kling-3-4k-text  |  /api/v1/video/kling-3-4k-image"
       >
         <p className="text-sm text-muted-foreground">
-          Phiên bản 4K, độ phân giải cao hơn. Hai endpoint riêng: text-to-video
-          và image-to-video.
+          Phiên bản 4K độ phân giải cao. Hai endpoint riêng cho T2V và I2V.
+          Không hỗ trợ multi-shot — nếu cần nhiều cảnh dùng Kling 3 thường
+          ở section trên.
         </p>
+
+        <div className="rounded-md border bg-muted/30 p-3 text-xs">
+          <p className="mb-2 font-medium text-foreground">Tham số <Code>params</Code>:</p>
+          <ul className="space-y-1 text-muted-foreground">
+            <li><Code>prompt</Code>: bắt buộc cho T2V endpoint, optional cho I2V</li>
+            <li><Code>negative_prompt</Code>: text mô tả thứ KHÔNG muốn</li>
+            <li><Code>image</Code>: bắt buộc cho I2V endpoint (URL hoặc base64 data URI)</li>
+            <li><Code>aspect_ratio</Code>: <Code>16:9</Code> / <Code>9:16</Code> / <Code>1:1</Code></li>
+            <li><Code>duration</Code>: <Code>"3"</Code> đến <Code>"15"</Code> giây (string)</li>
+            <li><Code>cfg_scale</Code>: 0.0 - 1.0 (mặc định ~0.5)</li>
+            <li><Code>generate_audio</Code>: bật audio (+1.5× giá)</li>
+          </ul>
+        </div>
+
+        <p className="text-sm font-medium text-foreground">Mẫu T2V 4K</p>
         <CodeTabs
           samples={{
-            curl: `# Text-to-Video 4K
-curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-text \\
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-text \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
     "params": {
-      "prompt": "Aerial view of Hạ Long bay at golden hour",
-      "duration": "5",
-      "aspect_ratio": "16:9"
+      "prompt": "Aerial view of Hạ Long bay at golden hour, cinematic",
+      "negative_prompt": "blurry, watermark, low quality",
+      "duration": "8",
+      "aspect_ratio": "16:9",
+      "cfg_scale": 0.6,
+      "generate_audio": false
     }
-  }'
+  }'`,
+            javascript: `await fetch("https://video.chugax.io.vn/api/v1/video/kling-3-4k-text", {
+  method: "POST",
+  headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
+  body: JSON.stringify({
+    params: {
+      prompt: "Aerial view of Hạ Long bay at golden hour",
+      negative_prompt: "blurry, watermark",
+      duration: "8",
+      aspect_ratio: "16:9",
+      cfg_scale: 0.6,
+    },
+  }),
+});`,
+            python: `requests.post(
+    "https://video.chugax.io.vn/api/v1/video/kling-3-4k-text",
+    headers={"Authorization": "Bearer sk_..."},
+    json={"params": {
+        "prompt": "Aerial view of Hạ Long bay at golden hour",
+        "duration": "8",
+        "aspect_ratio": "16:9",
+        "cfg_scale": 0.6,
+    }},
+)`,
+          }}
+        />
 
-# Image-to-Video 4K
-curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-image \\
+        <p className="text-sm font-medium text-foreground">Mẫu I2V 4K</p>
+        <CodeTabs
+          samples={{
+            curl: `curl -X POST https://video.chugax.io.vn/api/v1/video/kling-3-4k-image \\
   -H "Authorization: Bearer sk_your_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{
     "params": {
       "image": "https://your-cdn.com/portrait.jpg",
-      "prompt": "The character slowly smiles",
-      "duration": "5"
+      "prompt": "The character slowly smiles and looks to the side",
+      "duration": "5",
+      "cfg_scale": 0.5
     }
   }'`,
-            javascript: `// Text-to-Video 4K
-const t2v = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3-4k-text", {
-  method: "POST",
-  headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
-  body: JSON.stringify({
-    params: { prompt: "...", duration: "5", aspect_ratio: "16:9" },
-  }),
-});
-
-// Image-to-Video 4K
-const i2v = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3-4k-image", {
-  method: "POST",
-  headers: { Authorization: "Bearer sk_...", "Content-Type": "application/json" },
-  body: JSON.stringify({
-    params: { image: "https://your-cdn.com/portrait.jpg", prompt: "...", duration: "5" },
-  }),
+            javascript: `body: JSON.stringify({
+  params: {
+    image: "https://your-cdn.com/portrait.jpg",
+    prompt: "The character slowly smiles",
+    duration: "5",
+  },
 });`,
-            python: `# Text-to-Video 4K
-r = requests.post(
-    "https://video.chugax.io.vn/api/v1/video/kling-3-4k-text",
-    headers={"Authorization": "Bearer sk_...", "Content-Type": "application/json"},
-    json={"params": {"prompt": "...", "duration": "5", "aspect_ratio": "16:9"}},
-)
-
-# Image-to-Video 4K
-r = requests.post(
-    "https://video.chugax.io.vn/api/v1/video/kling-3-4k-image",
-    headers={"Authorization": "Bearer sk_...", "Content-Type": "application/json"},
-    json={"params": {"image": "https://your-cdn.com/portrait.jpg", "prompt": "...", "duration": "5"}},
-)`,
+            python: `json={"params": {
+    "image": "https://your-cdn.com/portrait.jpg",
+    "prompt": "The character slowly smiles",
+    "duration": "5",
+}}`,
           }}
         />
+
+        <p className="text-xs text-muted-foreground">
+          <strong className="text-foreground">Pricing</strong>: 0.252 €/giây
+          cho cả T2V và I2V. Vd 5s = 1.26 € (~1,260 đ).
+        </p>
+
         <TryIt
           method="POST"
           path="/api/v1/video/kling-3-4k-text"
@@ -442,7 +621,8 @@ r = requests.post(
   "params": {
     "prompt": "Aerial shot of Hanoi old quarter at dusk, neon signs reflecting in puddles",
     "aspect_ratio": "16:9",
-    "duration": "5"
+    "duration": "5",
+    "cfg_scale": 0.6
   }
 }`}
         />

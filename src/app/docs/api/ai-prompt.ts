@@ -113,32 +113,97 @@ Returns \`{ ok, usage: [...], summary: { total_count, total_cost_eur, by_status 
 
 ### Video generation (charges balance)
 
-#### \`POST /video/kling-3\` — Kling 3 (text-to-video / image-to-video)
-Body:
-\`\`\`json
-{
-  "tier": "std" | "pro",
-  "params": {
-    "prompt": "Cat surfing a wave at sunset, cinematic 4K",
-    "aspect_ratio": "16:9" | "9:16" | "1:1",
-    "duration": "5" | "10",
-    "generate_audio": false,
-    "image": "https://your-cdn.com/start-frame.jpg"
-  }
-}
+#### \`POST /video/kling-3\` — The do-everything endpoint
+Supports 5 modes in the same body shape: T2V, I2V first-frame only,
+I2V first+last-frame interpolation, multi-shot (up to 6 sequential
+scenes), and identity-locked elements.
+
+Full \`params\` field reference:
 \`\`\`
-- \`tier=std\` (720p) → 0.018 €/s
-- \`tier=pro\` (1080p) → 0.063 €/s
-- With \`generate_audio: true\` → ~1.5× rate
-- Omit \`image\` for T2V; include URL or base64 data URI for I2V
+prompt              text ≤2500 chars (skip when using multi_prompt)
+negative_prompt     text ≤2500 chars (things you DON'T want)
+start_image_url     URL of first frame (I2V mode). Omit for T2V.
+end_image_url       URL of last frame — model interpolates between start and end
+multi_shot          boolean — set true to enable multi-shot mode
+shot_type           "customize" (you control each shot) | "intelligent" (AI cuts)
+multi_prompt        array of up to 6 { prompt, duration } objects
+elements            array of identity refs { frontal_image_url, reference_image_urls[] }
+aspect_ratio        "16:9" | "9:16" | "1:1"
+duration            string "3" through "15" (seconds)
+cfg_scale           0.0–1.0 (higher = stricter prompt adherence, default ~0.5)
+generate_audio      boolean (price ×1.5 when true)
+\`\`\`
+
+Body: \`{ tier: "std" | "pro", params: {...} }\`
+
+Pricing: std 0.018 €/s, pro 0.063 €/s. Multi-shot bills sum of all
+shot durations. Audio +50%.
+
+Examples:
+
+\`\`\`bash
+# T2V
+curl -X POST ${CANONICAL_HOST}/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{"tier":"pro","params":{"prompt":"Cat surfing","duration":"5","aspect_ratio":"16:9"}}'
+
+# I2V with first + last frame interpolation
+curl -X POST ${CANONICAL_HOST}/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier":"pro",
+    "params":{
+      "prompt":"Smooth zoom in",
+      "start_image_url":"https://cdn/wide.jpg",
+      "end_image_url":"https://cdn/closeup.jpg",
+      "duration":"8"
+    }
+  }'
+
+# Multi-shot (3 sequential scenes, each with own prompt + duration)
+curl -X POST ${CANONICAL_HOST}/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier":"pro",
+    "params":{
+      "multi_shot":true,
+      "shot_type":"customize",
+      "multi_prompt":[
+        {"prompt":"Wide shot of city at dawn","duration":"5"},
+        {"prompt":"Zoom into coffee shop","duration":"5"},
+        {"prompt":"Close-up of latte art","duration":"5"}
+      ]
+    }
+  }'
+
+# Elements (lock a character's identity across frames)
+curl -X POST ${CANONICAL_HOST}/api/v1/video/kling-3 \\
+  -H "Authorization: Bearer sk_..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "tier":"pro",
+    "params":{
+      "prompt":"@Element1 walking through Tokyo at night",
+      "elements":[{
+        "frontal_image_url":"https://cdn/char-front.jpg",
+        "reference_image_urls":["https://cdn/char-side.jpg","https://cdn/char-back.jpg"]
+      }],
+      "duration":"5"
+    }
+  }'
+\`\`\`
 
 #### \`POST /video/kling-3-4k-text\` — 4K text-to-video
-Body: \`{ params: { prompt, aspect_ratio, duration, generate_audio? } }\`
-Rate: 0.252 €/s.
+Body: \`{ params: { prompt, negative_prompt?, aspect_ratio?, duration, cfg_scale?, generate_audio? } }\`
+Duration: "3" to "15" (string). Rate: 0.252 €/s.
+No multi-shot / no start-end frame on 4K — use Kling 3 std/pro for those.
 
 #### \`POST /video/kling-3-4k-image\` — 4K image-to-video
-Body: \`{ params: { image, prompt?, duration, cfg_scale? } }\`
-Rate: 0.252 €/s. \`image\` is required (URL or base64).
+Body: \`{ params: { image, prompt?, duration, cfg_scale?, negative_prompt? } }\`
+\`image\` required (URL or base64 data URI). Rate: 0.252 €/s.
 
 #### \`POST /video/kling-motion/{tier}\` — Apply motion from a reference video to a character
 Path \`{tier}\`: \`v2-6-std\` | \`v2-6-pro\` | \`v3-std\` | \`v3-pro\`
