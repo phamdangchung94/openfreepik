@@ -160,8 +160,8 @@ print(f"{len(data['models'])} models available")`,
       "endpoint": "POST /v1/video/kling-3",
       "capabilities": ["text-to-video", "image-to-video"],
       "tiers": [
-        { "id": "std", "label": "Kling 3 720p", "eur_per_second": 0.018, "vnd_per_second": 18 },
-        { "id": "pro", "label": "Kling 3 1080p", "eur_per_second": 0.063, "vnd_per_second": 63 }
+        { "id": "std", "label": "Kling 3 Std", "eur_per_second": 0.168, "vnd_per_second": 168 },
+        { "id": "pro", "label": "Kling 3 Pro", "eur_per_second": 0.224, "vnd_per_second": 224 }
       ]
     }
     // ...
@@ -491,9 +491,11 @@ r = requests.post(
 
         <p className="text-xs text-muted-foreground">
           <strong className="text-foreground">Pricing</strong>:{" "}
-          <Code>std</Code> 0.018 €/giây ·{" "}
-          <Code>pro</Code> 0.063 €/giây. With audio ×1.5. Multi-shot tính theo
-          tổng duration các cảnh cộng lại.
+          <Code>std</Code> 0.168 €/giây (≈168đ) ·{" "}
+          <Code>pro</Code> 0.224 €/giây (≈224đ).{" "}
+          <Code>generate_audio: true</Code> ~1.83× base rate (std 0.308 / pro 0.392 €/giây).
+          Multi-shot tính theo tổng duration các cảnh cộng lại.
+          Vd 5s std no-audio = 0.84 € (~840đ).
         </p>
 
         <TryIt
@@ -609,8 +611,9 @@ r = requests.post(
         />
 
         <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground">Pricing</strong>: 0.252 €/giây
-          cho cả T2V và I2V. Vd 5s = 1.26 € (~1,260 đ).
+          <strong className="text-foreground">Pricing</strong>: 1.12 €/giây
+          cho cả T2V và I2V (audio không đổi giá). Vd 5s = 5.60 € (~5,600đ),
+          10s = 11.20 € (~11,200đ).
         </p>
 
         <TryIt
@@ -700,6 +703,14 @@ r = requests.post(
           <br />
           <Code>output_duration</Code>: 5/10/15/30 giây tuỳ orientation —
           giá tính theo giây delivered.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          <strong className="text-foreground">Pricing</strong> (€/giây, không có audio variant):{" "}
+          <Code>v2-6-std</Code> 0.138 (~138đ) ·{" "}
+          <Code>v2-6-pro</Code> 0.276 (~276đ) ·{" "}
+          <Code>v3-std</Code> 0.294 (~294đ) ·{" "}
+          <Code>v3-pro</Code> 0.394 (~394đ).
+          Vd 5s v3-pro = 1.97 € (~1,970đ), 30s v3-pro = 11.81 € (~11,800đ).
         </p>
         <TryIt
           method="POST"

@@ -136,8 +136,9 @@ generate_audio      boolean (price ×1.5 when true)
 
 Body: \`{ tier: "std" | "pro", params: {...} }\`
 
-Pricing: std 0.018 €/s, pro 0.063 €/s. Multi-shot bills sum of all
-shot durations. Audio +50%.
+Pricing: std 0.168 €/s (~168 VND/s), pro 0.224 €/s (~224 VND/s).
+With audio (1.83× multiplier): std 0.308 €/s, pro 0.392 €/s.
+Multi-shot bills the sum of all shot durations.
 
 Examples:
 
@@ -198,12 +199,12 @@ curl -X POST ${CANONICAL_HOST}/api/v1/video/kling-3 \\
 
 #### \`POST /video/kling-3-4k-text\` — 4K text-to-video
 Body: \`{ params: { prompt, negative_prompt?, aspect_ratio?, duration, cfg_scale?, generate_audio? } }\`
-Duration: "3" to "15" (string). Rate: 0.252 €/s.
-No multi-shot / no start-end frame on 4K — use Kling 3 std/pro for those.
+Duration: "3" to "15" (string). Rate: **1.12 €/s** (~1,120 VND/s).
+Audio doesn't change pricing. No multi-shot / no start-end frame on 4K — use Kling 3 std/pro for those.
 
 #### \`POST /video/kling-3-4k-image\` — 4K image-to-video
 Body: \`{ params: { image, prompt?, duration, cfg_scale?, negative_prompt? } }\`
-\`image\` required (URL or base64 data URI). Rate: 0.252 €/s.
+\`image\` required (URL or base64 data URI). Rate: **1.12 €/s** (~1,120 VND/s).
 
 #### \`POST /video/kling-motion/{tier}\` — Apply motion from a reference video to a character
 Path \`{tier}\`: \`v2-6-std\` | \`v2-6-pro\` | \`v3-std\` | \`v3-pro\`
@@ -222,7 +223,7 @@ Body:
 \`\`\`
 - \`character_orientation: "video"\` → output 5/10/15/20/25/30 seconds
 - \`character_orientation: "image"\` → output capped at 10 seconds
-- Rates: v2-6-std 0.059, v2-6-pro 0.118, v3-std 0.126, v3-pro 0.168 €/s
+- Rates (€/s, audio not supported): v2-6-std 0.138, v2-6-pro 0.276, v3-std 0.294, v3-pro 0.394
 
 ### Utilities
 
@@ -267,13 +268,19 @@ as a backup if delivery fails.
 
 | Model | Tier | EUR/sec | Example 5s | Example 10s |
 |---|---|---|---|---|
-| Kling 3 | std | 0.018 | 0.09 € | 0.18 € |
-| Kling 3 | pro | 0.063 | 0.315 € | 0.63 € |
-| Kling 3 4K | 4k | 0.252 | 1.26 € | 2.52 € |
-| Motion 2.6 | std | 0.059 | 0.295 € | 0.59 € |
-| Motion 2.6 | pro | 0.118 | 0.59 € | 1.18 € |
-| Motion 3.0 | std | 0.126 | 0.63 € | 1.26 € |
-| Motion 3.0 | pro | 0.168 | 0.84 € | 1.68 € |
+| Kling 3 | std | 0.168 | 0.84 € | 1.68 € |
+| Kling 3 | std + audio | 0.308 | 1.54 € | 3.08 € |
+| Kling 3 | pro | 0.224 | 1.12 € | 2.24 € |
+| Kling 3 | pro + audio | 0.392 | 1.96 € | 3.92 € |
+| Kling 3 4K | 4k (T2V/I2V) | 1.120 | 5.60 € | 11.20 € |
+| Motion 2.6 | std | 0.138 | 0.69 € | 1.39 € |
+| Motion 2.6 | pro | 0.276 | 1.38 € | 2.76 € |
+| Motion 3.0 | std | 0.294 | 1.47 € | 2.95 € |
+| Motion 3.0 | pro | 0.394 | 1.97 € | 3.94 € |
+| Omni std | (T2V/I2V/V2V) | 0.168 | 0.84 € | 1.68 € |
+| Omni std + audio | (T2V/I2V/V2V) | 0.308 | 1.54 € | 3.08 € |
+| Omni pro | (T2V/I2V/V2V) | 0.224 | 1.12 € | 2.24 € |
+| Omni pro + audio | (T2V/I2V/V2V) | 0.392 | 1.96 € | 3.92 € |
 | Prompt enhance | — | 0 (free) | — | — |
 
 VND conversion: roughly 1 EUR ≈ 1,000 VND.

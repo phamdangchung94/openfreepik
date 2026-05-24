@@ -28,21 +28,25 @@ export function GET() {
       // Static catalog — keep ordered by approximate quality/cost tier
       // (cheapest first within each family).
       models: [
+        // Rates synced from production pricing_rules table 2026-05-23
+        // (derived from 5s row: cost_eur ÷ 5). Kling 3 + Omni honor a
+        // ~1.83× audio multiplier; Kling 4K bills the same with or
+        // without audio; Motion has no audio variant at all.
         {
           id: "kling-3",
           family: "kling",
           endpoint: "POST /v1/video/kling-3",
           poll: "GET /v1/tasks/{task_id}",
-          capabilities: ["text-to-video", "image-to-video"],
+          capabilities: ["text-to-video", "image-to-video", "multi-shot", "start-end-frame", "elements"],
           aspect_ratios: ["16:9", "9:16", "1:1"],
-          durations_seconds: [5, 10],
+          durations_seconds: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
           supports_audio: true,
           tiers: [
-            { id: "std", label: "Kling 3 720p", eur_per_second: 0.018, vnd_per_second: 18 },
-            { id: "pro", label: "Kling 3 1080p", eur_per_second: 0.063, vnd_per_second: 63 },
+            { id: "std", label: "Kling 3 Std", eur_per_second: 0.168, vnd_per_second: 168, eur_per_second_audio: 0.308, vnd_per_second_audio: 308 },
+            { id: "pro", label: "Kling 3 Pro", eur_per_second: 0.224, vnd_per_second: 224, eur_per_second_audio: 0.392, vnd_per_second_audio: 392 },
           ],
           notes:
-            "Set `tier` in request body (std/pro). With audio = ~1.5× base rate.",
+            "Set `tier` in request body (std/pro). With audio ~1.83× base rate.",
         },
         {
           id: "kling-3-4k-text",
@@ -51,12 +55,12 @@ export function GET() {
           poll: "GET /v1/tasks/{task_id}",
           capabilities: ["text-to-video"],
           aspect_ratios: ["16:9", "9:16", "1:1"],
-          durations_seconds: [5, 10],
+          durations_seconds: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
           supports_audio: true,
           tiers: [
-            { id: "4k", label: "Kling 3 4K T2V", eur_per_second: 0.252, vnd_per_second: 252 },
+            { id: "4k", label: "Kling 3 4K T2V", eur_per_second: 1.120, vnd_per_second: 1120 },
           ],
-          notes: "4K resolution, T2V only.",
+          notes: "4K resolution, T2V only. Audio doesn't change pricing.",
         },
         {
           id: "kling-3-4k-image",
@@ -64,10 +68,10 @@ export function GET() {
           endpoint: "POST /v1/video/kling-3-4k-image",
           poll: "GET /v1/tasks/{task_id}",
           capabilities: ["image-to-video"],
-          durations_seconds: [5, 10],
+          durations_seconds: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
           supports_audio: false,
           tiers: [
-            { id: "4k", label: "Kling 3 4K I2V", eur_per_second: 0.252, vnd_per_second: 252 },
+            { id: "4k", label: "Kling 3 4K I2V", eur_per_second: 1.120, vnd_per_second: 1120 },
           ],
           notes: "4K I2V. Provide image URL or base64 in params.image.",
         },
@@ -77,17 +81,17 @@ export function GET() {
           endpoint: "POST /v1/video/kling-motion/{tier}",
           poll: "GET /v1/tasks/{task_id}",
           capabilities: ["character-driven-motion"],
-          durations_seconds: [5, 10, 15, 20, 25, 30],
+          durations_seconds: [5, 10, 15, 30],
           supports_audio: false,
           tiers: [
-            { id: "v2-6-std", label: "Motion 2.6 Std", eur_per_second: 0.059, vnd_per_second: 59 },
-            { id: "v2-6-pro", label: "Motion 2.6 Pro", eur_per_second: 0.118, vnd_per_second: 118 },
-            { id: "v3-std", label: "Motion 3.0 Std", eur_per_second: 0.126, vnd_per_second: 126 },
-            { id: "v3-pro", label: "Motion 3.0 Pro", eur_per_second: 0.168, vnd_per_second: 168 },
+            { id: "v2-6-std", label: "Motion 2.6 Std", eur_per_second: 0.138, vnd_per_second: 138 },
+            { id: "v2-6-pro", label: "Motion 2.6 Pro", eur_per_second: 0.276, vnd_per_second: 276 },
+            { id: "v3-std", label: "Motion 3.0 Std", eur_per_second: 0.294, vnd_per_second: 294 },
+            { id: "v3-pro", label: "Motion 3.0 Pro", eur_per_second: 0.394, vnd_per_second: 394 },
           ],
           notes:
             "Requires image_url (character) + video_url (motion reference). " +
-            "character_orientation=video supports 5-30s output, =image caps at 10s.",
+            "character_orientation=video supports 5/10/15/30s output, =image caps at 10s.",
         },
         {
           id: "kling-omni",
@@ -106,14 +110,14 @@ export function GET() {
           durations_seconds: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
           supports_audio: true,
           tiers: [
-            { id: "omni-std", label: "Omni Std (T2V/I2V)", eur_per_second: 0.05, vnd_per_second: 50 },
-            { id: "omni-pro", label: "Omni Pro (T2V/I2V)", eur_per_second: 0.1, vnd_per_second: 100 },
-            { id: "omni-ref-std", label: "Omni Std (V2V)", eur_per_second: 0.05, vnd_per_second: 50 },
-            { id: "omni-ref-pro", label: "Omni Pro (V2V)", eur_per_second: 0.1, vnd_per_second: 100 },
+            { id: "omni-std", label: "Omni Std (T2V/I2V)", eur_per_second: 0.168, vnd_per_second: 168, eur_per_second_audio: 0.308, vnd_per_second_audio: 308 },
+            { id: "omni-pro", label: "Omni Pro (T2V/I2V)", eur_per_second: 0.224, vnd_per_second: 224, eur_per_second_audio: 0.392, vnd_per_second_audio: 392 },
+            { id: "omni-ref-std", label: "Omni Std (V2V)", eur_per_second: 0.168, vnd_per_second: 168, eur_per_second_audio: 0.308, vnd_per_second_audio: 308 },
+            { id: "omni-ref-pro", label: "Omni Pro (V2V)", eur_per_second: 0.224, vnd_per_second: 224, eur_per_second_audio: 0.392, vnd_per_second_audio: 392 },
           ],
           notes:
             "Supports multi_prompt[] for sequential shots. With generate_audio=true, rate ≈ 1.83× base. " +
-            "V2V tiers (omni-ref-*) require video_url. Currently web UI hides these tiers but API remains open.",
+            "V2V tiers (omni-ref-*) require video_url.",
         },
         {
           id: "improve-prompt",
@@ -131,7 +135,7 @@ export function GET() {
       meta: {
         currency_note:
           "Prices in EUR (internal accounting) + VND (~1 EUR = 1000 VND). " +
-          "Total cost = ceil(duration_seconds) × rate, with ~1.83× multiplier when audio enabled (Omni) or ~1.5× (Kling 3).",
+          "Total cost = ceil(duration_seconds) × rate. Use `eur_per_second_audio` when generate_audio=true on Kling 3 / Omni (Kling 4K & Motion don't change with audio).",
         billing_note:
           "Charge applied at POST time, refunded automatically on FAILED / TIMEOUT / orphan (15min sweeper).",
       },
