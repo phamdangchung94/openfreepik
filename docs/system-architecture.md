@@ -329,10 +329,14 @@ usage_logs           one row per request (status, cost, video URLs, TTL,
                        error_message (migration 0009) + prompt (0011)
                        captured for repeat-failure analysis;
                        key_id index added (migration 0013) for per-key
-                       drilldown + orphan sweeper
+                       drilldown + orphan sweeper;
+                       upstream_cost_eur snapshot (migration 0021) for
+                       per-request margin reporting
 pricing_rules        lookup matrix (endpoint, tier, duration, audio)
                        — tier enum: 'pro' | 'std' | '4k' (Kling 3's 4K tier
-                       lives on the kling-4k-* endpoints, indexed by tier='4k')
+                       lives on the kling-4k-* endpoints, indexed by tier='4k');
+                       upstream_cost_eur column (migration 0021) for
+                       2-layer pricing — see "Pricing" section
 admin_sessions       SHA-256 cookie tokens (24h TTL)
 rate_limit_buckets   fixed-window counters (cleaned by cron)
 failed_logins        per-IP admin login throttle
@@ -343,15 +347,33 @@ announcements        broadcast messages shown to all customers as a
 ```
 
 Migrations live in [`drizzle/migrations/`](../drizzle/migrations) —
-files 0000-0014 currently. `scripts/db-migrate.ts` walks them
+files 0000-0021 currently. `scripts/db-migrate.ts` walks them
 alphabetically against a `__drizzle_migrations` tracking table; the
 journal in `meta/_journal.json` was used by older `drizzle-kit`
 versions but isn't consulted at apply time today.
 
 ## Pricing
 
-Per-second EUR rates seeded via `scripts/seed-pricing.ts`. Editable in
-the admin dashboard.
+**2-layer model (migration 0021, 2026-05-24).** Each pricing rule
+carries two prices:
+
+- `cost_eur` — **customer retail** (internal credit unit, 1 EUR ≈ 1000
+  VND fiction; deducted from activation code balance)
+- `upstream_cost_eur` — **real Magnific cost** (4-decimal precision;
+  margin reporting only, never charged to anyone)
+
+Both columns also snapshot into `usage_logs` at POST time via the
+orchestrator → `calculateCost*()` returns `{ customerPriceEur,
+upstreamCostEur }` → 12 route handlers pass through. Refund logic stays
+on `cost_eur` alone (only number that touched the customer's balance).
+
+Margin = `(customer - upstream) / upstream × 100`. Admin tunes either
+column independently at `/dashboard/pricing` (2-column edit, color-coded
+margin %). Backfill state after migration 0021: `upstream == customer`
+(0% margin); admin sets real upstream values progressively.
+
+Per-second EUR rates (customer-facing) seeded via
+`scripts/seed-pricing.ts`. Editable in the admin dashboard.
 
 | Endpoint        | Rate                                                   |
 |-----------------|--------------------------------------------------------|

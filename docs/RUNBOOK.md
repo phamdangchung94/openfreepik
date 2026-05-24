@@ -621,6 +621,63 @@ Check current usage:
 
 ---
 
+## 2-layer pricing model (migration 0021, 2026-05-24)
+
+Trước đây cột `pricing_rules.cost_eur` overload 2 nghĩa:
+- Giá thực Magnific charge per request (EUR thật)
+- Giá customer phải trả (internal credit unit, 1 EUR ≈ 1000 VND)
+
+Hệ quả: admin không nhìn ra margin per-request → không biết model nào lãi.
+
+### Schema
+
+| Table | Column | Purpose |
+|---|---|---|
+| `pricing_rules` | `cost_eur` | Customer retail (internal credit, vẫn 2dp) |
+| `pricing_rules` | `upstream_cost_eur` | Giá thật Magnific (numeric 10,4) |
+| `usage_logs` | `cost_eur` | Snapshot tại POST time (customer charge) |
+| `usage_logs` | `upstream_cost_eur` | Snapshot tại POST time (real EUR upstream) |
+
+Refund logic dựa CỐ ĐỊNH trên `cost_eur` (số đã trừ activation code balance).
+`upstream_cost_eur` chỉ phục vụ margin reporting, KHÔNG ảnh hưởng customer.
+
+### Cách tune giá
+
+Vào `/dashboard/pricing` → mỗi row có 2 input + cột Margin %:
+- **Upstream EUR**: cập nhật khi Magnific publish rate mới
+- **Customer EUR**: chỉnh để đạt margin mong muốn (xanh ≥30%, vàng 0-30%, đỏ <0)
+- Margin tính tự động: `(customer - upstream) / upstream × 100`
+
+Sau khi save: pricing áp dụng cho request KẾ TIẾP — không retroactive.
+`usage_logs` rows cũ giữ snapshot tại thời điểm POST.
+
+### Quick margin report (Neon SQL)
+
+```sql
+-- P&L 30 ngày gần nhất, group theo endpoint
+SELECT
+  endpoint,
+  COUNT(*) AS requests,
+  SUM(cost_eur)::numeric(10,2)            AS customer_revenue_eur,
+  SUM(upstream_cost_eur)::numeric(10,4)   AS upstream_cost_eur,
+  (SUM(cost_eur) - SUM(upstream_cost_eur))::numeric(10,4) AS gross_margin_eur,
+  ROUND(
+    100.0 * (SUM(cost_eur) - SUM(upstream_cost_eur))
+    / NULLIF(SUM(upstream_cost_eur), 0),
+    1
+  ) AS margin_pct
+FROM usage_logs
+WHERE created_at > now() - interval '30 days'
+  AND status = 'succeeded'
+  AND upstream_cost_eur IS NOT NULL
+GROUP BY endpoint
+ORDER BY gross_margin_eur DESC;
+```
+
+Rows với `upstream_cost_eur IS NULL` = legacy data trước migration 0021 (không biết upstream là bao nhiêu) — exclude khỏi báo cáo lợi nhuận.
+
+---
+
 ## Common scenarios
 
 ### "Customer says they were charged but no video"
