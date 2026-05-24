@@ -6,9 +6,23 @@ import { pricingRules } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
 
-const patchSchema = z.object({
-  costEur: z.number().min(0),
-});
+/**
+ * 2-layer pricing PATCH (migration 0021). Admin can edit either column
+ * independently — `costEur` is what the customer pays (deducted from
+ * activation code balance), `upstreamCostEur` is what Magnific charges
+ * us per request. Both optional so the existing single-column UI
+ * (EUR input only) keeps working until the admin page upgrade ships.
+ * At least one must be supplied; refine() guards against an empty body.
+ */
+const patchSchema = z
+  .object({
+    costEur: z.number().min(0).optional(),
+    upstreamCostEur: z.number().min(0).optional(),
+  })
+  .refine(
+    (v) => v.costEur !== undefined || v.upstreamCostEur !== undefined,
+    { message: "At least one of costEur or upstreamCostEur is required." },
+  );
 
 /** PATCH /api/admin/pricing/[id] — update a single pricing rule's cost. */
 export async function PATCH(
@@ -28,12 +42,21 @@ export async function PATCH(
     );
   }
 
+  // Build the update patch — include only fields admin actually sent.
+  // 4-decimal precision for upstream matches the numeric(10,4) column;
+  // customer-facing cost stays 2-decimal (kept stable for legacy
+  // consumers like /v1/models that parseFloat to 2dp anyway).
+  const updateSet: Record<string, unknown> = { updatedAt: sql`now()` };
+  if (parsed.data.costEur !== undefined) {
+    updateSet.costEur = parsed.data.costEur.toFixed(2);
+  }
+  if (parsed.data.upstreamCostEur !== undefined) {
+    updateSet.upstreamCostEur = parsed.data.upstreamCostEur.toFixed(4);
+  }
+
   const [updated] = await db
     .update(pricingRules)
-    .set({
-      costEur: parsed.data.costEur.toFixed(2),
-      updatedAt: sql`now()`,
-    })
+    .set(updateSet)
     .where(eq(pricingRules.id, id))
     .returning();
 
