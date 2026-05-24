@@ -10,9 +10,14 @@ import { cn } from "@/lib/utils";
 import { TryIt } from "./try-it";
 import { SidebarNav, MobileSectionMenu, type NavItem } from "./sidebar-nav";
 import { CopyForAiButton } from "./copy-for-ai-button";
+import { ParameterMatrix } from "./parameter-matrix";
+import { PricingTable } from "./pricing-table";
 
 const NAV_ITEMS: readonly NavItem[] = [
   { anchor: "auth", label: "Kiểm tra key", method: "GET", group: "Bắt đầu" },
+  { anchor: "security", label: "Bảo mật & best-practices", group: "Bắt đầu" },
+  { anchor: "lifecycle", label: "Task lifecycle & polling", group: "Bắt đầu" },
+  { anchor: "retention", label: "Lưu trữ dữ liệu", group: "Bắt đầu" },
   { anchor: "models", label: "Danh sách model", method: "GET", group: "Khám phá" },
   { anchor: "usage", label: "Lịch sử dùng", method: "GET", group: "Khám phá" },
   { anchor: "upload", label: "Tải file", method: "POST", group: "Khám phá" },
@@ -84,6 +89,186 @@ export default function ApiDocsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <ParameterMatrix />
+
+      <PricingTable />
+
+      <Section
+        anchor="security"
+        title="Bảo mật & best-practices"
+        method="GET"
+        path="Headers / tokens / rate limits — đọc trước khi tích hợp prod"
+      >
+        <div className="space-y-3 text-sm">
+          <div>
+            <h4 className="mb-1 font-semibold text-foreground">
+              ⚠️ KHÔNG embed token trong frontend public
+            </h4>
+            <p className="text-muted-foreground">
+              <Code>sk_*</Code> là bearer có FULL ACCESS đến account. Ai có
+              key đều gọi được API và bị trừ tiền của bạn. Dùng backend
+              proxy hoặc env var server-side. Frontend chỉ nên gọi endpoint
+              proxy bên bạn tự host.
+            </p>
+            <pre className="mt-2 rounded-md bg-destructive/5 border border-destructive/20 p-2 text-[11px]">
+{`// ❌ DON'T do this in production frontend
+const res = await fetch("https://video.chugax.io.vn/api/v1/video/kling-3", {
+  headers: { Authorization: "Bearer sk_LIVE_KEY_HERE" }, // exposed to anyone
+});
+
+// ✅ DO route through your backend
+const res = await fetch("/my-api/generate-video", { method: "POST", ... });
+// → your server proxies + adds sk_ from env var`}
+            </pre>
+          </div>
+
+          <div>
+            <h4 className="mb-1 font-semibold text-foreground">
+              Token capabilities (hiện tại)
+            </h4>
+            <ul className="ml-5 list-disc text-muted-foreground">
+              <li>Per-key rate limit override (mặc định 30/phút)</li>
+              <li>Optional expiration date</li>
+              <li>Revoke ngay qua admin (mất key → liên hệ Zalo + mint mới)</li>
+            </ul>
+            <p className="mt-1 text-muted-foreground">
+              <strong className="text-foreground">Chưa hỗ trợ</strong>:
+              giới hạn theo model, IP allowlist, domain referer allowlist,
+              scope read-only. Nếu cần các tính năng này (dự án enterprise),
+              liên hệ trước.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="mb-1 font-semibold text-foreground">
+              Rate limit + Idempotency
+            </h4>
+            <p className="text-muted-foreground">
+              30 req/phút/key mặc định. Vượt → 429 với header{" "}
+              <Code>Retry-After</Code>. Production code phải honor header
+              này (xem section 8 Headers nâng cao).
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              POST endpoints accept optional <Code>Idempotency-Key</Code> header
+              (UUID) — retry cùng key + cùng body trả response cũ, tránh
+              double-charge khi network flake.
+            </p>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        anchor="lifecycle"
+        title="Task lifecycle & polling"
+        method="GET"
+        path="Cách track task từ POST → COMPLETED → download"
+      >
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            Mọi POST <Code>/v1/video/*</Code> trả về <Code>task_id</Code>{" "}
+            trong &lt;2s. Sau đó poll <Code>GET /v1/tasks/{"{task_id}"}</Code>{" "}
+            cho đến khi status terminal.
+          </p>
+
+          <div className="rounded-md border bg-muted/30 p-3 text-xs">
+            <p className="mb-2 font-medium text-foreground">Status enum:</p>
+            <ul className="ml-5 list-disc text-muted-foreground">
+              <li><Code>CREATED</Code> — vừa POST, chưa bắt đầu render</li>
+              <li><Code>IN_PROGRESS</Code> — đang render</li>
+              <li><Code>COMPLETED</Code> — xong, <Code>generated[0]</Code> chứa URL video (hoặc text với /prompt/improve)</li>
+              <li><Code>FAILED</Code> — thất bại, <Code>error_message</Code> có lý do, balance được refund tự động</li>
+            </ul>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 text-xs">
+            <p className="mb-2 font-medium text-foreground">Khuyến nghị polling:</p>
+            <ul className="ml-5 list-disc text-muted-foreground">
+              <li>Interval: <strong className="text-foreground">8 giây</strong> (không cần nhanh hơn vì generation 30-300s)</li>
+              <li>Max polling time: <strong className="text-foreground">15 phút</strong> (cushion cho upstream queue)</li>
+              <li>Sau 15 phút → coi như TIMEOUT, server cron tự refund</li>
+              <li>Optional backoff: 8s → 12s → 16s, cap 20s</li>
+              <li><strong className="text-foreground">Tốt hơn polling</strong>: dùng <Code>webhook_url</Code> nhận completion tức thì, 0 polling cost</li>
+            </ul>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 text-xs">
+            <p className="mb-2 font-medium text-foreground">Generation time điển hình:</p>
+            <ul className="ml-5 list-disc text-muted-foreground">
+              <li>Kling 3 std: 30-60s</li>
+              <li>Kling 3 pro: 60-120s</li>
+              <li>Kling 3 4K: 90-180s</li>
+              <li>Motion: 180-300s</li>
+              <li>Prompt enhance: 5-10s</li>
+            </ul>
+          </div>
+
+          <div className="rounded-md border bg-muted/30 p-3 text-xs">
+            <p className="mb-2 font-medium text-foreground">
+              <Code>generated[0]</Code> semantics (quan trọng):
+            </p>
+            <ul className="ml-5 list-disc text-muted-foreground">
+              <li><Code>/v1/video/*</Code> endpoints → <Code>generated[0]</Code> = <strong className="text-foreground">URL video MP4</strong> (hết hạn sau 24h)</li>
+              <li><Code>/v1/prompt/improve</Code> → <Code>generated[0]</Code> = <strong className="text-foreground">text prompt mở rộng</strong> (string, không phải URL)</li>
+              <li>Discriminate bằng endpoint bạn đã gọi — không có field type trong response</li>
+            </ul>
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        anchor="retention"
+        title="Lưu trữ dữ liệu & quyền riêng tư"
+        method="GET"
+        path="TTL của từng loại data — quan trọng cho compliance"
+      >
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            Em không train model trên dữ liệu của bạn. Mỗi loại data có TTL riêng:
+          </p>
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-left">
+                <tr>
+                  <th className="px-3 py-2">Loại data</th>
+                  <th className="px-3 py-2">TTL</th>
+                  <th className="px-3 py-2">Cách xoá</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                <tr>
+                  <td className="px-3 py-2">File upload qua <Code>/v1/upload</Code></td>
+                  <td className="px-3 py-2">120 phút</td>
+                  <td className="px-3 py-2">Cron sweep mỗi 15min, file biến mất trong 2-3 giờ</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2">Video output (URL trong <Code>generated[0]</Code>)</td>
+                  <td className="px-3 py-2">24 giờ</td>
+                  <td className="px-3 py-2">Cloudflare R2 lifecycle auto-delete. Download trước 24h nếu cần lâu dài</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2">Prompt text (<Code>params.prompt</Code>)</td>
+                  <td className="px-3 py-2">Vô thời hạn</td>
+                  <td className="px-3 py-2">Persist trong DB cho admin debug. Liên hệ Zalo nếu cần xoá cụ thể</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2">Webhook delivery logs</td>
+                  <td className="px-3 py-2">30 ngày</td>
+                  <td className="px-3 py-2">Auto-purge daily cron</td>
+                </tr>
+                <tr>
+                  <td className="px-3 py-2">Vùng lưu trữ</td>
+                  <td className="px-3 py-2" colSpan={2}>Cloudflare R2 (auto eu/asia), Neon PostgreSQL (US East). KHÔNG cross-region</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            ⚠️ <strong className="text-foreground">No antivirus/NSFW scanning</strong> trên file upload — bạn chịu trách nhiệm về source content.{" "}
+            <strong className="text-foreground">Public URL</strong> sau upload là public-read trong window 120 min — tránh upload data nhạy cảm.
+          </p>
+        </div>
+      </Section>
 
       <Section
         anchor="auth"
@@ -800,34 +985,56 @@ r = requests.post(
           samples={{
             curl: `curl https://video.chugax.io.vn/api/v1/tasks/abc123 \\
   -H "Authorization: Bearer sk_your_key_here"`,
-            javascript: `async function waitForTask(taskId, apiKey) {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const r = await fetch(\`https://video.chugax.io.vn/api/v1/tasks/\${taskId}\`, {
-      headers: { Authorization: \`Bearer \${apiKey}\` },
-    });
-    const data = await r.json();
-    if (data.status === "COMPLETED") return data.generated[0];
-    if (data.status === "FAILED") throw new Error(data.error_message ?? "FAILED");
-    await new Promise((r) => setTimeout(r, 2000));
+            javascript: `// Poll every 8s for up to 15 minutes
+async function waitForTask(taskId, apiKey, { maxMs = 900_000, intervalMs = 8000 } = {}) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10_000); // 10s per-poll timeout
+    try {
+      const r = await fetch(
+        \`https://video.chugax.io.vn/api/v1/tasks/\${taskId}\`,
+        { headers: { Authorization: \`Bearer \${apiKey}\` }, signal: ac.signal },
+      );
+      if (r.status === 429) {
+        // Respect Retry-After header on rate limit
+        const wait = Number(r.headers.get("Retry-After") ?? 5) * 1000;
+        await new Promise((res) => setTimeout(res, wait));
+        continue;
+      }
+      const data = await r.json();
+      if (data.status === "COMPLETED") return data.generated[0];
+      if (data.status === "FAILED") throw new Error(data.error_message ?? "FAILED");
+    } finally {
+      clearTimeout(timer);
+    }
+    await new Promise((res) => setTimeout(res, intervalMs));
   }
-  throw new Error("timeout");
+  throw new Error(\`Task \${taskId} timed out after 15 minutes\`);
 }`,
-            python: `import time
+            python: `import time, requests
 
-def wait_for_task(task_id: str, api_key: str) -> str:
+def wait_for_task(task_id: str, api_key: str, max_seconds: int = 900, interval: int = 8) -> str:
+    """Poll every 8s for up to 15 minutes. Respects Retry-After on 429."""
     headers = {"Authorization": f"Bearer {api_key}"}
-    for _ in range(60):
+    deadline = time.time() + max_seconds
+    while time.time() < deadline:
         r = requests.get(
             f"https://video.chugax.io.vn/api/v1/tasks/{task_id}",
             headers=headers,
+            timeout=10,
         )
+        if r.status_code == 429:
+            wait = int(r.headers.get("Retry-After", "5"))
+            time.sleep(wait)
+            continue
         data = r.json()
         if data["status"] == "COMPLETED":
             return data["generated"][0]
         if data["status"] == "FAILED":
             raise RuntimeError(data.get("error_message") or "FAILED")
-        time.sleep(2)
-    raise TimeoutError("task did not finish in 2 minutes")`,
+        time.sleep(interval)
+    raise TimeoutError(f"Task {task_id} did not finish within 15 minutes")`,
           }}
         />
         <ResponseBlock
@@ -971,7 +1178,7 @@ res = requests.post(
               <ErrorRow code="AUTH" status="401" desc="API key thiếu hoặc không hợp lệ" />
               <ErrorRow code="BAD_REQUEST" status="400" desc="Body không hợp lệ (xem trường issues)" />
               <ErrorRow code="RATE_LIMIT" status="429" desc="Vượt rate limit — đọc header retry-after" />
-              <ErrorRow code="INSUFFICIENT_FUNDS" status="402" desc="Số dư không đủ cho request này" />
+              <ErrorRow code="INSUFFICIENT_BALANCE" status="402" desc="Số dư không đủ cho request này" />
               <ErrorRow code="PRICING_MISSING" status="503" desc="Hệ thống chưa cấu hình giá cho kiểu request" />
               <ErrorRow code="NO_KEYS_AVAILABLE" status="503" desc="Tạm hết slot — thử lại sau 1-2 phút" />
               <ErrorRow code="NOT_FOUND" status="404" desc="task_id không tồn tại" />

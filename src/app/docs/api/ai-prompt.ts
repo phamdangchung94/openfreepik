@@ -325,17 +325,26 @@ def generate_video(prompt: str, tier: str = "std", duration: int = 5) -> str:
     task_id = resp.json()["task_id"]
     print(f"Task started: {task_id}")
 
-    # Poll every 2 seconds. Cap at 5 minutes total — Kling typically
-    # finishes in 30-90 seconds; 5 min covers Magnific upstream queueing.
-    deadline = time.time() + 300
+    # Poll every 8 seconds, cap at 15 minutes total.
+    # 30-300s typical generation; 15 min cushions upstream queueing + slow renders.
+    # No need to poll faster than 8s — generation doesn't finish in 2s anyway.
+    deadline = time.time() + 900
     while time.time() < deadline:
-        time.sleep(2)
-        s = requests.get(f"{BASE}/tasks/{task_id}", headers=HEADERS).json()
+        time.sleep(8)
+        try:
+            poll = requests.get(f"{BASE}/tasks/{task_id}", headers=HEADERS, timeout=10)
+        except requests.Timeout:
+            continue  # transient network — retry next interval
+        if poll.status_code == 429:
+            wait = int(poll.headers.get("Retry-After", "8"))
+            time.sleep(wait)
+            continue
+        s = poll.json()
         if s["status"] == "COMPLETED":
             return s["generated"][0]
         if s["status"] == "FAILED":
             raise RuntimeError(s.get("error_message") or "Task failed")
-    raise TimeoutError(f"Task {task_id} did not finish within 5 min")
+    raise TimeoutError(f"Task {task_id} did not finish within 15 min")
 
 
 if __name__ == "__main__":
@@ -378,18 +387,71 @@ async function generateVideo(prompt, { tier = "std", duration = 5 } = {}) {
 
   const { task_id } = await res.json();
 
-  const deadline = Date.now() + 300_000;
+  // Poll every 8s, cap at 15 minutes. Per-poll 10s timeout via AbortController.
+  const deadline = Date.now() + 900_000;
   while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const status = await fetch(\`\${BASE}/tasks/\${task_id}\`, {
-      headers: { Authorization: \`Bearer \${API_KEY}\` },
-    }).then((r) => r.json());
-    if (status.status === "COMPLETED") return status.generated[0];
-    if (status.status === "FAILED") throw new Error(status.error_message ?? "FAILED");
+    await new Promise((r) => setTimeout(r, 8000));
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 10_000);
+    try {
+      const poll = await fetch(\`\${BASE}/tasks/\${task_id}\`, {
+        headers: { Authorization: \`Bearer \${API_KEY}\` },
+        signal: ac.signal,
+      });
+      if (poll.status === 429) {
+        const wait = Number(poll.headers.get("Retry-After") ?? 8);
+        await new Promise((r) => setTimeout(r, wait * 1000));
+        continue;
+      }
+      const status = await poll.json();
+      if (status.status === "COMPLETED") return status.generated[0];
+      if (status.status === "FAILED") throw new Error(status.error_message ?? "FAILED");
+    } catch (err) {
+      if (err.name === "AbortError") continue; // transient timeout, retry
+      throw err;
+    } finally {
+      clearTimeout(t);
+    }
   }
-  throw new Error(\`Task \${task_id} timed out\`);
+  throw new Error(\`Task \${task_id} timed out after 15 min\`);
 }
 \`\`\`
+
+## Security expectations
+
+- **NEVER embed sk_* in browser frontend**. The token grants full
+  account access. Anyone who reads the JS bundle can drain the balance.
+  Always proxy through your backend with the token in an env var.
+- **Tokens are not scoped**: no per-model / IP / domain allowlist yet.
+  Leaked token → revoke via admin (contact channel) + mint replacement.
+- **Idempotency-Key is your friend**: send UUID v4 on every POST to
+  avoid double-charge on retry.
+- **request_id** is in every response (header \`X-Request-Id\` + error
+  body field). Quote it in support tickets.
+
+## Data retention
+
+- Files uploaded via \`/v1/upload\`: deleted after 120 minutes (cron
+  every 15 min — file gone within 2-3 hours)
+- Generated video URLs: live 24 hours then 404. Mirror to your own
+  storage if you need long-term.
+- Prompts (\`params.prompt\`): persisted indefinitely for admin debug.
+  Contact support to delete specific records.
+- **No antivirus / NSFW scanning** on uploads. You are responsible for
+  source content.
+- Public R2 URLs are **public-read for the 120-min upload TTL** — don't
+  upload sensitive data.
+
+## generated[0] semantics
+
+This field is type-overloaded per endpoint:
+- \`/v1/video/*\` endpoints → \`generated[0]\` is an MP4 **video URL**
+  (expires 24h after creation, signed by CDN)
+- \`/v1/prompt/improve\` → \`generated[0]\` is an enhanced prompt
+  **string** (not a URL — pass it back as \`params.prompt\` to a video
+  endpoint)
+- Always discriminate by which endpoint you called; the response
+  doesn't include a type field
 
 ## Implementation patterns to keep in mind
 
@@ -407,6 +469,10 @@ async function generateVideo(prompt, { tier = "std", duration = 5 } = {}) {
    shows the balance shared across all API tokens linked to the same
    activation code. Customers can issue multiple tokens (e.g. mobile +
    server) that share the same wallet.
+7. **Prefer webhook over polling**: pass top-level \`webhook_url\` in your
+   POST body and your server gets a push notification when the task
+   finishes — 0 polling cost. Polling is fallback for when webhook
+   delivery fails.
 
 ## When the developer asks you to build something
 
