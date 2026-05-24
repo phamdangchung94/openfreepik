@@ -64,6 +64,15 @@ export interface LogUsageOpts {
   withAudio?: boolean;
   costEur: number;
   /**
+   * Real upstream provider cost for THIS request (migration 0021,
+   * 2-layer pricing). Snapshotted from pricing_rules.upstream_cost_eur
+   * at POST time so admin can compute true per-request margin even after
+   * future price edits. NULL = unknown (legacy rows, or callers that
+   * haven't migrated yet). Never used for charging — `costEur` remains
+   * the only number the customer is billed.
+   */
+  upstreamCostEur?: number | null;
+  /**
    * Customer prompt verbatim — persisted into usage_logs.prompt for
    * admin debug. Null/undefined for endpoints without a customer
    * prompt (improve-prompt has its own prompt but we still log it).
@@ -159,6 +168,13 @@ export async function logUsage(
       durationSeconds: opts.durationSeconds ?? null,
       withAudio: opts.withAudio ?? false,
       costEur: opts.costEur.toFixed(2),
+      // Persist 4-decimal precision matching the numeric(10,4) column —
+      // .toFixed(2) here would silently round real upstream rates like
+      // 0.0294 EUR/s × 5s = 0.147 to 0.15 and skew margin math.
+      upstreamCostEur:
+        opts.upstreamCostEur != null
+          ? opts.upstreamCostEur.toFixed(4)
+          : null,
       freepikTaskId,
       status,
       prompt: opts.prompt ?? null,

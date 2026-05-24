@@ -10,6 +10,7 @@ import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
 import {
   PricingNotFoundError,
   calculateMotionCost,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -117,9 +118,9 @@ export async function POST(
   // Pricing — per-second billing with ceiling rounding (2026-05-20).
   // calculateMotionCost reads any one row for the endpoint, derives
   // per-second rate, and multiplies by ceil(durationSeconds).
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateMotionCost(slug, durationSeconds);
+    pricing = await calculateMotionCost(slug, durationSeconds);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", {
@@ -147,7 +148,8 @@ export async function POST(
     bearerCode: bearer,
     preValidated: validation,
     endpoint: slug,
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     // tier slot left null for motion — version+tier already baked into
     // `endpoint`. Surfacing them again as `tier` would conflict with
     // the kling-v3 'pro'/'std' semantic on the usage_logs row.

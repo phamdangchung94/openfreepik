@@ -6,6 +6,7 @@ import {
   PricingNotFoundError,
   calculateCost,
   lookupForWanV27,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -77,9 +78,9 @@ export async function POST(request: Request) {
     duration: params.duration,
     resolution: params.resolution,
   });
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateCost(lookup);
+    pricing = await calculateCost(lookup);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", { lookup, ...errFields(err) });
@@ -104,7 +105,8 @@ export async function POST(request: Request) {
     bearerCode: bearer,
     preValidated: validation,
     endpoint: "wan-v27",
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     // Tier slot doubles as resolution carrier for downstream logging.
     tier: params.resolution === "720P" ? "std" : "pro",
     durationSeconds: params.duration ?? 5,

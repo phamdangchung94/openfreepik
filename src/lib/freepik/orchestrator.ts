@@ -68,6 +68,17 @@ export interface OrchestrateOptions<T> {
     | "kling-omni-pro-reference"
     | "improve-prompt";
   costEur: number;
+  /**
+   * Real upstream provider cost in EUR for THIS request — snapshotted
+   * at POST time from pricing_rules.upstream_cost_eur. Used purely for
+   * margin accounting (persisted into usage_logs.upstream_cost_eur);
+   * never affects the customer charge (`costEur` is the only number the
+   * activation code balance is decremented by). Optional for back-compat
+   * with callers that haven't migrated yet — if omitted, the row's
+   * upstream_cost_eur stays NULL and margin reports treat it as
+   * "unknown" rather than "zero".
+   */
+  upstreamCostEur?: number | null;
   /** Persisted to usage_logs for filtering — e.g. "pro"/"std" */
   tier?: "pro" | "std" | "4k" | null;
   durationSeconds?: number | null;

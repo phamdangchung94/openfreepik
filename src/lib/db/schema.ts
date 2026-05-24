@@ -196,9 +196,23 @@ export const usageLogs = pgTable(
     tier: text("tier", { enum: ["pro", "std", "4k"] }),
     durationSeconds: smallint("duration_seconds"),
     withAudio: boolean("with_audio").notNull().default(false),
+    /**
+     * What the customer was charged for this task. Snapshot of the
+     * matching `pricing_rules.cost_eur` at POST time. Refunded back if
+     * the task fails. Internal credit EUR units (1 EUR ≈ 1,000 VND in
+     * the customer-facing display).
+     */
     costEur: numeric("cost_eur", { precision: 10, scale: 2 })
       .notNull()
       .default("0.00"),
+    /**
+     * What the upstream provider charged us for the same task — for
+     * margin tracking (admin /dashboard/profit). Migration 0021.
+     * Snapshot of `pricing_rules.upstream_cost_eur` at POST time. NULL
+     * for legacy rows pre-2026-05-24 (we never captured this back
+     * then) and for free endpoints (improve-prompt).
+     */
+    upstreamCostEur: numeric("upstream_cost_eur", { precision: 10, scale: 4 }),
     freepikTaskId: text("freepik_task_id"),
     /**
      * Customer-facing URL — preferred to be the R2 mirror (cheaper egress,
@@ -282,7 +296,20 @@ export const pricingRules = pgTable(
     tier: text("tier", { enum: ["pro", "std", "4k"] }),
     durationSeconds: smallint("duration_seconds"),
     withAudio: boolean("with_audio").notNull().default(false),
+    /**
+     * Customer retail price (per request, after audio multiplier).
+     * Snapshotted to `usage_logs.cost_eur` at POST + charged from
+     * `activation_codes.quota_eur`. Internal credit EUR — 1 EUR ≈
+     * 1,000 VND in display layer. Admin edits via /dashboard/pricing.
+     */
     costEur: numeric("cost_eur", { precision: 10, scale: 2 }).notNull(),
+    /**
+     * Actual upstream cost from the AI provider for the same request.
+     * Migration 0021. NULL initially for rows seeded before that;
+     * admin tunes per-row in /dashboard/pricing. Margin % computed
+     * client-side as `(cost_eur - upstream_cost_eur) / upstream_cost_eur`.
+     */
+    upstreamCostEur: numeric("upstream_cost_eur", { precision: 10, scale: 4 }),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

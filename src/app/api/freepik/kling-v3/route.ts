@@ -6,6 +6,7 @@ import {
   PricingNotFoundError,
   calculateCost,
   lookupForKlingV3,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -83,9 +84,9 @@ export async function POST(request: Request) {
   }
 
   const lookup = lookupForKlingV3(params, tier);
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateCost(lookup);
+    pricing = await calculateCost(lookup);
   } catch (err) {
     // P0-5: an unhandled PricingNotFoundError used to bubble as 500 with
     // no audit trail — the request would burn a Freepik request slot
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
     bearerCode: bearer,
     preValidated: validation,
     endpoint: "kling-v3",
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     tier,
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,

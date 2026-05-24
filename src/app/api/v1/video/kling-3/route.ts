@@ -6,6 +6,7 @@ import {
   PricingNotFoundError,
   calculateCost,
   lookupForKlingV3,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
@@ -81,9 +82,9 @@ export async function POST(request: Request) {
   }
 
   const lookup = lookupForKlingV3(params, tier);
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateCost(lookup);
+    pricing = await calculateCost(lookup);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", { lookup, ...errFields(err) });
@@ -111,7 +112,8 @@ export async function POST(request: Request) {
     bearerCode: null,
     preValidated: auth.preValidated,
     endpoint: "kling-v3",
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     tier,
     durationSeconds: Number(params.duration ?? 5),
     withAudio: !!params.generate_audio,

@@ -71,6 +71,10 @@ export async function POST(request: Request) {
     preValidated: validation,
     endpoint: "improve-prompt",
     costEur: 0,
+    // Free endpoint — no upstream charge from Magnific for prompt
+    // improvement either. Explicit 0 (rather than null) makes margin
+    // dashboards classify this row as "$0 in, $0 out" not "unknown".
+    upstreamCostEur: 0,
     prompt: parsed.data.prompt ?? null,
     callFreepik: (apiKey) =>
       freepik.improvePrompt.create(parsed.data, { apiKey }),

@@ -182,27 +182,51 @@ describe("calculateCost", () => {
     dbMocks.limit.mockReset();
   });
 
-  it("returns the EUR cost from the matching pricing_rules row", async () => {
-    dbMocks.limit.mockResolvedValueOnce([{ costEur: "0.84" }]);
-    const cost = await calculateCost({
+  it("returns customer + upstream EUR cost from the matching pricing_rules row", async () => {
+    // Backfill state: upstream == customer (0% markup).
+    dbMocks.limit.mockResolvedValueOnce([
+      { costEur: "0.84", upstreamCostEur: "0.84" },
+    ]);
+    const pricing = await calculateCost({
       endpoint: "kling-v3",
       tier: "std",
       durationSeconds: 5,
       withAudio: false,
     });
-    expect(cost).toBe(0.84);
+    expect(pricing.customerPriceEur).toBe(0.84);
+    expect(pricing.upstreamCostEur).toBe(0.84);
   });
 
-  it("coerces numeric strings to Number", async () => {
-    dbMocks.limit.mockResolvedValueOnce([{ costEur: "1.12" }]);
-    const cost = await calculateCost({
+  it("returns distinct customer + upstream when admin has tuned margin", async () => {
+    // Real-world post-tune state: customer charged 1.50, upstream cost 0.84
+    // (= ~78% margin on top of upstream).
+    dbMocks.limit.mockResolvedValueOnce([
+      { costEur: "1.50", upstreamCostEur: "0.84" },
+    ]);
+    const pricing = await calculateCost({
+      endpoint: "kling-v3",
+      tier: "std",
+      durationSeconds: 5,
+      withAudio: false,
+    });
+    expect(pricing.customerPriceEur).toBe(1.5);
+    expect(pricing.upstreamCostEur).toBe(0.84);
+  });
+
+  it("falls back to customer price when upstream_cost_eur is NULL", async () => {
+    // Defensive — a row admin inserted by hand with no upstream value.
+    // Margin reports treat it as 0% margin rather than NaN.
+    dbMocks.limit.mockResolvedValueOnce([
+      { costEur: "1.12", upstreamCostEur: null },
+    ]);
+    const pricing = await calculateCost({
       endpoint: "kling-4k-t2v",
       tier: "4k",
       durationSeconds: 1,
       withAudio: false,
     });
-    expect(typeof cost).toBe("number");
-    expect(cost).toBe(1.12);
+    expect(pricing.customerPriceEur).toBe(1.12);
+    expect(pricing.upstreamCostEur).toBe(1.12);
   });
 
   it("throws PricingNotFoundError when no rule matches", async () => {
@@ -241,13 +265,16 @@ describe("calculateCost", () => {
   });
 
   it("handles null-tier (improve-prompt) lookups", async () => {
-    dbMocks.limit.mockResolvedValueOnce([{ costEur: "0.00" }]);
-    const cost = await calculateCost({
+    dbMocks.limit.mockResolvedValueOnce([
+      { costEur: "0.00", upstreamCostEur: "0.00" },
+    ]);
+    const pricing = await calculateCost({
       endpoint: "improve-prompt",
       tier: null,
       durationSeconds: null,
       withAudio: false,
     });
-    expect(cost).toBe(0);
+    expect(pricing.customerPriceEur).toBe(0);
+    expect(pricing.upstreamCostEur).toBe(0);
   });
 });

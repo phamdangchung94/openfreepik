@@ -35,10 +35,35 @@ export class PricingNotFoundError extends Error {
 }
 
 /**
- * Look up the EUR cost for a request shape. Throws PricingNotFoundError
- * if the combination has no rule — admin must seed/edit one first.
+ * 2-layer pricing result returned by all calculator functions.
+ *
+ * - `customerPriceEur`: what the customer is billed (deducted from
+ *   activation code balance, internal credit unit — 1 EUR ≈ 1000 VND).
+ * - `upstreamCostEur`: what the underlying provider charges us in real
+ *   EUR. Snapshotted into `usage_logs.upstream_cost_eur` at POST time so
+ *   admin can compute true per-request margin later.
+ *
+ * `upstreamCostEur` may equal `customerPriceEur` (default backfill
+ * state after migration 0021 — markup 0%). Admin tunes either column
+ * independently via the dashboard pricing editor.
  */
-export async function calculateCost(lookup: PricingLookup): Promise<number> {
+export interface PricingResult {
+  customerPriceEur: number;
+  upstreamCostEur: number;
+}
+
+/**
+ * Look up the customer + upstream EUR cost for a request shape. Throws
+ * PricingNotFoundError if the combination has no rule — admin must
+ * seed/edit one first.
+ *
+ * Returns `{ customerPriceEur, upstreamCostEur }`. Both come from the
+ * same pricing_rules row; legacy rows backfilled by migration 0021 have
+ * `upstreamCostEur === customerPriceEur` until admin edits.
+ */
+export async function calculateCost(
+  lookup: PricingLookup,
+): Promise<PricingResult> {
   const conditions: SQL[] = [
     eq(pricingRules.endpoint, lookup.endpoint),
     eq(pricingRules.withAudio, lookup.withAudio),
@@ -51,13 +76,21 @@ export async function calculateCost(lookup: PricingLookup): Promise<number> {
   ];
 
   const [row] = await db
-    .select({ costEur: pricingRules.costEur })
+    .select({
+      costEur: pricingRules.costEur,
+      upstreamCostEur: pricingRules.upstreamCostEur,
+    })
     .from(pricingRules)
     .where(and(...conditions))
     .limit(1);
 
   if (!row) throw new PricingNotFoundError(lookup);
-  return Number(row.costEur);
+  const customerPriceEur = Number(row.costEur);
+  // Fallback to customer price if upstream is NULL (shouldn't happen
+  // post-backfill, but defends against rows admin inserted by hand).
+  const upstreamCostEur =
+    row.upstreamCostEur != null ? Number(row.upstreamCostEur) : customerPriceEur;
+  return { customerPriceEur, upstreamCostEur };
 }
 
 /**
@@ -181,7 +214,7 @@ export function lookupForKlingMotion(
 export async function calculateMotionCost(
   endpoint: string,
   exactSeconds: number,
-): Promise<number> {
+): Promise<PricingResult> {
   const rows = await db
     .select()
     .from(pricingRules)
@@ -199,9 +232,16 @@ export async function calculateMotionCost(
       `No pricing rule found for motion endpoint=${endpoint}`,
     );
   }
-  const ratePerSec = Number(row.costEur) / row.durationSeconds;
   const billed = Math.max(1, Math.ceil(exactSeconds));
-  return billed * ratePerSec;
+  const customerRatePerSec = Number(row.costEur) / row.durationSeconds;
+  const upstreamBase = row.upstreamCostEur != null
+    ? Number(row.upstreamCostEur)
+    : Number(row.costEur);
+  const upstreamRatePerSec = upstreamBase / row.durationSeconds;
+  return {
+    customerPriceEur: billed * customerRatePerSec,
+    upstreamCostEur: billed * upstreamRatePerSec,
+  };
 }
 
 /**
@@ -220,7 +260,7 @@ export async function calculateOmniCost(
   endpoint: string,
   exactSeconds: number,
   withAudio: boolean,
-): Promise<number> {
+): Promise<PricingResult> {
   const rows = await db
     .select()
     .from(pricingRules)
@@ -239,7 +279,14 @@ export async function calculateOmniCost(
       `No pricing rule found for omni endpoint=${endpoint} withAudio=${withAudio}`,
     );
   }
-  const ratePerSec = Number(row.costEur) / row.durationSeconds;
   const billed = Math.max(1, Math.ceil(exactSeconds));
-  return billed * ratePerSec;
+  const customerRatePerSec = Number(row.costEur) / row.durationSeconds;
+  const upstreamBase = row.upstreamCostEur != null
+    ? Number(row.upstreamCostEur)
+    : Number(row.costEur);
+  const upstreamRatePerSec = upstreamBase / row.durationSeconds;
+  return {
+    customerPriceEur: billed * customerRatePerSec,
+    upstreamCostEur: billed * upstreamRatePerSec,
+  };
 }

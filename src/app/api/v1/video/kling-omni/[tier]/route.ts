@@ -10,6 +10,7 @@ import { orchestrateFreepikCall } from "@/lib/freepik/orchestrator";
 import {
   PricingNotFoundError,
   calculateOmniCost,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireApiKey } from "@/lib/auth/api-key-helpers";
@@ -105,9 +106,9 @@ export async function POST(
     );
   }
 
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateOmniCost(slug, durationSeconds, withAudio);
+    pricing = await calculateOmniCost(slug, durationSeconds, withAudio);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", {
@@ -134,7 +135,8 @@ export async function POST(
     bearerCode: null,
     preValidated: auth.preValidated,
     endpoint: slug,
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     tier: null,
     durationSeconds,
     withAudio,

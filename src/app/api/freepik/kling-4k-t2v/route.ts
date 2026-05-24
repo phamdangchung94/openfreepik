@@ -6,6 +6,7 @@ import {
   PricingNotFoundError,
   calculateCost,
   lookupForKling4k,
+  type PricingResult,
 } from "@/lib/pricing/calculator";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateCode, type ValidationResult } from "@/lib/auth/activation";
@@ -72,9 +73,9 @@ export async function POST(request: Request) {
   }
 
   const lookup = lookupForKling4k("kling-4k-t2v", params);
-  let cost: number;
+  let pricing: PricingResult;
   try {
-    cost = await calculateCost(lookup);
+    pricing = await calculateCost(lookup);
   } catch (err) {
     if (err instanceof PricingNotFoundError) {
       log.warn("PRICING_MISSING", { lookup, ...errFields(err) });
@@ -99,7 +100,8 @@ export async function POST(request: Request) {
     bearerCode: bearer,
     preValidated: validation,
     endpoint: "kling-4k-t2v",
-    costEur: cost,
+    costEur: pricing.customerPriceEur,
+    upstreamCostEur: pricing.upstreamCostEur,
     tier: "4k",
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
