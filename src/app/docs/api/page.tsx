@@ -1124,22 +1124,127 @@ res = requests.post(
     "params": {"prompt": "con mèo"},
     "webhook_url": "https://your-server.com/webhook?token=xyz"
   }'`,
-                javascript: `// Payload server sẽ POST về webhook_url:
-// Headers: x-webhook-event: task.succeeded | task.failed
+                javascript: `// Payload server POST về webhook_url:
+// Headers:
+//   X-Webhook-Event: task.succeeded | task.failed
+//   X-Webhook-Id: <uuid> (idempotency)
+//   X-Webhook-Signature: t=<unix>,v1=<hex>  ← HMAC-SHA256 (xem mẫu verify)
 // Body:
 // {
 //   "task_id": "abc-...",
 //   "status": "COMPLETED" | "FAILED",
 //   "endpoint": "kling-v3",
-//   "video_url": "https://...",
+//   "video_url": "https://...",         // null khi FAILED
 //   "video_url_expires_at": "2026-05-24T...",
 //   "error_message": null,
 //   "finalized_at": "2026-05-23T..."
 // }`,
-                python: `# Cùng webhook payload shape — verify từ source IP hoặc query token
-# trên webhook_url (vd ?token=xxx) để chống spoof.`,
+                python: `# Mẫu Express + verify chữ ký HMAC-SHA256:
+# import crypto from "node:crypto";
+# app.post("/webhook", express.raw({type:"application/json"}), (req, res) => {
+#   const sig = req.headers["x-webhook-signature"];
+#   const parts = Object.fromEntries(sig.split(",").map(p=>p.split("=")));
+#   const expected = crypto.createHmac("sha256", WEBHOOK_SECRET)
+#     .update(\`\${parts.t}.\${req.body}\`).digest("hex");
+#   if (!crypto.timingSafeEqual(Buffer.from(parts.v1), Buffer.from(expected))) {
+#     return res.status(401).end();
+#   }
+#   if (Math.abs(Date.now()/1000 - Number(parts.t)) > 300) return res.status(401).end();
+#   res.json({received: true});
+# });`,
               }}
             />
+
+            <h5 className="mt-3 text-xs font-medium text-foreground">
+              Mẫu verify webhook signature (Python + Node)
+            </h5>
+            <CodeTabs
+              samples={{
+                curl: `# Webhook header bạn nhận:
+#   X-Webhook-Signature: t=1714723200,v1=abc123def...
+#   X-Webhook-Id: 8f4e...
+# Algorithm: HMAC-SHA256(WEBHOOK_SECRET, "<t>.<raw_body>") == v1
+# Reject if abs(now - t) > 300 seconds (replay protection).`,
+                javascript: `import crypto from "node:crypto";
+import express from "express";
+
+const WEBHOOK_SECRET = process.env.VIDEO_WEBHOOK_SECRET; // whsec_...
+
+app.post(
+  "/webhook",
+  // CRITICAL: raw body for signature, parse JSON later
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const sigHeader = req.headers["x-webhook-signature"];
+    if (typeof sigHeader !== "string") return res.status(401).end();
+
+    const parts = Object.fromEntries(
+      sigHeader.split(",").map((p) => p.split("=")),
+    );
+    const timestamp = Number(parts.t);
+    if (!timestamp || Math.abs(Date.now() / 1000 - timestamp) > 300) {
+      return res.status(401).end(); // replay or skew
+    }
+
+    const expected = crypto
+      .createHmac("sha256", WEBHOOK_SECRET)
+      .update(\`\${timestamp}.\${req.body.toString()}\`)
+      .digest("hex");
+
+    if (
+      !crypto.timingSafeEqual(
+        Buffer.from(parts.v1, "hex"),
+        Buffer.from(expected, "hex"),
+      )
+    ) {
+      return res.status(401).end();
+    }
+
+    const payload = JSON.parse(req.body.toString());
+    console.log(\`Task \${payload.task_id}: \${payload.status}\`);
+    res.json({ received: true });
+  },
+);`,
+                python: `import hmac, hashlib, time, os
+from flask import Flask, request, abort, jsonify
+
+WEBHOOK_SECRET = os.environ["VIDEO_WEBHOOK_SECRET"]  # whsec_...
+app = Flask(__name__)
+
+@app.post("/webhook")
+def webhook():
+    sig_header = request.headers.get("X-Webhook-Signature", "")
+    parts = dict(p.split("=") for p in sig_header.split(","))
+    try:
+        t = int(parts["t"])
+    except (KeyError, ValueError):
+        abort(401)
+
+    # Replay protection: ±5 minutes
+    if abs(time.time() - t) > 300:
+        abort(401)
+
+    raw = request.get_data()  # MUST be raw bytes, not JSON-decoded
+    expected = hmac.new(
+        WEBHOOK_SECRET.encode(),
+        f"{t}.".encode() + raw,
+        hashlib.sha256,
+    ).hexdigest()
+
+    if not hmac.compare_digest(parts.get("v1", ""), expected):
+        abort(401)
+
+    payload = request.get_json()
+    print(f"Task {payload['task_id']}: {payload['status']}")
+    return jsonify(received=True)`,
+              }}
+            />
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              <strong className="text-foreground">Lấy WEBHOOK_SECRET</strong>:
+              admin tạo key cho bạn → response include cả <Code>sk_*</Code> + <Code>whsec_*</Code>.
+              Mất secret → admin Regenerate trên dashboard → bạn cập nhật env var.
+              Legacy keys (chưa có secret) → webhook fire unsigned + log warn.
+            </p>
           </div>
 
           <div>

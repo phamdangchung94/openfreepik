@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { desc, eq, sql } from "drizzle-orm";
@@ -55,6 +56,10 @@ export async function GET() {
       // the key was minted after migration 0018 and we can decrypt
       // plaintext on demand.
       hasPlaintext: sql<boolean>`${apiKeys.keyEncrypted} IS NOT NULL`,
+      // Webhook signing secret presence (migration 0019). NULL for
+      // legacy keys → webhook fires unsigned + log warn. Admin can
+      // Regenerate to upgrade.
+      hasWebhookSecret: sql<boolean>`${apiKeys.webhookSecretEncrypted} IS NOT NULL`,
     })
     .from(apiKeys)
     .leftJoin(activationCodes, eq(activationCodes.id, apiKeys.codeId))
@@ -107,6 +112,7 @@ export async function GET() {
       createdAt: r.createdAt,
       expiresAt: r.expiresAt,
       hasPlaintext: r.hasPlaintext,
+      hasWebhookSecret: r.hasWebhookSecret,
       // Linked activation code balance snapshot — saves a roundtrip
       // when admin wants to know "how much credit does this key have?".
       account: {
@@ -165,16 +171,21 @@ export async function POST(request: Request) {
   }
 
   const { plaintext, hash } = mintApiKey();
+  // Webhook signing secret — 32 bytes random base64url-encoded =>
+  // "whsec_<43 chars>". Customer pastes this into their verify code
+  // env var; we HMAC-SHA256 sign webhook payloads with it.
+  const webhookSecretPlain = `whsec_${randomBytes(32).toString("base64url")}`;
   const expiresAt = parsed.data.expiresInDays
     ? new Date(Date.now() + parsed.data.expiresInDays * 86_400_000)
     : null;
 
-  // AES-GCM encrypt plaintext for admin-side reveal (migration 0018).
-  // Decryption requires KEY_ENCRYPTION_SECRET — leaked DB alone yields
-  // nothing.
+  // AES-GCM encrypt BOTH secrets (migration 0018 + 0019).
+  // KEY_ENCRYPTION_SECRET shared — leaked DB alone yields nothing.
   let keyEncrypted: string;
+  let webhookSecretEncrypted: string;
   try {
     keyEncrypted = await encrypt(plaintext);
+    webhookSecretEncrypted = await encrypt(webhookSecretPlain);
   } catch (err) {
     log.error("API_KEY_ENCRYPT_FAILED", {
       label: parsed.data.label,
@@ -195,6 +206,7 @@ export async function POST(request: Request) {
     .values({
       keyHash: hash,
       keyEncrypted,
+      webhookSecretEncrypted,
       label: parsed.data.label,
       codeId: parsed.data.codeId,
       rateLimitPerMin: parsed.data.rateLimitPerMin ?? null,
@@ -217,9 +229,13 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     created: row,
-    // Plaintext shown ONCE — admin must copy now.
+    // Both secrets shown ONCE — admin must copy now.
+    // sk_* = bearer token (sent in Authorization header by customer)
+    // whsec_* = webhook signing secret (customer uses to verify
+    //          X-Webhook-Signature header on incoming webhook POSTs)
     plaintext,
-    note: "Lưu lại key ngay — không thể xem lại sau khi đóng dialog.",
+    webhookSecret: webhookSecretPlain,
+    note: "Lưu lại 2 secret ngay — không thể xem lại plaintext sau khi đóng dialog (có thể Regenerate sau).",
   });
 }
 

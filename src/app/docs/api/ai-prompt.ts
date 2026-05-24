@@ -245,9 +245,56 @@ Returns the task status. Poll every 2 seconds until \`status\` reaches
 
 ## Optional: server-push completion via \`webhook_url\`
 
-Add \`webhook_url: "https://your-server.com/webhook?token=xyz"\` to the
-top level of any POST /video/* body. When the task finishes, the server
-POSTs the status payload to that URL:
+Add \`webhook_url: "https://your-server.com/webhook"\` to the top level
+of any POST /video/* body. When the task finishes, the server POSTs the
+status payload to that URL with these headers:
+
+- \`X-Webhook-Event: task.succeeded | task.failed\`
+- \`X-Webhook-Id: <uuid>\` (use for idempotent receiver dedup)
+- \`X-Webhook-Signature: t=<unix>,v1=<hmac-sha256-hex>\` — when the API
+  key has a webhook secret (always for keys minted after 2026-05-23).
+  Legacy keys send unsigned + server-side log warns.
+
+**Verify in Python** (Flask example):
+\`\`\`python
+import hmac, hashlib, time, os
+from flask import request, abort
+
+WEBHOOK_SECRET = os.environ["VIDEO_WEBHOOK_SECRET"]  # whsec_...
+
+def verify_webhook(raw_body: bytes, sig_header: str, tolerance: int = 300) -> bool:
+    parts = dict(p.split("=") for p in sig_header.split(","))
+    t = int(parts["t"])
+    if abs(time.time() - t) > tolerance:
+        return False
+    expected = hmac.new(
+        WEBHOOK_SECRET.encode(), f"{t}.".encode() + raw_body, hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(parts.get("v1", ""), expected)
+\`\`\`
+
+**Verify in Node** (Express, IMPORTANT: use express.raw body parser):
+\`\`\`javascript
+import crypto from "node:crypto";
+
+const WEBHOOK_SECRET = process.env.VIDEO_WEBHOOK_SECRET;
+
+function verifyWebhook(rawBody, sigHeader) {
+  const parts = Object.fromEntries(sigHeader.split(",").map((p) => p.split("=")));
+  const t = Number(parts.t);
+  if (!t || Math.abs(Date.now() / 1000 - t) > 300) return false;
+  const expected = crypto
+    .createHmac("sha256", WEBHOOK_SECRET)
+    .update(\`\${t}.\${rawBody.toString()}\`)
+    .digest("hex");
+  return crypto.timingSafeEqual(
+    Buffer.from(parts.v1, "hex"),
+    Buffer.from(expected, "hex"),
+  );
+}
+\`\`\`
+
+Payload shape:
 \`\`\`json
 {
   "task_id": "uuid",
@@ -259,10 +306,9 @@ POSTs the status payload to that URL:
   "finalized_at": "2026-05-23T..."
 }
 \`\`\`
-Header on the delivery: \`X-Webhook-Event: task.succeeded\` or \`task.failed\`.
-
 Best-effort fire-and-forget (10s timeout, no retries). Poll \`/tasks/{id}\`
-as a backup if delivery fails.
+as a backup if delivery fails. Replay protection: reject signatures
+older than 5 minutes (tolerance configurable).
 
 ## Pricing summary (EUR/second × duration)
 

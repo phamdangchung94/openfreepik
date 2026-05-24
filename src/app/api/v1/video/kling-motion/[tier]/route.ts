@@ -150,7 +150,7 @@ export async function POST(
     durationSeconds,
     withAudio: false,
     prompt: motionParams.prompt ?? null,
-    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    callFreepik: (apiKey, ctx) =>
+    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    apiKeyId: auth.apiKeyId,    callFreepik: (apiKey, ctx) =>
       freepik.klingMotion.generate(withConditionalWebhook(motionParams, webhookUrl, ctx), {
         version,
         tier,

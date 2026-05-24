@@ -133,6 +133,17 @@ export const apiKeys = pgTable(
      * migration — those can't be recovered, must be re-minted.
      */
     keyEncrypted: text("key_encrypted"),
+    /**
+     * AES-GCM encrypted webhook signing secret (migration 0019).
+     * When set, the orchestrator signs customer webhook payloads with
+     * HMAC-SHA256(secret, "{timestamp}.{body}") and sends header
+     * `X-Webhook-Signature: t=<unix>,v1=<hex>`. Customer's receiver
+     * verifies → drops forged/replayed deliveries.
+     *
+     * Null = legacy key. Webhook fires unsigned + log warn. Admin
+     * regenerates via /api/admin/api-keys/[id]/webhook-secret.
+     */
+    webhookSecretEncrypted: text("webhook_secret_encrypted"),
     /** Customer-readable name. Admin sees this in the dashboard. */
     label: text("label").notNull(),
     /** Links the key to an activation code that owns billing. */
@@ -168,6 +179,17 @@ export const usageLogs = pgTable(
       .notNull()
       .references(() => activationCodes.id, { onDelete: "restrict" }),
     keyId: uuid("key_id").references(() => freepikKeys.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Customer API token that minted this task. NULL for web-UI
+     * requests (which auth via activation code bearer). Used by
+     * finalizeUsageOnPoll to resolve the webhook signing secret
+     * (api_keys.webhook_secret_encrypted, migration 0019). Migration
+     * 0020. ON DELETE SET NULL preserves the audit trail when admin
+     * revokes a key.
+     */
+    apiKeyId: uuid("api_key_id").references(() => apiKeys.id, {
       onDelete: "set null",
     }),
     endpoint: text("endpoint").notNull(),

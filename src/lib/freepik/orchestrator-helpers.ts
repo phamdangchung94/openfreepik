@@ -8,11 +8,41 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { usageLogs, type NewUsageLog } from "@/lib/db/schema";
+import { apiKeys, usageLogs, type NewUsageLog } from "@/lib/db/schema";
 import { refundCode } from "@/lib/auth/activation";
 import { FreepikApiError } from "@/lib/freepik/errors";
+import { decrypt } from "@/lib/crypto/aes-gcm";
 import { errFields, log } from "@/lib/logger";
 import { fireCustomerWebhook } from "@/lib/api-v1/customer-webhook";
+
+/**
+ * Resolve the webhook signing secret for a task by joining usage_logs
+ * → api_keys. Returns null when:
+ *   - usage_logs.api_key_id is NULL (web UI / pre-migration-0020 task)
+ *   - api_keys.webhook_secret_encrypted is NULL (legacy key)
+ *   - decrypt fails (rotated KEY_ENCRYPTION_SECRET, etc.)
+ * fireCustomerWebhook receives null → logs CUSTOMER_WEBHOOK_UNSIGNED.
+ */
+async function resolveWebhookSigningSecret(
+  freepikTaskId: string,
+): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ encrypted: apiKeys.webhookSecretEncrypted })
+      .from(usageLogs)
+      .leftJoin(apiKeys, eq(usageLogs.apiKeyId, apiKeys.id))
+      .where(eq(usageLogs.freepikTaskId, freepikTaskId))
+      .limit(1);
+    if (!row?.encrypted) return null;
+    return await decrypt(row.encrypted);
+  } catch (err) {
+    log.warn("WEBHOOK_SECRET_RESOLVE_FAILED", {
+      freepikTaskId,
+      ...errFields(err),
+    });
+    return null;
+  }
+}
 
 export interface LogUsageOpts {
   endpoint:
@@ -47,6 +77,13 @@ export interface LogUsageOpts {
    * web UI requests (which use in-app polling).
    */
   customerWebhookUrl?: string | null;
+  /**
+   * Customer API token id that authorized this request. Persisted to
+   * `usage_logs.api_key_id` (migration 0020) so finalizeUsageOnPoll
+   * can resolve the webhook signing secret. Null when request came
+   * from the web UI (activation code bearer, not sk_*).
+   */
+  apiKeyId?: string | null;
 }
 
 export type OrchestrateResult<T> =
@@ -126,6 +163,7 @@ export async function logUsage(
       status,
       prompt: opts.prompt ?? null,
       customerWebhookUrl: opts.customerWebhookUrl ?? null,
+      apiKeyId: opts.apiKeyId ?? null,
     });
   } catch (err) {
     log.error("USAGE_LOG_INSERT_FAILED", {
@@ -224,22 +262,29 @@ export async function finalizeUsageOnPoll(
     // (idempotency guard above means concurrent finalizes return 0
     // rows; only the WINNING finalize sends the notification).
     if (succRow?.customerWebhookUrl) {
-      // Don't await — finalize must complete regardless of webhook
-      // delivery. Helper handles errors internally.
-      void fireCustomerWebhook(
-        succRow.customerWebhookUrl,
-        "task.succeeded",
-        {
-          task_id: opts.freepikTaskId,
-          status: "COMPLETED",
-          endpoint: succRow.endpoint,
-          video_url: opts.videoUrl,
-          video_url_expires_at:
-            succRow.videoUrlExpiresAt?.toISOString() ?? null,
-          error_message: null,
-          finalized_at: new Date().toISOString(),
-        },
-      );
+      // Resolve signing secret + fire async. Don't await — finalize
+      // must complete regardless of webhook delivery latency. Helper
+      // handles all error paths internally.
+      void (async () => {
+        const signingSecret = await resolveWebhookSigningSecret(
+          opts.freepikTaskId,
+        );
+        await fireCustomerWebhook(
+          succRow.customerWebhookUrl as string,
+          "task.succeeded",
+          {
+            task_id: opts.freepikTaskId,
+            status: "COMPLETED",
+            endpoint: succRow.endpoint,
+            video_url: opts.videoUrl ?? null,
+            video_url_expires_at:
+              succRow.videoUrlExpiresAt?.toISOString() ?? null,
+            error_message: null,
+            finalized_at: new Date().toISOString(),
+          },
+          { signingSecret },
+        );
+      })();
     }
     return;
   }
@@ -281,20 +326,26 @@ export async function finalizeUsageOnPoll(
   // Fire customer webhook (failed path). Treat refunded == failed
   // from customer POV — the request is dead and won't produce video.
   if (row.customerWebhookUrl) {
-    void fireCustomerWebhook(
-      row.customerWebhookUrl,
-      "task.failed",
-      {
-        task_id: opts.freepikTaskId,
-        status: "FAILED",
-        endpoint: row.endpoint,
-        video_url: null,
-        video_url_expires_at: null,
-        error_message:
-          opts.upstreamErrorMessage ?? opts.failureReason ?? null,
-        finalized_at: new Date().toISOString(),
-      },
-    );
+    void (async () => {
+      const signingSecret = await resolveWebhookSigningSecret(
+        opts.freepikTaskId,
+      );
+      await fireCustomerWebhook(
+        row.customerWebhookUrl as string,
+        "task.failed",
+        {
+          task_id: opts.freepikTaskId,
+          status: "FAILED",
+          endpoint: row.endpoint,
+          video_url: null,
+          video_url_expires_at: null,
+          error_message:
+            opts.upstreamErrorMessage ?? opts.failureReason ?? null,
+          finalized_at: new Date().toISOString(),
+        },
+        { signingSecret },
+      );
+    })();
   }
 
   const cost = Number(row.costEur);

@@ -140,7 +140,7 @@ export async function POST(
     withAudio,
     prompt:
       omniParams.prompt ?? omniParams.multi_prompt?.join(" / ") ?? null,
-    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    callFreepik: (apiKey, ctx) =>
+    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    apiKeyId: auth.apiKeyId,    callFreepik: (apiKey, ctx) =>
       freepik.klingOmni.generate(withConditionalWebhook(omniParams, webhookUrl, ctx), {
         mode,
         tier,

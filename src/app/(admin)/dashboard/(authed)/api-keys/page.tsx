@@ -15,6 +15,7 @@ import {
   Wallet,
   Activity,
   Eye,
+  Webhook,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -70,6 +71,11 @@ interface ApiKeyRow {
    * 0018+). False for legacy keys — UI hides the Reveal button.
    */
   hasPlaintext: boolean;
+  /**
+   * Webhook signing secret presence (migration 0019). False for legacy
+   * keys — UI shows "Regenerate" button to upgrade.
+   */
+  hasWebhookSecret: boolean;
 }
 
 interface CodeOption {
@@ -365,6 +371,7 @@ function ApiTokenCard({
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           <RevealKeyButton row={row} />
+          <WebhookSecretButton row={row} />
           <Button
             variant="outline"
             size="sm"
@@ -536,6 +543,172 @@ function RevealKeyButton({ row }: { row: ApiKeyRow }) {
   );
 }
 
+/**
+ * Webhook secret button — combines reveal (GET) + regenerate (POST) in
+ * one dialog. Legacy keys (hasWebhookSecret=false) show "Generate"
+ * instead; new keys show "Xem" + "Regenerate".
+ */
+function WebhookSecretButton({ row }: { row: ApiKeyRow }) {
+  const [open, setOpen] = useState(false);
+  const [plaintext, setPlaintext] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [isFreshlyRotated, setIsFreshlyRotated] = useState(false);
+
+  async function fetchPlaintext() {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/api-keys/${row.id}/webhook-secret`,
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Không lấy được secret");
+        return;
+      }
+      setPlaintext(json.webhookSecret);
+      setIsFreshlyRotated(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function regenerate() {
+    if (
+      row.hasWebhookSecret &&
+      !confirm(
+        `Regenerate webhook secret cho "${row.label}"? Secret cũ sẽ bị invalidate ngay — customer dùng key này phải cập nhật verify code.`,
+      )
+    ) {
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/api-keys/${row.id}/webhook-secret`,
+        { method: "POST" },
+      );
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast.error(json.message ?? "Regenerate thất bại");
+        return;
+      }
+      setPlaintext(json.webhookSecret);
+      setIsFreshlyRotated(true);
+      toast.success("Đã tạo webhook secret mới");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copy() {
+    if (!plaintext) return;
+    try {
+      await navigator.clipboard.writeText(plaintext);
+      setCopied(true);
+      toast.success("Đã copy");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Copy thất bại");
+    }
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="flex-1"
+        onClick={() => {
+          setOpen(true);
+          if (row.hasWebhookSecret && !plaintext) void fetchPlaintext();
+        }}
+        title={
+          row.hasWebhookSecret
+            ? "Xem/rotate webhook signing secret"
+            : "Generate webhook signing secret (legacy key)"
+        }
+      >
+        <Webhook className="size-3.5" />
+        {row.hasWebhookSecret ? "Webhook secret" : "Gen webhook"}
+      </Button>
+
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) {
+            setPlaintext(null);
+            setCopied(false);
+            setIsFreshlyRotated(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Webhook secret: {row.label}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5">
+              <p className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="size-3" />
+                {isFreshlyRotated
+                  ? "Secret CŨ đã bị invalidate — gửi secret mới cho customer ngay"
+                  : "Customer dùng secret này để verify chữ ký X-Webhook-Signature"}
+              </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                HMAC-SHA256(secret, &ldquo;&lt;timestamp&gt;.&lt;body&gt;&rdquo;) phải khớp{" "}
+                <code className="font-mono">v1=</code> trong header. Mỗi lần xem/rotate được audit-log.
+              </p>
+            </div>
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground">
+                <RefreshCw className="size-3.5 animate-spin" />
+                Đang xử lý…
+              </div>
+            ) : plaintext ? (
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
+                  {plaintext}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copy}
+                  className="size-9 shrink-0 [&_svg]:size-3.5"
+                  aria-label="Copy"
+                >
+                  {copied ? <Check className="text-emerald-500" /> : <Copy />}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {row.hasWebhookSecret
+                  ? "Bấm 'Xem secret' để decrypt."
+                  : "Key này chưa có webhook secret. Bấm Regenerate để tạo mới."}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={regenerate}
+                disabled={loading}
+              >
+                <RefreshCw className="size-3.5" />
+                {row.hasWebhookSecret ? "Regenerate" : "Generate"}
+              </Button>
+              <Button size="sm" onClick={() => setOpen(false)}>
+                Đóng
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** Format EUR as "X.XX €" with sensible precision (4 dp for <1, 2 dp otherwise). */
 function fmtEur(value: number | null): string {
   if (value === null) return "—";
@@ -558,7 +731,8 @@ function CreateApiKeyDialog({
   const [expiresInDays, setExpiresInDays] = useState("");
   const [busy, setBusy] = useState(false);
   const [plaintext, setPlaintext] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [copied, setCopied] = useState<"key" | "webhook" | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -591,19 +765,19 @@ function CreateApiKeyDialog({
         return;
       }
       setPlaintext(json.plaintext);
+      setWebhookSecret(json.webhookSecret ?? null);
       onCreated();
     } finally {
       setBusy(false);
     }
   }
 
-  async function copyPlaintext() {
-    if (!plaintext) return;
+  async function copy(value: string, kind: "key" | "webhook") {
     try {
-      await navigator.clipboard.writeText(plaintext);
-      setCopied(true);
-      toast.success("Đã copy API key");
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(value);
+      setCopied(kind);
+      toast.success(kind === "key" ? "Đã copy API key" : "Đã copy webhook secret");
+      setTimeout(() => setCopied(null), 2000);
     } catch {
       toast.error("Copy thất bại — chọn thủ công từ ô bên dưới");
     }
@@ -611,7 +785,8 @@ function CreateApiKeyDialog({
 
   function reset() {
     setPlaintext(null);
-    setCopied(false);
+    setWebhookSecret(null);
+    setCopied(null);
     setLabel("");
     setCodeId("");
     setRateLimit("");
@@ -645,28 +820,54 @@ function CreateApiKeyDialog({
             <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
               <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                 <AlertTriangle className="size-3.5" />
-                Lưu lại key ngay
+                Lưu lại CẢ 2 secret ngay
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Em chỉ store SHA-256 hash trong DB — không thể xem lại
-                plaintext sau khi đóng dialog. Customer copy ngay và bảo
-                quản như password.
+                Plaintext có thể xem lại qua nút <span className="font-medium">Xem key</span> / <span className="font-medium">Webhook secret</span> trên card, nhưng dialog này là cách nhanh nhất. Copy + gửi customer qua kênh bảo mật.
               </p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
-                {plaintext}
-              </code>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={copyPlaintext}
-                aria-label="Copy API key"
-                className="size-9 shrink-0 [&_svg]:size-3.5"
-              >
-                {copied ? <Check className="text-emerald-500" /> : <Copy />}
-              </Button>
+
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                API key (header <code className="font-mono">Authorization: Bearer ...</code>)
+              </p>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
+                  {plaintext}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copy(plaintext, "key")}
+                  aria-label="Copy API key"
+                  className="size-9 shrink-0 [&_svg]:size-3.5"
+                >
+                  {copied === "key" ? <Check className="text-emerald-500" /> : <Copy />}
+                </Button>
+              </div>
             </div>
+
+            {webhookSecret && (
+              <div>
+                <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                  Webhook signing secret (customer verify <code className="font-mono">X-Webhook-Signature</code>)
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <code className="flex-1 select-all rounded bg-muted px-2 py-1.5 font-mono text-xs break-all">
+                    {webhookSecret}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copy(webhookSecret, "webhook")}
+                    aria-label="Copy webhook secret"
+                    className="size-9 shrink-0 [&_svg]:size-3.5"
+                  >
+                    {copied === "webhook" ? <Check className="text-emerald-500" /> : <Copy />}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button size="sm" onClick={() => setOpen(false)}>
                 Xong

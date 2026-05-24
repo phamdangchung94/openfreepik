@@ -10,9 +10,12 @@
  *   - **No retry queue** — single attempt with 10s timeout. Customer
  *     can re-poll /v1/tasks/{id} as fallback. Reliable delivery would
  *     require a separate worker; out of scope for v1.
- *   - **No HMAC signature yet** — customer can authenticate via a
- *     URL query token (`?token=xyz`) or trust source IP. We'll add
- *     signing if customer demand surfaces.
+ *   - **HMAC-SHA256 signature** (Stripe-style, migration 0019) when
+ *     the API key has a `webhook_secret_encrypted`. Header format:
+ *     `X-Webhook-Signature: t=<unix>,v1=<hex>` where hex = HMAC-SHA256
+ *     (secret, "<t>.<body>"). Customer's receiver verifies with their
+ *     stored secret. Legacy keys (NULL secret) fall back to unsigned
+ *     delivery + log warn.
  *   - **2-second HTTP timeout** caps each call so a slow customer
  *     endpoint can't pile up serverless function time. AbortController
  *     fires the timeout cleanly.
@@ -21,6 +24,7 @@
  *     succeed regardless of webhook delivery).
  */
 
+import { createHmac, randomUUID } from "node:crypto";
 import { errFields, log } from "@/lib/logger";
 
 const TIMEOUT_MS = 10_000;
@@ -41,10 +45,20 @@ export interface CustomerWebhookPayload {
   finalized_at: string;
 }
 
+export interface FireWebhookOptions {
+  /**
+   * Plaintext webhook signing secret resolved from `api_keys.
+   * webhook_secret_encrypted` for the key that minted this task. Null
+   * for legacy keys → webhook fires unsigned + logs warn.
+   */
+  signingSecret?: string | null;
+}
+
 export async function fireCustomerWebhook(
   url: string,
   event: CustomerWebhookEvent,
   payload: CustomerWebhookPayload,
+  opts: FireWebhookOptions = {},
 ): Promise<void> {
   // Validate URL one more time (was already validated at POST time, but
   // defense in depth — an attacker who could write to usage_logs
@@ -64,17 +78,44 @@ export async function fireCustomerWebhook(
     return;
   }
 
+  // Build canonical body string ONCE so the signature signs exactly
+  // what's sent. Re-stringifying after sign could re-order keys on
+  // some runtimes and break verify.
+  const body = JSON.stringify(payload);
+  const webhookId = randomUUID();
+
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-webhook-event": event,
+    "x-webhook-id": webhookId,
+  };
+
+  if (opts.signingSecret) {
+    // Stripe-style: timestamp prevents replay; HMAC-SHA256 of
+    // "<timestamp>.<body>" prevents tampering. v1= is a version
+    // prefix for future rotation.
+    const timestamp = Math.floor(Date.now() / 1000);
+    const sig = createHmac("sha256", opts.signingSecret)
+      .update(`${timestamp}.${body}`)
+      .digest("hex");
+    headers["x-webhook-signature"] = `t=${timestamp},v1=${sig}`;
+  } else {
+    log.warn("CUSTOMER_WEBHOOK_UNSIGNED", {
+      url,
+      event,
+      taskId: payload.task_id,
+      reason: "no signing secret on linked api_key (legacy)",
+    });
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: "POST",
       signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        "x-webhook-event": event,
-      },
-      body: JSON.stringify(payload),
+      headers,
+      body,
     });
     // Log non-2xx so customer sees their endpoint is broken when they
     // check our logs. Body is intentionally not consumed — we don't

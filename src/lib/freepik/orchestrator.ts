@@ -118,6 +118,13 @@ export interface OrchestrateOptions<T> {
    * web UI requests.
    */
   customerWebhookUrl?: string | null;
+  /**
+   * Customer API token id that authorized this request (when auth was
+   * sk_* on /v1/* routes). Persisted to usage_logs.api_key_id so
+   * finalizeUsageOnPoll can resolve the webhook signing secret.
+   * Null for web-UI requests.
+   */
+  apiKeyId?: string | null;
 }
 
 export async function orchestrateFreepikCall<T>(
@@ -282,7 +289,11 @@ async function runOrchestrate<T>(
         // finalize wired up.
         const initialStatus = opts.costEur > 0 ? "pending" : "succeeded";
         await logUsage(
-          { ...opts, customerWebhookUrl: opts.customerWebhookUrl },
+          {
+            ...opts,
+            customerWebhookUrl: opts.customerWebhookUrl,
+            apiKeyId: opts.apiKeyId,
+          },
           codeId,
           key.id,
           taskId,

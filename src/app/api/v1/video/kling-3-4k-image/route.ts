@@ -107,7 +107,7 @@ export async function POST(request: Request) {
     durationSeconds: lookup.durationSeconds,
     withAudio: lookup.withAudio,
     prompt: params.prompt ?? null,
-    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    callFreepik: (apiKey, ctx) =>
+    requiresWebhook: webhookUrl !== null,    customerWebhookUrl: extractCustomerWebhookUrl(body),    apiKeyId: auth.apiKeyId,    callFreepik: (apiKey, ctx) =>
       freepik.kling4k.generateI2v(withConditionalWebhook(params, webhookUrl, ctx), { apiKey }),
     extractTaskId: (data) => data.task_id,
   });
