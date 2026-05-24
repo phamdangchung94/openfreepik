@@ -26,6 +26,7 @@
 
 import { createHmac, randomUUID } from "node:crypto";
 import { errFields, log } from "@/lib/logger";
+import { isUnsafeWebhookHost } from "@/lib/api-v1/url-security";
 
 const TIMEOUT_MS = 10_000;
 
@@ -74,6 +75,21 @@ export async function fireCustomerWebhook(
     log.warn("CUSTOMER_WEBHOOK_BAD_PROTOCOL", {
       protocol: parsed.protocol,
       taskId: payload.task_id,
+    });
+    return;
+  }
+
+  // SSRF defense-in-depth: the URL was checked at POST time via
+  // extractCustomerWebhookUrl, but a row inserted before this guard
+  // existed (or via direct SQL) could still slip through. Re-check
+  // here and drop the delivery if the host is loopback/private/
+  // link-local. Customer's POST still got a 200 + task_id; only the
+  // notification is suppressed. See lib/api-v1/url-security.ts.
+  if (isUnsafeWebhookHost(parsed.hostname)) {
+    log.warn("CUSTOMER_WEBHOOK_BLOCKED_HOST", {
+      hostname: parsed.hostname,
+      taskId: payload.task_id,
+      reason: "loopback or private/reserved address — SSRF guard",
     });
     return;
   }

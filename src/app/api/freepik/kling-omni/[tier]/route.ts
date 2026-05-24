@@ -20,6 +20,10 @@ import {
 } from "@/lib/freepik/route-helpers";
 import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
+import {
+  isLegacyEndpointDisabled,
+  legacyGoneBody,
+} from "@/lib/api-v1/legacy-gate";
 
 /**
  * POST /api/freepik/kling-omni/[tier]
@@ -56,6 +60,11 @@ export async function POST(
   }
   const { mode, tier } = parsedTier;
   const slug = endpointSlug(mode, tier);
+
+  // Deprecation gate (2026-05-24) — see /api/v1 sibling for details.
+  if (isLegacyEndpointDisabled(slug)) {
+    return NextResponse.json(legacyGoneBody(slug, "kling-v3"), { status: 410 });
+  }
 
   const body = await parseJsonBody(request);
   const parsed = klingOmniRouteInputSchema.safeParse(body);

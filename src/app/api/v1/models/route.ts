@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiSuccess, newRequestId } from "@/lib/api-v1/response";
+import { isLegacyEndpointDisabled } from "@/lib/api-v1/legacy-gate";
 
 /**
  * GET /api/v1/models
@@ -20,14 +21,16 @@ import { apiSuccess, newRequestId } from "@/lib/api-v1/response";
 export function GET() {
   const requestId = newRequestId();
 
-  return apiSuccess({
-    requestId,
-    data: {
-      ok: true,
-      version: "1",
-      // Static catalog — keep ordered by approximate quality/cost tier
-      // (cheapest first within each family).
-      models: [
+  // Hide legacy models from the catalog when DISABLE_LEGACY_MODELS flag
+  // is on. `id` in this list is the route slug used by the catalog
+  // entry below (e.g. "kling-omni" → /v1/video/kling-omni/{tier}).
+  const isModelHidden = (id: string): boolean => {
+    if (id === "kling-omni") return isLegacyEndpointDisabled("kling-omni");
+    if (id === "wan-v27") return isLegacyEndpointDisabled("wan-v27");
+    return false;
+  };
+
+  const allModels = [
         // Rates synced from production pricing_rules table 2026-05-23
         // (derived from 5s row: cost_eur ÷ 5). Kling 3 + Omni honor a
         // ~1.83× audio multiplier; Kling 4K bills the same with or
@@ -131,7 +134,19 @@ export function GET() {
           notes:
             "Free utility. Expands a short prompt into a detailed one. Use type=video for video prompts, type=image for image prompts.",
         },
-      ],
+      ];
+
+  // Filter legacy models OUT of the public catalog when admin has
+  // flipped DISABLE_LEGACY_MODELS. Customers see only what they can
+  // actually call.
+  const models = allModels.filter((m) => !isModelHidden(m.id));
+
+  return apiSuccess({
+    requestId,
+    data: {
+      ok: true,
+      version: "1",
+      models,
       meta: {
         currency_note:
           "Prices in EUR (internal accounting) + VND (~1 EUR = 1000 VND). " +

@@ -16,6 +16,10 @@ import {
 } from "@/lib/freepik/route-helpers";
 import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
+import {
+  isLegacyEndpointDisabled,
+  legacyGoneBody,
+} from "@/lib/api-v1/legacy-gate";
 
 const WAN_V27_RATE_LIMIT = 30;
 const WAN_V27_RATE_WINDOW_SEC = 60;
@@ -31,6 +35,15 @@ const WAN_V27_RATE_WINDOW_SEC = 60;
  * see lookupForWanV27).
  */
 export async function POST(request: Request) {
+  // Deprecation gate (2026-05-24): admin can flip DISABLE_LEGACY_MODELS
+  // env to retire this endpoint without removing code. See
+  // lib/api-v1/legacy-gate.ts.
+  if (isLegacyEndpointDisabled("wan-v27")) {
+    return NextResponse.json(legacyGoneBody("wan-v27", "kling-v3"), {
+      status: 410,
+    });
+  }
+
   const body = await parseJsonBody(request);
   const parsed = wanV27RouteInputSchema.safeParse(body);
   if (!parsed.success) {

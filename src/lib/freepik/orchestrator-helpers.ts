@@ -215,12 +215,33 @@ export function reasonMessage(reason: "not_found" | "inactive" | "expired"): str
  * customer can receive a working video URL. Anything else flips the
  * row to status='refunded' AND restores the balance.
  *
- * Idempotent — guarded by `WHERE status = 'pending'` so concurrent
- * polls / a reconcile-script overlap can't double-refund.
- *
  * Use `outcome='succeeded'` only when you actually have a URL to hand
  * the customer. Magnific FAILED, empty generated[], or function-killed
  * orphans all funnel through `outcome='failed'`.
+ *
+ * ## Refund-race safety (audit 2026-05-24)
+ *
+ * There are 3 codepaths that can finalize a pending row:
+ *   1. This function (finalizeUsageOnPoll) — called when GET /tasks/{id}
+ *      polling sees Magnific in COMPLETED or FAILED state.
+ *   2. The orphan sweeper cron (sweep-orphan-charges/route.ts) — flips
+ *      rows stuck pending > 15 min to 'refunded'.
+ *   3. The orchestrator failure paths (orchestrator.ts refundIfCharged
+ *      calls) — these never touch existing rows; they only insert NEW
+ *      rows with status='failed'/'refunded' on POST-time errors, so no
+ *      overlap with #1 or #2.
+ *
+ * #1 and #2 race for the same pending row, but both use atomic
+ * `UPDATE ... SET status='X' WHERE id=? AND status='pending' RETURNING`.
+ * Postgres serializes the UPDATEs: exactly one returns a row, the other
+ * returns 0 rows and skips the refund. No double-refund possible.
+ *
+ * The atomic flip wins BEFORE refundCode() runs, so a crash between
+ * "flip succeeded" and "refundCode succeeded" leaves the row marked
+ * refunded with NO actual balance restore. That's the
+ * POLL_REFUND_FAILED / ORPHAN_REFUND_FAILED case — logged critical for
+ * manual reconciliation. Same failure mode applies to any one of the
+ * paths whether or not the others exist.
  */
 export interface FinalizeUsageOpts {
   freepikTaskId: string;

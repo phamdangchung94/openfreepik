@@ -621,6 +621,58 @@ Check current usage:
 
 ---
 
+## Disable a legacy model endpoint (2026-05-24)
+
+UI hid WAN 2.7 + Kling Omni back in May, but the API routes stayed
+callable for backwards-compat. To kill them entirely:
+
+Vercel → Project → Settings → Environment Variables → add or edit:
+
+```
+DISABLE_LEGACY_MODELS=wan-v27,kling-omni
+```
+
+Then redeploy (or wait for next cold start — value read at request time).
+Affected routes start returning **410 Gone**:
+
+```json
+{"ok":false,"error":"ENDPOINT_DEPRECATED","message":"Model … đã ngừng phục vụ. Vui lòng chuyển sang …"}
+```
+
+`/api/v1/models` also drops them from the catalog so customers see only
+what they can actually call. Flag values:
+
+| Value | Effect |
+|---|---|
+| (unset / empty) | All legacy routes callable (default — current prod) |
+| `wan-v27` | Block WAN 2.7 only |
+| `kling-omni` | Block all 4 Omni variants (prefix shortcut) |
+| `wan-v27,kling-omni` | Block both |
+| `all` | Block every entry in legacy slug list |
+
+To revert: clear the env var + redeploy. Code stays intact.
+
+---
+
+## Customer webhook SSRF guard (2026-05-24)
+
+Customer-supplied `webhook_url` is validated against a blocklist at
+POST time AND at delivery time (defense in depth). Blocks:
+
+- Loopback (`127.0.0.0/8`, `::1`, `localhost`)
+- RFC 1918 private (`10/8`, `172.16/12`, `192.168/16`)
+- Link-local + cloud metadata (`169.254/16` covers AWS/GCP metadata IPs)
+- IPv6 unique-local (`fc00::/7`), link-local (`fe80::/10`), multicast
+- mDNS / corp suffixes: `.local`, `.internal`, `.lan`, `.intranet`,
+  `.corp`, `.home`, `.test`, `.example`, `.invalid`
+
+Helper: `lib/api-v1/url-security.ts`. Test coverage: 67 cases.
+
+If a customer reports their webhook isn't firing, check logs for
+`CUSTOMER_WEBHOOK_BLOCKED_HOST` — they likely tried a private IP.
+
+---
+
 ## 2-layer pricing model (migration 0021, 2026-05-24)
 
 Trước đây cột `pricing_rules.cost_eur` overload 2 nghĩa:

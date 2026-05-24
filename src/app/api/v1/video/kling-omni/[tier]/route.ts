@@ -19,6 +19,10 @@ import { extractCustomerWebhookUrl } from "@/lib/api-v1/response";
 import { beginIdempotency } from "@/lib/api-v1/idempotency";
 import { getWebhookUrl, withConditionalWebhook } from "@/lib/freepik/webhook-url";
 import { errFields, log } from "@/lib/logger";
+import {
+  isLegacyEndpointDisabled,
+  legacyGoneBody,
+} from "@/lib/api-v1/legacy-gate";
 
 /**
  * POST /api/v1/video/kling-omni/[tier]
@@ -58,6 +62,13 @@ export async function POST(
   }
   const { mode, tier } = parsedTier;
   const slug = endpointSlug(mode, tier);
+
+  // Deprecation gate (2026-05-24): admin flips DISABLE_LEGACY_MODELS to
+  // retire Omni without removing code. Checks per-variant slug (e.g.
+  // `kling-omni-std-video`) AND `kling-omni` prefix shortcut.
+  if (isLegacyEndpointDisabled(slug)) {
+    return NextResponse.json(legacyGoneBody(slug, "kling-3"), { status: 410 });
+  }
 
   const body = await parseJsonBody(request);
   const parsed = klingOmniRouteInputSchema.safeParse(body);

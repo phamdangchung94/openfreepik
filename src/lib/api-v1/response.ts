@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { RateLimitResult } from "@/lib/rate-limit";
+import { validateCustomerWebhookUrl } from "@/lib/api-v1/url-security";
 
 /**
  * Standardized response helpers for /api/v1/* endpoints.
@@ -77,28 +78,18 @@ export function apiSuccess<T>(opts: ApiSuccessOpts<T>): NextResponse {
 
 /**
  * Extract the optional `webhook_url` field from a parsed request body
- * and validate it as a URL. Returns null if absent or invalid (silent
- * — invalid webhook is non-fatal; customer can still poll). Used by
- * v1 video POST routes to capture the customer's notification endpoint
- * for later forwarding by finalizeUsageOnPoll.
+ * and validate it as a URL. Returns null if absent, malformed, or
+ * unsafe (loopback/private/link-local host). Silent — invalid webhook
+ * is non-fatal; customer can still poll.
  *
- * Accepts http/https only — file:// or javascript: URLs would let an
- * attacker make the server POST sensitive payloads to its own loopback
- * or trigger redirector flows.
+ * SSRF guard delegated to validateCustomerWebhookUrl() so the same
+ * policy applies at both POST validate time and webhook fire time.
+ * See url-security.ts for the block list.
  */
 export function extractCustomerWebhookUrl(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
   const raw = (body as Record<string, unknown>).webhook_url;
-  if (typeof raw !== "string" || raw.length === 0) return null;
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
+  return validateCustomerWebhookUrl(raw);
 }
 
 /**
