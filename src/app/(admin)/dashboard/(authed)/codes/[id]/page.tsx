@@ -340,7 +340,10 @@ export default function CodeDrilldownPage({
                 </thead>
                 <tbody>
                   {recent.map((t) => (
-                    <tr key={t.id} className="border-t">
+                    <tr
+                      key={t.id}
+                      className="border-t even:bg-muted/30 hover:bg-muted/50"
+                    >
                       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
                         {new Date(t.createdAt).toLocaleString()}
                       </td>

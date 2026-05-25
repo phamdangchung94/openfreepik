@@ -63,7 +63,10 @@ export function VoucherTable({
             {vouchers.map((v) => {
               const status = statusOf(v);
               return (
-                <tr key={v.id} className="border-t hover:bg-muted/30">
+                <tr
+                  key={v.id}
+                  className="border-t even:bg-muted/30 hover:bg-muted/50"
+                >
                   <td className="px-3 py-2 font-mono text-foreground/80">
                     {v.code}
                   </td>

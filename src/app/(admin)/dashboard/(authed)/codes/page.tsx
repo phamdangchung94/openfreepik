@@ -70,7 +70,11 @@ export default function AdminCodesPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/codes");
+      // limit=1000 = server cap. Server-default 50 was hiding older
+      // codes ("không hiển thị các code trước"). When we cross 1000
+      // codes, swap this for paginated "Load more" — see route's LIMIT
+      // constant comment.
+      const res = await fetch("/api/admin/codes?limit=1000");
       const json = await res.json();
       if (json.ok) setRows(json.codes);
       // Drop stale selections after reload — codes might have been
@@ -435,7 +439,12 @@ function CodeRowItem({
   }
 
   return (
-    <tr className={`border-t ${selected ? "bg-primary/5" : ""}`}>
+    // Zebra striping: selected wins (primary tint), else alternate
+    // rows tint via `even:`. Hover always nudges a touch darker so
+    // user has visual feedback wherever the cursor lands.
+    <tr
+      className={`border-t hover:bg-muted/50 ${selected ? "bg-primary/10" : "even:bg-muted/30"}`}
+    >
       <td className="w-8 px-3 py-2">
         <input
           type="checkbox"

@@ -16,11 +16,16 @@ import { parseJsonBody } from "@/lib/freepik/route-helpers";
  *
  * Audit P1-5: paginated. The LEFT JOIN aggregating succeeded usage_logs
  * per code is O(codes × usage_rows) and was returning every row — fine
- * at 4 codes, problematic past ~200 customers. Default limit 50, capped
- * at 200.
+ * at 4 codes, problematic past ~200 customers.
+ *
+ * 2026-05-24: bumped cap 200 → 1000 to match the admin /dashboard/codes
+ * UI which now sends ?limit=1000 (admin needs the full ledger visible
+ * without pagination UI). GROUP BY scales fine to that range; if we
+ * ever cross 1000 codes, switch the page to true server-paginated
+ * "Load more" instead of bumping again.
  */
 const LIST_DEFAULT_LIMIT = 50;
-const LIST_MAX_LIMIT = 200;
+const LIST_MAX_LIMIT = 1000;
 
 export async function GET(request: Request) {
   const denied = await requireAdminApi();

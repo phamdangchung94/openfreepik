@@ -181,7 +181,10 @@ export default function AdminPricingPage() {
                     (d.upstream !== undefined &&
                       d.upstream !== (r.upstreamCostEur ?? ""));
                   return (
-                    <tr key={r.id} className="border-t hover:bg-muted/30">
+                    <tr
+                      key={r.id}
+                      className="border-t even:bg-muted/30 hover:bg-muted/50"
+                    >
                       <td className="px-3 py-2 font-mono text-[11px]">
                         {r.endpoint}
                       </td>
