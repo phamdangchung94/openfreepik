@@ -40,6 +40,18 @@ const client = postgres(process.env.DATABASE_URL, {
   prepare: false,
   max: 1,
   idle_timeout: 20,
+  // Supabase pooler REJECTS plain-text connections. Without explicit
+  // `ssl: 'require'` postgres-js negotiates based on URL params alone;
+  // if DATABASE_URL omits `?sslmode=require` (Vercel envar is a bare
+  // pooler URL), the client opens a plain socket, waits for SSL handshake
+  // response that never comes, and the Vercel function times out at 10s
+  // with a 504. Setting `'require'` here forces the TLS upgrade regardless
+  // of URL params — production observed on 2026-06-02 cutover.
+  ssl: "require",
+  // Fail-fast on broken connect (e.g. DNS issue, firewall) instead of
+  // hanging 10s until Vercel kills the function. 5s is enough for
+  // Singapore→Tokyo cold TLS handshake (~250ms RTT × 2 round-trips).
+  connect_timeout: 5,
 });
 
 export const db = drizzle(client, { schema });
