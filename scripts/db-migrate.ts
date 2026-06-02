@@ -1,11 +1,15 @@
 /**
- * Apply Drizzle-generated migration files to Neon via the HTTP driver.
- * Workaround for `drizzle-kit push` hanging on Neon's pooled connection.
+ * Apply Drizzle-generated migration files to Postgres via postgres-js.
+ *
+ * Originally a workaround for `drizzle-kit push` hanging on Neon's pooled
+ * connection. After the 2026-05-31 Neon→Supabase migration we still keep
+ * this script because Supabase's pgBouncer pooler has the same issue
+ * with drizzle-kit's interactive prompts.
  *
  * Usage: pnpm tsx --env-file=.env.local scripts/db-migrate.ts
  */
 
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,13 +18,18 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+// max:1 + prepare:false matches the runtime client config — pooler safe.
+const sql = postgres(process.env.DATABASE_URL, {
+  prepare: false,
+  max: 1,
+  idle_timeout: 20,
+});
 const MIGRATIONS_DIR = "drizzle/migrations";
 
 async function main() {
   // Sanity check connection
-  const ping = await sql`SELECT now() AS now`;
-  console.log(`Connected to Neon at ${ping[0]?.now}`);
+  const ping = await sql<{ now: Date }[]>`SELECT now() AS now`;
+  console.log(`Connected at ${ping[0]?.now?.toISOString() ?? "unknown"}`);
 
   // Track applied migrations in a small table
   await sql`
@@ -54,7 +63,9 @@ async function main() {
 
     console.log(`APPLY ${filename} (${statements.length} statements)`);
     for (const stmt of statements) {
-      await sql.query(stmt);
+      // postgres-js: tagged templates parameterize, .unsafe() runs raw SQL.
+      // Migration files contain DDL with no params, so unsafe() is correct.
+      await sql.unsafe(stmt);
     }
 
     await sql`INSERT INTO __drizzle_migrations (filename) VALUES (${filename})`;
@@ -62,9 +73,11 @@ async function main() {
   }
 
   console.log("All migrations applied.");
+  await sql.end();
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Migration failed:", err);
+  await sql.end();
   process.exit(1);
 });

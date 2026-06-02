@@ -32,7 +32,7 @@
  *   - Final:    "Cập nhật vào pricing_rules? [y/N]"
  */
 
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 import { createInterface } from "node:readline/promises";
 
 const API_BASE_URL = process.env.FREEPIK_API_BASE_URL ?? "https://api.magnific.com";
@@ -48,7 +48,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = postgres(process.env.DATABASE_URL, {
+  prepare: false,
+  max: 1,
+  idle_timeout: 10,
+});
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 interface ComboKey {
@@ -307,10 +311,12 @@ async function main() {
   }
 
   rl.close();
+  await sql.end();
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Calibration failed:", err);
   rl.close();
+  await sql.end();
   process.exit(1);
 });

@@ -13,7 +13,7 @@
  * constants in scripts/seed-pricing.ts.
  */
 
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
 const RATES = {
   std_noaudio: 0.168,
@@ -29,7 +29,11 @@ async function main() {
     console.error("DATABASE_URL not set");
     process.exit(1);
   }
-  const sql = neon(process.env.DATABASE_URL);
+  const sql = postgres(process.env.DATABASE_URL, {
+    prepare: false,
+    max: 1,
+    idle_timeout: 10,
+  });
 
   let count = 0;
   for (const tier of ["std", "pro"] as const) {
@@ -67,6 +71,7 @@ async function main() {
   for (const r of verify) {
     console.log(`  ${r.tier}/5s/audio=${r.with_audio}: ${r.cost_eur} EUR`);
   }
+  await sql.end();
 }
 
 main().catch((err) => {

@@ -1,6 +1,10 @@
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
-const sql = neon(process.env.DATABASE_URL!);
+const sql = postgres(process.env.DATABASE_URL!, {
+  prepare: false,
+  max: 1,
+  idle_timeout: 10,
+});
 
 async function main() {
   const rows = await sql`
@@ -36,7 +40,10 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(() => sql.end())
+  .catch(async (e) => {
+    console.error(e);
+    await sql.end();
+    process.exit(1);
+  });

@@ -4,14 +4,18 @@
  * Usage: pnpm db:status
  */
 
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL not set");
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = postgres(process.env.DATABASE_URL, {
+  prepare: false,
+  max: 1,
+  idle_timeout: 10,
+});
 
 const TABLES = [
   "freepik_keys",
@@ -27,13 +31,20 @@ const TABLES = [
 async function main() {
   const rows: Array<{ table: string; rows: number }> = [];
   for (const t of TABLES) {
-    const result = await sql.query(`SELECT count(*)::int AS n FROM ${t}`);
-    rows.push({ table: t, rows: (result[0] as { n: number }).n });
+    // postgres-js: tagged templates parameterize, sql.unsafe() for
+    // dynamic identifiers (table name interpolation). Table names come
+    // from a hard-coded allowlist above so no injection risk.
+    const result = await sql.unsafe<{ n: number }[]>(
+      `SELECT count(*)::int AS n FROM ${t}`,
+    );
+    rows.push({ table: t, rows: result[0]?.n ?? 0 });
   }
   console.table(rows);
+  await sql.end();
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Status check failed:", err);
+  await sql.end();
   process.exit(1);
 });

@@ -1,17 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_COOKIE_NAME } from "@/lib/auth/admin";
+import {
+  DB_MIGRATION_RETRY_AFTER_SECONDS,
+  isDbMigrationMaintenanceMode,
+} from "@/lib/db/maintenance";
 
 /**
- * Edge proxy — two responsibilities, ordered intentionally:
+ * Edge proxy - three responsibilities, ordered intentionally:
  *
- *   1. **Canonical-host redirect**: funnel all customer-facing browser
+ *   1. **DB migration maintenance gate**: temporarily stop all API
+ *      traffic during a database snapshot + cutover so no writes land
+ *      in the old database after the snapshot was taken.
+ *
+ *   2. **Canonical-host redirect**: funnel all customer-facing browser
  *      traffic to https://video.chugax.io.vn so docs URLs + bookmarks
  *      always show the canonical brand. Aliases (freepik.io.vn,
  *      openfreepik.vercel.app, etc.) get 308'd. /api/* exempted for
  *      backwards-compat (existing customer integrations + Magnific
  *      webhook delivery keyed on the old aliases).
  *
- *   2. **Dashboard auth gate**: any /dashboard/* hit without the admin
+ *   3. **Dashboard auth gate**: any /dashboard/* hit without the admin
  *      session cookie redirects to /dashboard/login.
  *
  * Historical note: this file used to host an /api/* Origin allowlist
@@ -39,6 +47,26 @@ export function proxy(request: NextRequest) {
   const isDev = host.startsWith("localhost") || host.startsWith("127.0.0.1");
   const isPreview = host.endsWith(".vercel.app");
   const isApi = pathname.startsWith("/api/");
+
+  // -- 1. DB migration maintenance gate -----------------------------
+  // Block reads too: several GET poll + cron endpoints finalize tasks
+  // and therefore write to the DB. Keeping one simple API-wide gate
+  // prevents a stale Neon snapshot during the Supabase cutover.
+  if (isApi && isDbMigrationMaintenanceMode()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "DB_MIGRATION_MAINTENANCE",
+        message: "Service is briefly unavailable during database maintenance.",
+      },
+      {
+        status: 503,
+        headers: {
+          "Retry-After": String(DB_MIGRATION_RETRY_AFTER_SECONDS),
+        },
+      },
+    );
+  }
 
   if (!isCanonical && !isDev && !isPreview && !isApi) {
     const targetUrl = `https://${CANONICAL_HOST}${pathname}${search}`;

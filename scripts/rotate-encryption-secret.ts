@@ -18,7 +18,7 @@
  * detects decryption failures with --old-secret and reports zero changes.
  */
 
-import { neon } from "@neondatabase/serverless";
+import postgres from "postgres";
 
 interface Args {
   url: string;
@@ -110,12 +110,10 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = neon(url);
-  const rows = (await sql`SELECT id, label, key_encrypted FROM freepik_keys`) as Array<{
-    id: string;
-    label: string;
-    key_encrypted: string;
-  }>;
+  const sql = postgres(url, { prepare: false, max: 1, idle_timeout: 10 });
+  const rows = await sql<
+    { id: string; label: string; key_encrypted: string }[]
+  >`SELECT id, label, key_encrypted FROM freepik_keys`;
 
   console.log(`Found ${rows.length} freepik_keys row(s) on this DB`);
   let rotated = 0;
@@ -148,6 +146,7 @@ async function main() {
 
   console.log("");
   console.log(`Summary: rotated=${rotated}, alreadyNew=${alreadyNew}, failed=${failed}`);
+  await sql.end();
   if (failed > 0) process.exit(1);
 }
 

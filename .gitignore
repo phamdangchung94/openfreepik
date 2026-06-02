@@ -45,3 +45,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# DB migration dumps — Neon→Supabase one-off migration 2026-05-31.
+# Contains AES-encrypted blobs + customer codes + 5k usage_logs rows.
+# Deleted manually post-cutover; never commit.
+/migrations-data/
+*.dump
+*.sql.gz
