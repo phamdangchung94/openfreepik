@@ -52,6 +52,8 @@ const sql = postgres(process.env.DATABASE_URL, {
   prepare: false,
   max: 1,
   idle_timeout: 10,
+  ssl: "require",
+  connect_timeout: 5,
 });
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 

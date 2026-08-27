@@ -15,32 +15,33 @@ const sql = postgres(process.env.DATABASE_URL, {
   prepare: false,
   max: 1,
   idle_timeout: 10,
+  ssl: "require",
+  connect_timeout: 5,
 });
-
-const TABLES = [
-  "freepik_keys",
-  "activation_codes",
-  "usage_logs",
-  "pricing_rules",
-  "admin_sessions",
-  "rate_limit_buckets",
-  "failed_logins",
-  "__drizzle_migrations",
-] as const;
 
 async function main() {
   const rows: Array<{ table: string; rows: number }> = [];
-  for (const t of TABLES) {
-    // postgres-js: tagged templates parameterize, sql.unsafe() for
-    // dynamic identifiers (table name interpolation). Table names come
-    // from a hard-coded allowlist above so no injection risk.
+  const tables = await sql<{ table: string }[]>`
+    SELECT tablename AS table
+    FROM pg_tables
+    WHERE schemaname = 'public'
+    ORDER BY tablename
+  `;
+
+  for (const { table } of tables) {
+    // postgres-js parameterizes values, not identifiers. Table names come
+    // from Postgres' public schema catalog and are quoted before use.
     const result = await sql.unsafe<{ n: number }[]>(
-      `SELECT count(*)::int AS n FROM ${t}`,
+      `SELECT count(*)::int AS n FROM public.${quoteIdentifier(table)}`,
     );
-    rows.push({ table: t, rows: result[0]?.n ?? 0 });
+    rows.push({ table, rows: result[0]?.n ?? 0 });
   }
   console.table(rows);
   await sql.end();
+}
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
 }
 
 main().catch(async (err) => {

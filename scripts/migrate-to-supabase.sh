@@ -198,11 +198,14 @@ echo "    Dump complete: $DUMP_SIZE"
 
 echo ""
 echo "==> Phase 2: pg_restore into Supabase"
+# `set -u` strict-mode-safe expansion of a possibly-empty array. The
+# ${arr[@]+"${arr[@]}"} form expands to nothing when the array is unset
+# OR empty, instead of erroring out. Standard bash array idiom.
 if ! "$PG_RESTORE" \
   --no-owner --no-acl \
   --exit-on-error \
   --dbname="$SUPABASE_DIRECT_URL" \
-  "${RESTORE_CLEAN_ARGS[@]}" \
+  ${RESTORE_CLEAN_ARGS[@]+"${RESTORE_CLEAN_ARGS[@]}"} \
   "$DUMP_FILE" >"$RESTORE_LOG" 2>&1; then
   tail -40 "$RESTORE_LOG" >&2
   echo "ERROR: pg_restore failed; refusing to continue to cutover." >&2

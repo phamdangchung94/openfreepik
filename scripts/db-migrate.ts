@@ -23,6 +23,8 @@ const sql = postgres(process.env.DATABASE_URL, {
   prepare: false,
   max: 1,
   idle_timeout: 20,
+  ssl: "require",
+  connect_timeout: 5,
 });
 const MIGRATIONS_DIR = "drizzle/migrations";
 

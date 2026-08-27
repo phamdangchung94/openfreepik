@@ -33,6 +33,8 @@ async function main() {
     prepare: false,
     max: 1,
     idle_timeout: 10,
+    ssl: "require",
+    connect_timeout: 5,
   });
 
   let count = 0;

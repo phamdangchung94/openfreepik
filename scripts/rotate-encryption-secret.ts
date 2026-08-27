@@ -110,7 +110,13 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = postgres(url, { prepare: false, max: 1, idle_timeout: 10 });
+  const sql = postgres(url, {
+    prepare: false,
+    max: 1,
+    idle_timeout: 10,
+    ssl: "require",
+    connect_timeout: 5,
+  });
   const rows = await sql<
     { id: string; label: string; key_encrypted: string }[]
   >`SELECT id, label, key_encrypted FROM freepik_keys`;
