@@ -16,18 +16,24 @@ Customer-facing: same URL, no `/dashboard`.
 | Vercel deployments | https://vercel.com/chugaxs-projects/openfreepik/deployments |
 | Vercel logs (live) | https://vercel.com/chugaxs-projects/openfreepik/logs |
 | Vercel env vars | https://vercel.com/chugaxs-projects/openfreepik/settings/environment-variables |
-| Neon project | https://console.neon.tech (Project: openfreepik / db: neondb) |
+| Supabase projects | https://supabase.com/dashboard/projects |
+| Neon project (temporary rollback source) | https://console.neon.tech (Project: openfreepik / db: neondb) |
 | GitHub repo | https://github.com/phamdangchung94/openfreepik |
 | Open audit reports | [`plans/audits/`](../plans/audits/) |
 | Schema | [`src/lib/db/schema.ts`](../src/lib/db/schema.ts) |
 
 ## Required env vars
 
-All of these are set in Vercel production AND mirrored in `.env.local` for development. `DATABASE_URL` in `.env.local` points to the Neon `dev` branch (split landed 2026-05-12 — audit #2 closed). Other secrets currently mirror production values; rotate the dev branch's `KEY_ENCRYPTION_SECRET` later if you need full isolation of the encrypted key blobs too.
+All of these are set in Vercel production and mirrored in `.env.local`
+for development. After the 2026-05-31 Supabase cutover, production
+`DATABASE_URL` must point to Supabase's transaction pooler on port
+`6543`; restore/migration one-shots use a direct/session URL on port
+`5432`. For local work, prefer a Supabase non-production database and
+verify the host before running `db:*` scripts.
 
 | Var | Purpose | Rotation impact |
 |-----|---------|-----------------|
-| `DATABASE_URL` | Neon pooled connection | Redeploy needed; new conn string takes effect on next request |
+| `DATABASE_URL` | Supabase Postgres connection. Runtime: transaction pooler `:6543`; maintenance: direct/session `:5432` | Redeploy needed; new conn string takes effect on next request |
 | `KEY_ENCRYPTION_SECRET` | AES-GCM key for Freepik keys at rest | **All existing Freepik keys decrypt fail** — must re-encrypt every row before swap |
 | `ADMIN_PASSWORD` | Login to `/dashboard` | Active admin sessions still valid until cookie expires (24h) |
 | `ADMIN_SESSION_SECRET` | Cookie session validation | All admin sessions invalidated immediately on rotation |
@@ -90,22 +96,31 @@ Magnific's push delivery cuts customer wait time from "poll every 2-10s" to "ins
 
 Signature verification uses HMAC-SHA256 over `${webhook-id}.${webhook-timestamp}.${raw-body}`. We try the secret as UTF-8 raw bytes, hex-decoded, and base64-decoded so different Magnific surface formats all work. Replay window is 5 min.
 
-### Dev / production database split (audit #2 — DONE 2026-05-12)
+### Dev / production database discipline
 
-Neon project has two branches now:
-- **`production`** — primary, default. Used by Vercel prod + preview deploys via `DATABASE_URL`.
-- **`dev`** — copy-on-write snapshot. Used by local `pnpm dev` / `db:*` scripts via the `DATABASE_URL` in `.env.local`.
+Supabase is now the primary database. Production and preview deploys
+read `DATABASE_URL` from Vercel. Local `pnpm dev` / `db:*` scripts read
+`.env.local`, so check that file before every destructive operation.
 
 Operations:
 
-- **Apply a schema migration to dev first**: `pnpm db:migrate` (runs against dev). Once it works, paste the SQL into the Neon Console SQL editor under the `production` branch — or wait for the next prod deploy to run migrations as part of build.
-- **Reset dev from prod** (e.g. before testing a destructive change against fresh data): Neon Console → `dev` branch → **Reset from parent**. Instant.
-- **Pull a fresh dev snapshot after a major prod write** (e.g. customer support manually fixed something on prod): same Reset from parent.
-- **Promote a dev change to prod** (e.g. you tested a migration on dev and want it live): Neon doesn't auto-promote — apply the migration to `production` separately, either via the SQL editor or `pnpm db:migrate` against a temporary `.env.local` pointed at prod.
+- **Apply a schema migration locally first**: point `.env.local` at a
+  Supabase non-production database, run `pnpm db:migrate`, then promote
+  the same migration to production using a Supabase direct/session URL.
+- **Runtime connection**: Vercel production should use the Supabase
+  transaction pooler on port `6543`.
+- **Maintenance connection**: `pg_restore`, bulk SQL, and emergency
+  migration work should use a Supabase direct/session URL on port `5432`.
+- **Cutover snapshot**: keep Neon and the local dump file for 24-48h
+  after Supabase production is stable, then archive/delete them.
 
 Caveats:
-- `KEY_ENCRYPTION_SECRET` still mirrors prod (so dev can decrypt the snapshot's `freepik_keys`). If you want full isolation of the encrypted-key blob — useful for testing key-rotation — generate a separate dev secret and re-encrypt the dev branch's `freepik_keys` rows.
-- Webhook delivery currently points at prod URL; webhooks from your dev tasks will hit prod's `/api/freepik/webhook` (signature mismatch → ignored). Acceptable today; add a separate `WEBHOOK_BASE_URL` once you start regular dev-side video testing.
+- `KEY_ENCRYPTION_SECRET` may still mirror prod in development so copied
+  `freepik_keys` rows can decrypt. Generate a dev-specific secret and
+  re-encrypt dev rows if you need full crypto isolation.
+- Webhook delivery should use a dev `WEBHOOK_BASE_URL` once you run
+  regular dev-side video testing; otherwise dev tasks may still call the
+  production webhook URL and get ignored by signature checks.
 
 ### Mint an activation code for a new customer
 
@@ -271,9 +286,9 @@ Trivial. `vercel env rm ADMIN_PASSWORD production`, then `vercel env add ADMIN_P
 
 Anyone with an active admin cookie gets logged out immediately on next request. Schedule for low-traffic hours.
 
-### Rotate `DATABASE_URL` (Neon password reset)
+### Rotate `DATABASE_URL` (Supabase)
 
-1. Neon console → Project → **Roles** → `neondb_owner` → **Reset password** → copy new pooled connection string
+1. Supabase dashboard → Project → Database → Connection string → copy the transaction-pooler URL on port `6543`
 2. `vercel env rm DATABASE_URL production && vercel env add DATABASE_URL production` → paste
 3. Redeploy
 4. Verify: `curl https://video.chugax.io.vn/api/admin/overview` (need a valid admin cookie)
@@ -291,9 +306,9 @@ pnpm db:generate    # Drizzle Kit watches src/lib/db/schema.ts diff
 # Apply locally first
 pnpm db:migrate
 
-# Once verified locally, the SAME migration runs against production on
-# the next `pnpm db:migrate` against the prod DATABASE_URL.
-DATABASE_URL=<prod-pooled-url> pnpm db:migrate
+# Once verified locally, apply the same migration against production
+# using a Supabase direct/session URL when possible.
+DATABASE_URL=<prod-direct-or-session-url> pnpm db:migrate
 ```
 
 ### Rolling back a bad migration
@@ -308,7 +323,7 @@ Drizzle does NOT auto-generate down migrations. You write the inverse manually:
 
 ### Manual hot-fix on production data
 
-Use Neon's web SQL console: https://console.neon.tech → Project → **SQL Editor**. Avoid running queries from your local terminal against prod (footgun).
+Use Supabase SQL Editor: https://supabase.com/dashboard/projects → Project → **SQL Editor**. Avoid running queries from your local terminal against prod (footgun).
 
 Common queries:
 
@@ -341,7 +356,7 @@ DELETE FROM failed_logins WHERE ip = '1.2.3.4';
    - `event="CRON_PARTIAL"` — purge job had a failure
 2. **Vercel functions tab**: error rate per route, p50/p99 latency
 3. **Admin dashboard `/dashboard`**: code count, key budget remaining, today's usage
-4. **Neon dashboard → Monitoring**: connection count, slow queries, storage size
+4. **Supabase dashboard → Reports / Database**: connection count, slow queries, storage size
 
 ### Structured log events worth alerting on
 
@@ -353,7 +368,7 @@ configured (see Setup Telegram alerts below).
 
 | Event | Severity | Source | Action |
 |-------|----------|--------|--------|
-| `REFUND_FAILED` | CRITICAL | orchestrator-helpers | Inspect `codeId` + `amountEur`; manual SQL refund via Neon console |
+| `REFUND_FAILED` | CRITICAL | orchestrator-helpers | Inspect `codeId` + `amountEur`; manual SQL refund via Supabase SQL Editor |
 | `POLL_REFUND_FAILED` | CRITICAL | poll path finalize | Row marked refunded but balance not restored — manual SQL |
 | `ALL_KEYS_EXHAUSTED` | HIGH | orchestrator | Add Freepik key OR reactivate paused ones; customers seeing 503. Telegram alert fires automatically. |
 | `ORPHAN_CHARGE_REFUNDED` | INFO | sweep-orphan-charges cron | Auto-refund happened; no action needed unless frequent (then investigate root crash cause) |
@@ -610,13 +625,13 @@ No action needed in normal operation; if cron stops firing,
 |----------|------|-----------|------------|-----------------|
 | Vercel | Hobby (free) | 100h function execution / month | Same | Customer #5 (audit `$2`) |
 | Vercel | Pro ($20/mo) | Unlimited execution | Bandwidth, function memory | — |
-| Neon | Free | 191.9 compute hours / mo, 0.5 GB storage | Same | Customer #80 (audit `$1`) |
-| Neon | Pro ($19/mo) | 300 compute hours / mo, 10 GB storage | Same | — |
+| Supabase | Free | Monitor database size, connection usage, and project limits in dashboard | Plan limits | Before storage or connection limits become customer-visible |
+| Supabase | Paid | Higher database/storage/connection limits | Plan limits | When free tier warnings appear |
 | Freepik | Per-account | 500 EUR free credit | Same | Add 2nd account when 1st <100 EUR remaining |
 
 Check current usage:
 - Vercel: https://vercel.com/chugaxs-projects/openfreepik/usage
-- Neon: console → Project → **Monitoring** → "Compute hours used this billing period"
+- Supabase: dashboard → Project → **Reports / Database**
 - Freepik: https://www.freepik.com/api/dashboard (per account)
 
 ---
@@ -703,7 +718,7 @@ Vào `/dashboard/pricing` → mỗi row có 2 input + cột Margin %:
 Sau khi save: pricing áp dụng cho request KẾ TIẾP — không retroactive.
 `usage_logs` rows cũ giữ snapshot tại thời điểm POST.
 
-### Quick margin report (Neon SQL)
+### Quick margin report (Supabase SQL)
 
 ```sql
 -- P&L 30 ngày gần nhất, group theo endpoint
@@ -735,7 +750,7 @@ Rows với `upstream_cost_eur IS NULL` = legacy data trước migration 0021 (kh
 ### "Customer says they were charged but no video"
 
 1. Find their code in the dashboard `/dashboard/codes`
-2. Cross-reference `usage_logs` (Neon SQL editor): `SELECT * FROM usage_logs WHERE code_id = '<id>' ORDER BY created_at DESC LIMIT 20`
+2. Cross-reference `usage_logs` (Supabase SQL Editor): `SELECT * FROM usage_logs WHERE code_id = '<id>' ORDER BY created_at DESC LIMIT 20`
 3. If status = `succeeded` and `video_url` is set → URL works, customer just hasn't refreshed history
 4. If status = `succeeded` but `video_url` is null → Freepik task likely still polling; check `freepik_task_id` against Freepik's API directly
 5. If status = `refunded` → balance was reverted; tell customer to retry
@@ -751,7 +766,7 @@ Rows với `upstream_cost_eur IS NULL` = legacy data trước migration 0021 (kh
 
 You hit the brute-force protection (audit fix #8). Two options:
 - Wait 15 min, retry with correct password
-- Manual unlock via Neon: `DELETE FROM failed_logins WHERE ip = '<your IP>';`
+- Manual unlock via Supabase SQL Editor: `DELETE FROM failed_logins WHERE ip = '<your IP>';`
 
 Find your IP at https://api.ipify.org or via Vercel logs.
 
@@ -768,7 +783,7 @@ Find your IP at https://api.ipify.org or via Vercel logs.
 |------|---------|
 | You (admin) | (your email) |
 | Freepik API support | https://www.freepik.com/profile/support |
-| Neon support | https://neon.tech/docs/introduction/support |
+| Supabase support | https://supabase.com/support |
 | Vercel support | https://vercel.com/support (Pro tier only — Hobby is community Discord) |
 
 ---
@@ -788,7 +803,7 @@ pricing rows kept for revert — see `model-picker.tsx` commented option).
 
 Pricing model: base table provided by anh + 10% retail markup. To change
 the markup, update `scripts/seed-kling-motion-pricing.sql` and re-run
-on prod via Neon MCP (idempotent DELETE-then-INSERT).
+on prod via Supabase SQL Editor (idempotent DELETE-then-INSERT).
 
 Routes: `/api/freepik/kling-motion/[tier]` (POST) + `/[taskId]` (GET poll).
 
@@ -922,7 +937,7 @@ sau, Omni không bị ảnh hưởng.
 schema accept nhưng UI chưa expose. Defer to next phase.
 
 **To change pricing**: update `scripts/seed-kling-omni-pricing.sql`
-và re-run qua Neon MCP. Idempotent DELETE-then-INSERT.
+và re-run qua Supabase SQL Editor. Idempotent DELETE-then-INSERT.
 
 **To revert**: remove `kling-omni` từ `model-picker.tsx` options.
 Backend routes (`/api/freepik/kling-omni/[tier]`, `/api/v1/video/kling-omni/[tier]`)

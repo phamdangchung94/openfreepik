@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     return await handle(request);
   } catch (err) {
     // Server-side log keeps the full stack — but the response body
-    // never includes Drizzle SQL error text or Neon connection
+    // never includes Drizzle SQL error text or database connection
     // hostnames. Audit P0-3.
     log.error("USAGE_500", errFields(err));
     return NextResponse.json(
@@ -30,16 +30,14 @@ export async function GET(request: Request) {
 }
 
 /**
- * Drizzle's neon-http driver returns timestamptz columns as ISO strings,
- * NOT Date objects (unlike the node-postgres driver). Calling
- * `.toISOString()` directly throws a TypeError. Normalise both shapes
- * into ISO so the customer-facing JSON is consistent regardless of
- * which driver Drizzle picks.
+ * Different Drizzle drivers can return timestamptz columns as Date
+ * objects or ISO strings. Normalize both shapes into ISO so the
+ * customer-facing JSON is consistent.
  */
 function toIso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
   if (v instanceof Date) return v.toISOString();
-  // Already a string from neon-http; trust it.
+  // Already an ISO string from the driver; trust it.
   return String(v);
 }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { rawRows } from "@/lib/db/raw-rows";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 
 /**
@@ -94,16 +95,6 @@ export async function GET() {
     WHERE status = 'succeeded'
   `);
 
-  // Drizzle's neon-http driver wraps results as { rows }; node-postgres
-  // returns the rows directly. Normalize.
-  function rowsOf<T>(r: unknown): T[] {
-    if (Array.isArray(r)) return r as T[];
-    if (r && typeof r === "object" && "rows" in r) {
-      return (r as { rows: T[] }).rows;
-    }
-    return [];
-  }
-
   type TierRow = { tier: string | null; videos: string; eur: string };
   type CustRow = {
     code_id: string;
@@ -121,10 +112,10 @@ export async function GET() {
     week_eur: string;
   };
 
-  const tierRows = rowsOf<TierRow>(byTier);
-  const custRows = rowsOf<CustRow>(byCustomer);
-  const dayRows = rowsOf<DayRow>(byDay);
-  const totRow = rowsOf<TotRow>(totals)[0];
+  const tierRows = rawRows<TierRow>(byTier);
+  const custRows = rawRows<CustRow>(byCustomer);
+  const dayRows = rawRows<DayRow>(byDay);
+  const totRow = rawRows<TotRow>(totals)[0];
 
   return NextResponse.json({
     ok: true,

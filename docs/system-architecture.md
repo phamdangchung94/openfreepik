@@ -44,7 +44,7 @@ Plus a free prompt-enhancement endpoint (`/v1/ai/improve-prompt`).
 | UI       | React 19, Tailwind v4, shadcn/ui v4 (base-ui) |
 | Forms    | react-hook-form 7 + Zod v4 (custom resolver)  |
 | Client state | Zustand 5 (localStorage persist)          |
-| Database | Neon Postgres + Drizzle ORM 0.45              |
+| Database | Supabase Postgres + Drizzle ORM 0.45          |
 | Storage  | Cloudflare R2 (video mirror, image upload)    |
 | Hosting  | Vercel (Fluid runtime, sin1 region, cron)     |
 | Upstream | Magnific / Freepik API                        |
@@ -558,12 +558,10 @@ desktop branch.
 
 ## Local Dev
 
-`.env.local` `DATABASE_URL` points to the Neon `dev` branch (split
-landed 2026-05-12 — audit #2 closed). Local `pnpm dev`, `db:migrate`,
-`db:seed-pricing`, etc. all touch dev only; production data is safe.
-`KEY_ENCRYPTION_SECRET` still mirrors prod (so dev can decrypt the
-snapshot's `freepik_keys`); generate a dev-specific secret if you
-need full crypto isolation. Webhook URL still points at prod, so
-any test video kicked off locally will trigger a webhook to the
-prod endpoint (signature mismatch → ignored). See
-[`RUNBOOK.md`](RUNBOOK.md) for the operational details.
+`.env.local` `DATABASE_URL` should point to a Supabase non-production
+database for normal development. Runtime deploys use Supabase's
+transaction pooler; restore and emergency maintenance use a
+direct/session URL. `KEY_ENCRYPTION_SECRET` may still mirror prod so
+copied `freepik_keys` rows can decrypt; generate a dev-specific secret
+if you need full crypto isolation. See [`RUNBOOK.md`](RUNBOOK.md) for
+the production-safe workflow.

@@ -345,7 +345,7 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │   │   └── login-throttle.ts ....... brute-force protection
 │   ├── crypto/aes-gcm.ts ........... mã hoá Freepik key trong DB
 │   ├── db/
-│   │   ├── client.ts ............... Drizzle + Neon Postgres pool
+│   │   ├── client.ts ............... Drizzle + Supabase Postgres pool
 │   │   └── schema.ts ............... bảng (xem mục Data Model)
 │   ├── form/
 │   │   ├── generator-schema.ts ..... Zod v4 schema
@@ -386,7 +386,7 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 ├── src/proxy.ts .................... Next.js middleware (auth check cho /dashboard/(authed))
 │
 ├── ┌──────────────────────────────────────────────────────────────────────────────┐
-│   │  🗄️ DATA MODEL (Neon Postgres + Drizzle)                                    │
+│   │  🗄️ DATA MODEL (Supabase Postgres + Drizzle)                                │
 │   └──────────────────────────────────────────────────────────────────────────────┘
 │
 ├── drizzle/migrations/ .............. 0000 → 0014
@@ -451,9 +451,9 @@ OpenFreepik — SaaS Video Generation (Kling V3 / Kling 4K / WAN V2.7 / Improve 
 │     Inbound (Magnific push delivery → us):
 │       - POST {WEBHOOK_BASE_URL}/api/freepik/webhook (Svix-style HMAC, per-key secret)
 │   • Cloudflare R2 (env: R2_ACCOUNT_ID, R2_BUCKET, R2_PUBLIC_URL_BASE…) → video mirror, image upload
-│   • Neon Postgres — 2 branches:
-│       - production: Vercel prod + preview deploys
-│       - dev: local .env.local (split landed 2026-05-12)
+│   • Supabase Postgres:
+│       - production: Vercel prod + preview deploys via transaction pooler
+│       - dev/local: .env.local should point to a non-production Supabase DB
 │   • Vercel Cron (vercel.json) — daily purge + key healthcheck
 │
 └── ┌──────────────────────────────────────────────────────────────────────────────┐

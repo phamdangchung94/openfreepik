@@ -20,7 +20,7 @@
 -- default; we DELETE existing motion rows first to keep this script
 -- idempotent across re-runs.
 --
--- Apply: paste into Neon SQL Editor on the production branch.
+-- Apply: paste into Supabase SQL Editor on the production database.
 
 -- Step 1 — clear existing motion rows (idempotent).
 DELETE FROM pricing_rules

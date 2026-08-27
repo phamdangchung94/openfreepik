@@ -74,7 +74,7 @@ export async function GET(
     return await handle(request, params);
   } catch (err) {
     // Server-side log keeps the stack; client gets a generic message.
-    // Drizzle SQL error text + Neon hostnames must NOT leak. Audit P0-3.
+    // Drizzle SQL error text + database hostnames must NOT leak. Audit P0-3.
     const { taskId } = (await params.catch(() => ({ taskId: "?" }))) as { taskId: string };
     log.error("DOWNLOAD_PROXY_500", { taskId, ...errFields(err) });
     return Response.json(
@@ -173,8 +173,8 @@ async function handle(
     );
   }
 
-  // neon-http returns timestamptz as ISO string; node-postgres returns
-  // Date. Normalise to ms so the comparison works either way. Note:
+  // Drizzle drivers can return timestamptz as ISO string or Date.
+  // Normalize to ms so the comparison works either way. Note:
   // `row` is guaranteed defined here because if it were undefined the
   // upstreamUrl resolution block would have returned 404 above.
   if (row?.expiresAt) {

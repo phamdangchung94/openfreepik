@@ -1,7 +1,7 @@
 -- Migration 0007 — add per-key Magnific webhook signing secret.
 -- Same payload as drizzle/migrations/0007_add_key_webhook_secret.sql;
--- shipped as a stand-alone file so admin can apply it via the Neon
--- SQL editor when DATABASE_URL isn't available locally (Vercel
+-- shipped as a stand-alone file so admin can apply it via the Supabase
+-- SQL Editor when DATABASE_URL isn't available locally (Vercel
 -- Sensitive-env policy blocks `vercel env pull` from returning it).
 --
 -- Idempotent — re-running is a no-op once the column exists.

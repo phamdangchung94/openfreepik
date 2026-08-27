@@ -3,7 +3,7 @@
 -- Both endpoints (kling-4k-t2v + kling-4k-i2v) priced identically.
 -- Idempotent — re-running just refreshes cost_eur + updated_at.
 --
--- Apply: paste into Neon SQL Editor on the production branch.
+-- Apply: paste into Supabase SQL Editor on the production database.
 
 INSERT INTO pricing_rules (endpoint, tier, duration_seconds, with_audio, cost_eur)
 VALUES

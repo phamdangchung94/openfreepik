@@ -10,9 +10,9 @@ import { requireAdminApi } from "@/lib/auth/admin-server";
  * Aggregates Freepik upstream EUR burn rate + remaining balance per
  * key, projects days-until-exhaustion based on 7-day moving average.
  *
- * Why only Freepik (not Vercel/Neon/R2): admin uses Vercel Pro tier
+ * Why only Freepik (not Vercel/Supabase/R2): admin uses Vercel Pro tier
  * — function/log quotas are essentially unlimited at current scale.
- * Neon free tier + R2 free egress are also comfortably within budget.
+ * Supabase/R2 infrastructure is monitored separately from this forecast.
  * The one cost that DOES move with usage and runs out unpredictably
  * is the Freepik account credit.
  *

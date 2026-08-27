@@ -7,6 +7,7 @@
 
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { rawRows } from "@/lib/db/raw-rows";
 import { freepikKeys, type NewFreepikKey } from "@/lib/db/schema";
 import { decrypt, encrypt } from "@/lib/crypto/aes-gcm";
 import { log } from "@/lib/logger";
@@ -144,8 +145,12 @@ export async function pickActiveKey(
       (freepik_keys.webhook_secret_encrypted IS NOT NULL) AS has_webhook_secret;
   `);
 
-  // Neon HTTP driver returns { rows: T[], ... } despite the generic shape.
-  const rows = (result as unknown as { rows: Array<{ id: string; label: string; key_encrypted: string; has_webhook_secret: boolean }> }).rows;
+  const rows = rawRows<{
+    id: string;
+    label: string;
+    key_encrypted: string;
+    has_webhook_secret: boolean;
+  }>(result);
   const row = rows[0];
   if (!row) return null;
 
@@ -238,7 +243,12 @@ export async function keyPoolStats(costEur: number): Promise<{
       )::text AS active_with_slots
     FROM freepik_keys;
   `);
-  const rows = (result as unknown as { rows: Array<{ total: string; active: string; active_with_budget: string; active_with_slots: string }> }).rows;
+  const rows = rawRows<{
+    total: string;
+    active: string;
+    active_with_budget: string;
+    active_with_slots: string;
+  }>(result);
   const row = rows[0] ?? { total: "0", active: "0", active_with_budget: "0", active_with_slots: "0" };
   return {
     activeWithSlots: Number(row.active_with_slots),

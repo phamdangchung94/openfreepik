@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { rawRows } from "@/lib/db/raw-rows";
 import { activationCodes, apiKeys, usageLogs } from "@/lib/db/schema";
 import { requireAdminApi } from "@/lib/auth/admin-server";
 import { parseJsonBody } from "@/lib/freepik/route-helpers";
@@ -90,7 +91,15 @@ export async function GET() {
     GROUP BY key_id
   `);
 
-  const statsRows = (stats as unknown as { rows: Array<{ key_id: string; req_count: string; success_count: string; refunded_count: string; failed_count: string; pending_count: string; spend_eur: string }> }).rows;
+  const statsRows = rawRows<{
+    key_id: string;
+    req_count: string;
+    success_count: string;
+    refunded_count: string;
+    failed_count: string;
+    pending_count: string;
+    spend_eur: string;
+  }>(stats);
   const statsByKey = new Map<string, (typeof statsRows)[number]>();
   for (const s of statsRows) statsByKey.set(s.key_id, s);
 

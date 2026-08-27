@@ -4,7 +4,7 @@
 -- a generate_audio field). Per business rule both audio variants
 -- price identically at 1.12 EUR/s × duration.
 --
--- Apply: paste into Neon SQL Editor on the production branch. Safe
+-- Apply: paste into Supabase SQL Editor on the production database. Safe
 -- to re-run (idempotent via ON CONFLICT).
 
 -- Step 1 — migrate existing rows from tier=NULL → tier='4k'.

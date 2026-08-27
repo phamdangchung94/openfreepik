@@ -5,14 +5,14 @@ authenticate with an admin-issued activation code; the server pools
 multiple Freepik API keys behind the scenes and meters per-customer
 usage.
 
-**Live**: https://openfreepik.vercel.app
-**Admin**: https://openfreepik.vercel.app/dashboard
+**Live**: https://video.chugax.io.vn
+**Admin**: https://video.chugax.io.vn/dashboard
 
 ## Stack
 
 - Next.js 16 (App Router, Turbopack)
 - React 19
-- Drizzle ORM + Neon Postgres
+- Drizzle ORM + Supabase Postgres
 - Zustand (client state)
 - TailwindCSS + Base UI components
 - Vercel deploy + Cron
@@ -27,13 +27,12 @@ pnpm db:seed-pricing             # seed the pricing matrix
 pnpm dev                         # http://localhost:3000
 ```
 
-> 🌿 **Local dev talks to the Neon `dev` branch, not production** (since
-> 2026-05-12). Pasting `pnpm db:migrate` / `pnpm db:seed-pricing` /
-> arbitrary SQL won't touch real customer data. The dev branch is a
-> copy-on-write snapshot of prod taken at branch creation; reset it
-> from the Neon Console any time it drifts: project → Branches → `dev`
-> → "Reset from parent". See [`docs/RUNBOOK.md#separate-the-dev-database-from-production-audit-2`](docs/RUNBOOK.md)
-> for the workflow.
+> **Database safety**: after the Supabase cutover, `.env.local`
+> should point to a Supabase non-production database when doing local
+> development. Before running `pnpm db:migrate`, `pnpm db:seed-pricing`,
+> or arbitrary SQL, verify the host in `DATABASE_URL`. See
+> [`docs/RUNBOOK.md#database-management`](docs/RUNBOOK.md) for the
+> production-safe workflow.
 
 ## Operations
 

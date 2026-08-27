@@ -1,7 +1,7 @@
 /**
  * DB-backed fixed-window rate limiter.
  *
- * Trade-off vs Vercel KV / Upstash: ~50ms per check (Neon HTTP roundtrip)
+ * Trade-off vs Vercel KV / Upstash: one Postgres roundtrip per check,
  * but no new vendor and zero ops setup. Migrating to KV later is a
  * targeted swap inside this file.
  *

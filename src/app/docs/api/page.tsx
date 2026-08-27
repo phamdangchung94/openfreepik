@@ -258,7 +258,7 @@ const res = await fetch("/my-api/generate-video", { method: "POST", ... });
                 </tr>
                 <tr>
                   <td className="px-3 py-2">Vùng lưu trữ</td>
-                  <td className="px-3 py-2" colSpan={2}>Cloudflare R2 (auto eu/asia), Neon PostgreSQL (US East). KHÔNG cross-region</td>
+                  <td className="px-3 py-2" colSpan={2}>Cloudflare R2 (auto eu/asia), Supabase PostgreSQL. Khu vực DB theo cấu hình Supabase project</td>
                 </tr>
               </tbody>
             </table>
